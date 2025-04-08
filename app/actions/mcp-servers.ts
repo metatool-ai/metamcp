@@ -10,6 +10,11 @@ export async function getMcpServers(
   profileUuid: string,
   status?: McpServerStatus
 ) {
+  // Return empty array if profile UUID is empty
+  if (!profileUuid) {
+    return [];
+  }
+
   const servers = await db
     .select()
     .from(mcpServersTable)

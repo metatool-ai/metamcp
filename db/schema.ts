@@ -5,6 +5,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  serial,
   text,
   timestamp,
   unique,
@@ -32,6 +33,13 @@ export enum McpServerType {
 
 export enum ProfileCapability {
   TOOLS_MANAGEMENT = 'TOOLS_MANAGEMENT',
+  TOOL_LOGS = 'TOOL_LOGS',
+}
+
+export enum ToolExecutionStatus {
+  SUCCESS = 'SUCCESS',
+  ERROR = 'ERROR',
+  PENDING = 'PENDING',
 }
 
 export const mcpServerStatusEnum = pgEnum(
@@ -52,6 +60,11 @@ export const mcpServerTypeEnum = pgEnum(
 export const profileCapabilityEnum = pgEnum(
   'profile_capability',
   enumToPgEnum(ProfileCapability)
+);
+
+export const toolExecutionStatusEnum = pgEnum(
+  'tool_execution_status',
+  enumToPgEnum(ToolExecutionStatus)
 );
 
 export const projectsTable = pgTable('projects', {
@@ -208,5 +221,35 @@ export const toolsTable = pgTable(
       table.mcp_server_uuid,
       table.name
     ),
+  ]
+);
+
+export const toolExecutionLogsTable = pgTable(
+  'tool_execution_logs',
+  {
+    id: serial('id').primaryKey(),
+    mcp_server_uuid: uuid('mcp_server_uuid').references(
+      () => mcpServersTable.uuid,
+      { onDelete: 'no action' }
+    ),
+    tool_name: text('tool_name').notNull(),
+    payload: jsonb('payload')
+      .$type<Record<string, any>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    result: jsonb('result').$type<any>(),
+    status: toolExecutionStatusEnum('status')
+      .notNull()
+      .default(ToolExecutionStatus.PENDING),
+    error_message: text('error_message'),
+    execution_time_ms: text('execution_time_ms'),
+    created_at: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('tool_execution_logs_mcp_server_uuid_idx').on(table.mcp_server_uuid),
+    index('tool_execution_logs_tool_name_idx').on(table.tool_name),
+    index('tool_execution_logs_created_at_idx').on(table.created_at),
   ]
 );

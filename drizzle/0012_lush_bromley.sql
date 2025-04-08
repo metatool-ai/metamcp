@@ -1,0 +1,1 @@
+ALTER TYPE "public"."profile_capability" ADD VALUE 'TOOL_LOGS';
