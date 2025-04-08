@@ -4,6 +4,7 @@ import {
   Code2,
   Info,
   Key,
+  Leaf,
   Plus,
   Search,
   Server,
@@ -12,7 +13,7 @@ import {
   Trash2,
   Wrench,
 } from 'lucide-react';
-import Image from 'next/image';
+// import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
@@ -31,6 +32,7 @@ import { Input } from '@/components/ui/input';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter, // Added SidebarFooter here
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -77,14 +79,8 @@ export default function SidebarLayout({
         <Sidebar collapsible='none' className='w-64 flex-shrink-0 border-r'>
           <SidebarHeader className='flex flex-col justify-center items-center px-2 py-4'>
             <div className='flex items-center gap-4 mb-2'>
-              <Image
-                src='/favicon.ico'
-                alt='MetaMCP Logo'
-                width={256}
-                height={256}
-                className='h-12 w-12'
-              />
-              <h2 className='text-2xl font-semibold'>MetaMCP</h2>
+              <Leaf className='size-8' />
+              <h2 className='text-2xl font-semibold'>mcp.garden</h2>
             </div>
             <ProjectSwitcher />
             <ProfileSwitcher />
@@ -170,6 +166,8 @@ export default function SidebarLayout({
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
+          <SidebarFooter />
+
         </Sidebar>
 
         {/* Secondary Sidebar */}

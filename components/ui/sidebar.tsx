@@ -1,8 +1,10 @@
 'use client';
 
 import { Slot } from '@radix-ui/react-slot';
+import { User } from '@supabase/supabase-js';
 import { cva, VariantProps } from 'class-variance-authority';
-import { PanelLeft } from 'lucide-react';
+import { LogIn, LogOut, PanelLeft } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -18,6 +20,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { createClient } from '@/utils/supabase/client';
 
 const SIDEBAR_COOKIE_NAME = 'sidebar:state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
@@ -361,14 +364,97 @@ SidebarHeader.displayName = 'SidebarHeader';
 const SidebarFooter = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<'div'>
->(({ className, ...props }, ref) => {
+>(({ className, children, ...props }, ref) => {
+  const [user, setUser] = React.useState<User | null>(null);
+  const supabase = createClient();
+  const router = useRouter();
+
+  React.useEffect(() => {
+    const fetchUser = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (!error && data?.user) {
+        setUser(data.user);
+      } else {
+        setUser(null); // Ensure user is null if not logged in or error occurs
+      }
+    };
+
+    fetchUser();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+      }
+    );
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  const handleLogin = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        redirectTo: location.origin + '/api/auth/callback', // Adjust if your callback route is different
+      },
+    });
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    router.refresh(); // Refresh the page to reflect logout state
+  };
+
   return (
     <div
       ref={ref}
       data-sidebar='footer'
       className={cn('flex flex-col gap-2 p-2', className)}
-      {...props}
-    />
+      {...props}>
+      {children}
+      <div className='mt-auto flex flex-col gap-2 group-data-[collapsible=icon]:hidden'>
+        {user ? (
+          <>
+            <div className='p-2 text-xs text-sidebar-foreground/70'>
+              Logged in as: {user.email}
+            </div>
+            <Button variant='ghost' size='sm' className='w-full justify-start gap-2 px-2' onClick={handleLogout}>
+              <LogOut size={16} /> Logout
+            </Button>
+          </>
+        ) : (
+          <Button variant='ghost' size='sm' className='w-full justify-start gap-2 px-2' onClick={handleLogin}>
+            <LogIn size={16} /> Login with GitHub
+          </Button>
+        )}
+      </div>
+      {/* Keep icon-only buttons visible when collapsed */}
+      <div className='mt-auto hidden flex-col gap-2 group-data-[collapsible=icon]:flex'>
+        {user ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant='ghost' size='icon' className='size-8' onClick={handleLogout}>
+                <LogOut size={16} />
+                <span className='sr-only'>Logout</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side='right' align='center'>Logout</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant='ghost' size='icon' className='size-8' onClick={handleLogin}>
+                <LogIn size={16} />
+                <span className='sr-only'>Login with GitHub</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side='right' align='center'>Login with GitHub</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </div>
   );
 });
 SidebarFooter.displayName = 'SidebarFooter';
@@ -607,7 +693,7 @@ const SidebarMenuAction = React.forwardRef<
         'peer-data-[size=lg]/menu-button:top-2.5',
         'group-data-[collapsible=icon]:hidden',
         showOnHover &&
-          'group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0',
+        'group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0',
         className
       )}
       {...props}
