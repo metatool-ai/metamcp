@@ -1,8 +1,7 @@
-import { and, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
-import { db } from '@/db';
-import { mcpServersTable, McpServerStatus } from '@/db/schema';
+import { createClient } from '@/utils/supabase/server'; // Use the server helper
+import { McpServerStatus } from '@/db/schema'; // Keep enum for status check
 
 import { authenticateApiKey } from '../auth';
 
@@ -11,15 +10,22 @@ export async function GET(request: Request) {
     const auth = await authenticateApiKey(request);
     if (auth.error) return auth.error;
 
-    const activeMcpServers = await db
-      .select()
-      .from(mcpServersTable)
-      .where(
-        and(
-          eq(mcpServersTable.status, McpServerStatus.ACTIVE),
-          eq(mcpServersTable.profile_uuid, auth.activeProfile.uuid)
-        )
+    const supabase = await createClient(); // Use the async helper
+
+    // Fetch active servers - profile_uuid filtering is deferred as requested
+    const { data: activeMcpServers, error: fetchError } = await supabase
+      .from('mcp_servers') // Use table name as string
+      .select('*')
+      .eq('status', McpServerStatus.ACTIVE); // Use enum value 'ACTIVE'
+
+    if (fetchError) {
+      console.error('Supabase fetch error:', fetchError);
+      return NextResponse.json(
+        { error: 'Failed to fetch active MCP servers' },
+        { status: 500 }
       );
+    }
+
     return NextResponse.json(activeMcpServers);
   } catch (error) {
     console.error(error);
@@ -35,24 +41,39 @@ export async function POST(request: Request) {
     const auth = await authenticateApiKey(request);
     if (auth.error) return auth.error;
 
-    const body = await request.json();
-    const { uuid, name, description, command, args, env, status } = body;
+    const supabase = await createClient(); // Use the async helper
 
-    const newMcpServer = await db
-      .insert(mcpServersTable)
-      .values({
-        uuid,
+    const body = await request.json();
+    // Ensure all relevant fields from the schema are extracted
+    const { uuid, name, description, type, command, args, env, url, status } = body;
+
+    // Insert new server - profile_uuid is omitted as requested
+    const { data: newMcpServer, error: insertError } = await supabase
+      .from('mcp_servers') // Use table name as string
+      .insert({
+        uuid, // Assuming client sends it or DB generates it
         name,
         description,
+        type, // Include type from body
         command,
         args,
         env,
-        status,
-        profile_uuid: auth.activeProfile.uuid,
+        url,
+        status, // Use status from body
+        // profile_uuid: auth.activeProfile.uuid, // Omitted as requested
       })
-      .returning();
+      .select()
+      .single(); // Assuming insert returns the single created row
 
-    return NextResponse.json(newMcpServer[0]);
+    if (insertError) {
+      console.error('Supabase insert error:', insertError);
+      return NextResponse.json(
+        { error: 'Failed to create MCP server', details: insertError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(newMcpServer);
   } catch (error) {
     console.error(error);
     return NextResponse.json(

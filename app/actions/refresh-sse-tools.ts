@@ -2,12 +2,15 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { eq } from 'drizzle-orm';
-import { sql } from 'drizzle-orm';
+// Remove drizzle imports
+// import { eq } from 'drizzle-orm';
+// import { sql } from 'drizzle-orm';
 
-import { db } from '@/db';
-import { mcpServersTable, McpServerType } from '@/db/schema';
-import { toolsTable } from '@/db/schema';
+import { createClient } from '@/utils/supabase/server';
+import { McpServerType } from '@/db/schema'; // Keep enum
+// Remove unused schema imports
+// import { mcpServersTable } from '@/db/schema';
+// import { toolsTable } from '@/db/schema';
 
 // Helper function to transform localhost URLs for Docker
 function transformUrlForDocker(url: string): string {
@@ -21,9 +24,21 @@ function transformUrlForDocker(url: string): string {
 }
 
 export async function refreshSseTools(mcpServerUuid: string) {
-  const mcpServer = await db.query.mcpServersTable.findFirst({
-    where: eq(mcpServersTable.uuid, mcpServerUuid),
-  });
+  const supabase = await createClient();
+  const { data: mcpServer, error: serverFetchError } = await supabase
+    .from('mcp_servers') // Use table name string
+    .select('*') // Select all columns needed
+    .eq('uuid', mcpServerUuid)
+    .single(); // Expect a single server or null/error
+
+  if (serverFetchError) {
+    console.error("Error fetching MCP server:", serverFetchError);
+    // Rethrow or handle specific errors like not found
+    if (serverFetchError.code === 'PGRST116') {
+      throw new Error('MCP server not found');
+    }
+    throw new Error('Failed to fetch MCP server');
+  }
 
   if (!mcpServer) {
     throw new Error('MCP server not found');
@@ -66,19 +81,21 @@ export async function refreshSseTools(mcpServerUuid: string) {
 
   if (toolsToInsert.length > 0) {
     // Batch insert all tools with upsert
-    const results = await db
-      .insert(toolsTable)
-      .values(toolsToInsert)
-      .onConflictDoUpdate({
-        target: [toolsTable.mcp_server_uuid, toolsTable.name],
-        set: {
-          description: sql`excluded.description`,
-          toolSchema: sql`excluded.tool_schema`,
-        },
+    // Use Supabase upsert
+    const { data: results, error: upsertError } = await supabase
+      .from('tools') // Use table name string
+      .upsert(toolsToInsert, {
+        onConflict: 'mcp_server_uuid, name', // Specify conflict columns
       })
-      .returning();
+      .select(); // Select the upserted rows
 
-    return { success: true, count: results.length, tools: results };
+    if (upsertError) {
+      console.error("Error upserting tools:", upsertError);
+      // Handle specific errors if needed (e.g., foreign key violation)
+      throw new Error('Failed to upsert tools');
+    }
+
+    return { success: true, count: results?.length || 0, tools: results || [] };
   }
 
   return { success: true, count: 0, tools: [] };

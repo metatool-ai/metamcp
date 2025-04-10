@@ -1,13 +1,12 @@
 'use server';
 
-import { and, desc, eq, or } from 'drizzle-orm';
+// Remove Drizzle imports
+// import { and, desc, eq, or } from 'drizzle-orm';
 
-import { db } from '@/db';
-import {
-  codesTable,
-  customMcpServersTable,
-  McpServerStatus,
-} from '@/db/schema';
+import { createClient } from '@/utils/supabase/server';
+import { McpServerStatus } from '@/db/schema'; // Keep enum
+// Remove unused schema imports
+// import { codesTable, customMcpServersTable } from '@/db/schema';
 import { CustomMcpServer } from '@/types/custom-mcp-server';
 import {
   CreateCustomMcpServerData,
@@ -15,98 +14,93 @@ import {
 } from '@/types/custom-mcp-server';
 
 export async function getCustomMcpServers(profileUuid: string) {
-  const servers = await db
-    .select({
-      uuid: customMcpServersTable.uuid,
-      name: customMcpServersTable.name,
-      description: customMcpServersTable.description,
-      code_uuid: customMcpServersTable.code_uuid,
-      additionalArgs: customMcpServersTable.additionalArgs,
-      env: customMcpServersTable.env,
-      created_at: customMcpServersTable.created_at,
-      profile_uuid: customMcpServersTable.profile_uuid,
-      status: customMcpServersTable.status,
-      code: codesTable.code,
-      codeFileName: codesTable.fileName,
-    })
-    .from(customMcpServersTable)
-    .leftJoin(codesTable, eq(customMcpServersTable.code_uuid, codesTable.uuid))
-    .where(
-      and(
-        eq(customMcpServersTable.profile_uuid, profileUuid),
-        or(
-          eq(customMcpServersTable.status, McpServerStatus.ACTIVE),
-          eq(customMcpServersTable.status, McpServerStatus.INACTIVE)
-        )
-      )
-    )
-    .orderBy(desc(customMcpServersTable.created_at));
+  const supabase = await createClient();
+  const { data: servers, error } = await supabase
+    .from('custom_mcp_servers') // Use table name string
+    .select(`
+      *,
+      codes!left ( code, fileName )
+    `) // Select all from custom_mcp_servers and join codes
+    .eq('profile_uuid', profileUuid) // Filter by profile
+    .or(`status.eq.${McpServerStatus.ACTIVE},status.eq.${McpServerStatus.INACTIVE}`) // Filter status
+    .order('created_at', { ascending: false }); // Order
 
-  return servers as CustomMcpServer[];
+  if (error) {
+    console.error("Error fetching custom MCP servers:", error);
+    return []; // Return empty array on error
+  }
+
+  // Flatten the nested codes data
+  const formattedServers = servers?.map(server => {
+    const codeData = Array.isArray(server.codes) && server.codes.length > 0
+      ? server.codes[0]
+      : server.codes; // Handle if it's already an object or null
+    return {
+      ...server,
+      code: codeData?.code,
+      codeFileName: codeData?.fileName,
+      codes: undefined, // Remove nested object
+    };
+  });
+
+  return (formattedServers || []) as CustomMcpServer[]; // Return formatted data or empty array
 }
 
 export async function getCustomMcpServerByUuid(
   profileUuid: string,
   uuid: string
 ): Promise<CustomMcpServer | null> {
-  const server = await db
-    .select({
-      uuid: customMcpServersTable.uuid,
-      name: customMcpServersTable.name,
-      description: customMcpServersTable.description,
-      code_uuid: customMcpServersTable.code_uuid,
-      additionalArgs: customMcpServersTable.additionalArgs,
-      env: customMcpServersTable.env,
-      created_at: customMcpServersTable.created_at,
-      profile_uuid: customMcpServersTable.profile_uuid,
-      status: customMcpServersTable.status,
-      code: codesTable.code,
-      codeFileName: codesTable.fileName,
-    })
-    .from(customMcpServersTable)
-    .leftJoin(codesTable, eq(customMcpServersTable.code_uuid, codesTable.uuid))
-    .where(
-      and(
-        eq(customMcpServersTable.uuid, uuid),
-        eq(customMcpServersTable.profile_uuid, profileUuid)
-      )
-    )
-    .limit(1);
+  const supabase = await createClient();
+  const { data: server, error } = await supabase
+    .from('custom_mcp_servers') // Use table name string
+    .select(`
+      *,
+      codes!left ( code, fileName )
+    `) // Select all and join codes
+    .eq('uuid', uuid)
+    .eq('profile_uuid', profileUuid)
+    .maybeSingle(); // Expect single or null
 
-  if (server.length === 0) {
-    return null;
+  if (error) {
+    console.error(`Error fetching custom MCP server ${uuid}:`, error);
+    return null; // Return null on error
   }
 
-  return server[0] as CustomMcpServer;
+  if (!server) {
+    return null; // Return null if not found
+  }
+
+  // Flatten the nested codes data before returning
+  const codeData = Array.isArray(server.codes) && server.codes.length > 0
+    ? server.codes[0]
+    : server.codes;
+  const formattedServer = {
+    ...server,
+    code: codeData?.code,
+    codeFileName: codeData?.fileName,
+    codes: undefined,
+  };
+  return formattedServer as CustomMcpServer;
 }
 
 export async function deleteCustomMcpServerByUuid(
   profileUuid: string,
   uuid: string
 ): Promise<void> {
-  // First get the code_uuid
-  const server = await db
-    .select({ code_uuid: customMcpServersTable.code_uuid })
-    .from(customMcpServersTable)
-    .where(
-      and(
-        eq(customMcpServersTable.uuid, uuid),
-        eq(customMcpServersTable.profile_uuid, profileUuid)
-      )
-    )
-    .limit(1);
+  // Note: Original code fetched code_uuid but didn't use it. Replicating delete only.
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('custom_mcp_servers') // Use table name string
+    .delete()
+    .eq('uuid', uuid)
+    .eq('profile_uuid', profileUuid);
 
-  if (server.length > 0) {
-    // Delete the custom MCP server first
-    await db
-      .delete(customMcpServersTable)
-      .where(
-        and(
-          eq(customMcpServersTable.uuid, uuid),
-          eq(customMcpServersTable.profile_uuid, profileUuid)
-        )
-      );
+  if (error) {
+    console.error(`Error deleting custom MCP server ${uuid}:`, error);
+    // Handle specific errors or throw
+    throw new Error('Failed to delete custom MCP server');
   }
+  // No need to fetch code_uuid if not used for cascading delete etc.
 }
 
 export async function toggleCustomMcpServerStatus(
@@ -114,33 +108,44 @@ export async function toggleCustomMcpServerStatus(
   uuid: string,
   newStatus: McpServerStatus
 ): Promise<void> {
-  await db
-    .update(customMcpServersTable)
-    .set({ status: newStatus })
-    .where(
-      and(
-        eq(customMcpServersTable.uuid, uuid),
-        eq(customMcpServersTable.profile_uuid, profileUuid)
-      )
-    );
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('custom_mcp_servers') // Use table name string
+    .update({ status: newStatus }) // Set the new status
+    .eq('uuid', uuid)
+    .eq('profile_uuid', profileUuid);
+
+  if (error) {
+    console.error(`Error toggling status for custom MCP server ${uuid}:`, error);
+    // Handle specific errors or throw
+    throw new Error('Failed to toggle custom MCP server status');
+  }
 }
 
 export async function createCustomMcpServer(
   profileUuid: string,
   data: CreateCustomMcpServerData
 ) {
-  const [server] = await db
-    .insert(customMcpServersTable)
-    .values({
+  const supabase = await createClient();
+  const { data: server, error } = await supabase
+    .from('custom_mcp_servers') // Use table name string
+    .insert({
       profile_uuid: profileUuid,
       name: data.name,
       description: data.description || '',
       code_uuid: data.code_uuid,
       additionalArgs: data.additionalArgs || [],
       env: data.env || {},
-      status: McpServerStatus.ACTIVE,
+      status: McpServerStatus.ACTIVE, // Default status
     })
-    .returning();
+    .select() // Select the inserted row
+    .single(); // Expect single result
+
+  if (error || !server) {
+    console.error("Error creating custom MCP server:", error);
+    // Handle specific errors or throw
+    throw new Error('Failed to create custom MCP server');
+  }
 
   return server;
 }
@@ -150,15 +155,16 @@ export async function updateCustomMcpServer(
   uuid: string,
   data: UpdateCustomMcpServerData
 ): Promise<void> {
-  await db
-    .update(customMcpServersTable)
-    .set({
-      ...data,
-    })
-    .where(
-      and(
-        eq(customMcpServersTable.uuid, uuid),
-        eq(customMcpServersTable.profile_uuid, profileUuid)
-      )
-    );
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('custom_mcp_servers') // Use table name string
+    .update({ ...data }) // Pass update data object
+    .eq('uuid', uuid)
+    .eq('profile_uuid', profileUuid);
+
+  if (error) {
+    console.error(`Error updating custom MCP server ${uuid}:`, error);
+    // Handle specific errors or throw
+    throw new Error('Failed to update custom MCP server');
+  }
 }

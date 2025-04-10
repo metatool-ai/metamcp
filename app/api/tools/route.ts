@@ -1,8 +1,8 @@
-import { sql } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
-import { db } from '@/db';
-import { mcpServersTable, toolsTable } from '@/db/schema';
+import { createClient } from '@/utils/supabase/server';
+// Remove unused schema imports if not needed for types
+// import { mcpServersTable, toolsTable } from '@/db/schema';
 
 import { authenticateApiKey } from '../auth';
 
@@ -51,17 +51,20 @@ export async function POST(request: Request) {
     let results: any[] = [];
     if (validTools.length > 0) {
       try {
-        results = await db
-          .insert(toolsTable)
-          .values(validTools)
-          .onConflictDoUpdate({
-            target: [toolsTable.mcp_server_uuid, toolsTable.name],
-            set: {
-              description: sql`excluded.description`,
-              toolSchema: sql`excluded.tool_schema`,
-            },
+        const supabase = await createClient(); // Instantiate client
+        const { data, error } = await supabase
+          .from('tools') // Use table name string
+          .upsert(validTools, {
+            onConflict: 'mcp_server_uuid, name', // Specify conflict columns
+            // ignoreDuplicates: false, // Default behavior updates conflicting rows
           })
-          .returning();
+          .select(); // Select the upserted rows
+
+        if (error) {
+          // Re-throw to be caught by the outer catch block
+          throw error;
+        }
+        results = data || []; // Assign results, default to empty array if null
       } catch (error: any) {
         // Handle database errors for the batch operation
         console.error('Database error:', error);
@@ -103,26 +106,43 @@ export async function GET(request: Request) {
     const status = searchParams.get('status');
 
     // Join with mcp_servers table to filter by profile_uuid
-    const query = db
-      .select({
-        mcp_server_uuid: toolsTable.mcp_server_uuid,
-        name: toolsTable.name,
-        status: toolsTable.status,
-      })
-      .from(toolsTable)
-      .innerJoin(
-        mcpServersTable,
-        sql`${toolsTable.mcp_server_uuid} = ${mcpServersTable.uuid}`
-      )
-      .where(
-        sql`${mcpServersTable.profile_uuid} = ${auth.activeProfile.uuid}${
-          status ? sql` AND ${toolsTable.status} = ${status}` : sql``
-        }`
+    const supabase = await createClient();
+
+    // Build the query using Supabase client
+    let queryBuilder = supabase
+      .from('tools')
+      .select(`
+        mcp_server_uuid,
+        name,
+        status,
+        mcp_servers!inner ( profile_uuid )
+      `) // Select columns and enforce inner join
+      .eq('mcp_servers.profile_uuid', auth.activeProfile.uuid); // Filter by profile_uuid via join
+
+    // Conditionally add status filter
+    if (status) {
+      queryBuilder = queryBuilder.eq('status', status);
+    }
+
+    const { data: results, error: fetchError } = await queryBuilder;
+
+    if (fetchError) {
+      console.error('Supabase tools fetch error:', fetchError);
+      return NextResponse.json(
+        { error: 'Failed to fetch tools' },
+        { status: 500 }
       );
+    }
 
-    const results = await query;
+    // The result structure includes nested mcp_servers. Flatten if needed.
+    const formattedResults = results?.map(tool => ({
+      mcp_server_uuid: tool.mcp_server_uuid,
+      name: tool.name,
+      status: tool.status,
+      // mcp_servers object is implicitly filtered but not needed in output here
+    }));
 
-    return NextResponse.json({ results });
+    return NextResponse.json({ results: formattedResults || [] });
   } catch (error) {
     console.error(error);
     return NextResponse.json(

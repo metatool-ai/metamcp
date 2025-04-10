@@ -1,13 +1,12 @@
 'use server';
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+// Remove Drizzle imports
+// import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
-import { db } from '@/db';
-import {
-  mcpServersTable,
-  toolExecutionLogsTable,
-  ToolExecutionStatus,
-} from '@/db/schema';
+import { createClient } from '@/utils/supabase/server';
+import { ToolExecutionStatus } from '@/db/schema'; // Keep enum
+// Remove unused schema table imports
+// import { mcpServersTable, toolExecutionLogsTable } from '@/db/schema';
 
 export type ToolExecutionLog = {
   id: number;
@@ -51,74 +50,68 @@ export async function getToolExecutionLogs({
   const whereConditions = [];
 
   // Filter by MCP servers that belong to the current profile
-  const allowedMcpServers = await db
-    .select({ uuid: mcpServersTable.uuid })
-    .from(mcpServersTable)
-    .where(eq(mcpServersTable.profile_uuid, currentProfileUuid));
+  const supabase = await createClient();
+
+  // Fetch allowed MCP server UUIDs
+  const { data: allowedMcpServers, error: serverFetchError } = await supabase
+    .from('mcp_servers')
+    .select('uuid')
+    .eq('profile_uuid', currentProfileUuid);
+
+  if (serverFetchError) {
+    console.error("Error fetching allowed MCP servers:", serverFetchError);
+    return { logs: [], total: 0 }; // Return empty on error
+  }
 
   const allowedMcpServerUuids = allowedMcpServers.map((server) => server.uuid);
 
-  if (allowedMcpServerUuids.length > 0) {
-    whereConditions.push(
-      inArray(toolExecutionLogsTable.mcp_server_uuid, allowedMcpServerUuids)
-    );
+  // If no allowed servers, return empty immediately
+  if (!allowedMcpServerUuids || allowedMcpServerUuids.length === 0) {
+    return { logs: [], total: 0 };
   }
+
+  // Start building the Supabase query
+  let logQuery = supabase
+    .from('tool_execution_logs')
+    .select('*, mcp_servers ( name )', { count: 'exact' }) // Select logs, join server name, get exact count
+    .in('mcp_server_uuid', allowedMcpServerUuids); // Filter by allowed servers
 
   // Apply additional filters if provided
+  // Apply additional filters conditionally
   if (mcpServerUuids && mcpServerUuids.length > 0) {
-    whereConditions.push(
-      inArray(toolExecutionLogsTable.mcp_server_uuid, mcpServerUuids)
-    );
+    // Intersect with allowed servers if necessary, though filtering by allowedMcpServerUuids should suffice
+    // For simplicity, we assume mcpServerUuids is a subset of allowed ones or apply .in() again
+    logQuery = logQuery.in('mcp_server_uuid', mcpServerUuids);
   }
-
   if (toolNames && toolNames.length > 0) {
-    whereConditions.push(inArray(toolExecutionLogsTable.tool_name, toolNames));
+    logQuery = logQuery.in('tool_name', toolNames);
   }
-
   if (statuses && statuses.length > 0) {
-    whereConditions.push(inArray(toolExecutionLogsTable.status, statuses));
+    logQuery = logQuery.in('status', statuses);
   }
-
-  // Combine all conditions with AND
-  const whereClause =
-    whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
   // Get total count
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(toolExecutionLogsTable)
-    .where(whereClause);
+  // Apply ordering and pagination
+  logQuery = logQuery
+    .order('id', { ascending: false })
+    .range(offset, offset + limit - 1);
 
-  // Get logs with joined MCP server names
-  const logs = await db
-    .select({
-      id: toolExecutionLogsTable.id,
-      mcp_server_uuid: toolExecutionLogsTable.mcp_server_uuid,
-      tool_name: toolExecutionLogsTable.tool_name,
-      payload: toolExecutionLogsTable.payload,
-      result: toolExecutionLogsTable.result,
-      status: toolExecutionLogsTable.status,
-      error_message: toolExecutionLogsTable.error_message,
-      execution_time_ms: toolExecutionLogsTable.execution_time_ms,
-      created_at: toolExecutionLogsTable.created_at,
-      mcp_server_name: mcpServersTable.name,
-    })
-    .from(toolExecutionLogsTable)
-    .leftJoin(
-      mcpServersTable,
-      eq(toolExecutionLogsTable.mcp_server_uuid, mcpServersTable.uuid)
-    )
-    .where(whereClause)
-    .orderBy(desc(toolExecutionLogsTable.id))
-    .limit(limit)
-    .offset(offset);
+  // Execute the query
+  const { data: logs, error: logFetchError, count } = await logQuery;
+
+  if (logFetchError) {
+    console.error("Error fetching tool execution logs:", logFetchError);
+    return { logs: [], total: 0 }; // Return empty on error
+  }
 
   return {
     logs: logs.map((log) => ({
       ...log,
-      mcp_server_name: log.mcp_server_name || 'Unknown Server',
+      // Access nested server name correctly
+      mcp_server_name: log.mcp_servers?.name || 'Unknown Server',
+      mcp_servers: undefined, // Remove nested object after extracting name
     })) as ToolExecutionLog[],
-    total: count,
+    total: count || 0, // Use the count from the Supabase response
   };
 }
 
@@ -131,25 +124,41 @@ export async function getToolNames(
   }
 
   // Get allowed MCP servers
-  const allowedMcpServers = await db
-    .select({ uuid: mcpServersTable.uuid })
-    .from(mcpServersTable)
-    .where(eq(mcpServersTable.profile_uuid, currentProfileUuid));
+  const supabase = await createClient();
+
+  // Fetch allowed MCP server UUIDs
+  const { data: allowedMcpServers, error: serverFetchError } = await supabase
+    .from('mcp_servers')
+    .select('uuid')
+    .eq('profile_uuid', currentProfileUuid);
+
+  if (serverFetchError) {
+    console.error("Error fetching allowed MCP servers for tool names:", serverFetchError);
+    return []; // Return empty on error
+  }
 
   const allowedMcpServerUuids = allowedMcpServers.map((server) => server.uuid);
 
-  if (allowedMcpServerUuids.length === 0) {
+  if (!allowedMcpServerUuids || allowedMcpServerUuids.length === 0) {
     return [];
   }
 
   // Get unique tool names
-  const result = await db
-    .selectDistinct({ tool_name: toolExecutionLogsTable.tool_name })
-    .from(toolExecutionLogsTable)
-    .where(
-      inArray(toolExecutionLogsTable.mcp_server_uuid, allowedMcpServerUuids)
-    )
-    .orderBy(toolExecutionLogsTable.tool_name);
+  // Fetch all tool names for the allowed servers
+  const { data: toolNameResults, error: toolNameFetchError } = await supabase
+    .from('tool_execution_logs')
+    .select('tool_name')
+    .in('mcp_server_uuid', allowedMcpServerUuids);
 
-  return result.map((r) => r.tool_name);
+  if (toolNameFetchError) {
+    console.error("Error fetching tool names:", toolNameFetchError);
+    return []; // Return empty on error
+  }
+
+  // Deduplicate and sort in code
+  const distinctToolNames = [
+    ...new Set(toolNameResults?.map((r) => r.tool_name) || []),
+  ].sort();
+
+  return distinctToolNames;
 }

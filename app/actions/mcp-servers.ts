@@ -1,9 +1,12 @@
 'use server';
 
-import { and, desc, eq, or } from 'drizzle-orm';
+// Remove Drizzle imports
+// import { and, desc, eq, or } from 'drizzle-orm';
 
-import { db } from '@/db';
-import { mcpServersTable, McpServerStatus, McpServerType } from '@/db/schema';
+import { createClient } from '@/utils/supabase/server';
+import { McpServerStatus, McpServerType } from '@/db/schema'; // Keep enums
+// Remove unused schema import
+// import { mcpServersTable } from '@/db/schema';
 import { McpServer } from '@/types/mcp-server';
 
 export async function getMcpServers(
@@ -15,35 +18,46 @@ export async function getMcpServers(
     return [];
   }
 
-  const servers = await db
-    .select()
-    .from(mcpServersTable)
-    .where(
-      and(
-        eq(mcpServersTable.profile_uuid, profileUuid),
-        status
-          ? eq(mcpServersTable.status, status)
-          : or(
-              eq(mcpServersTable.status, McpServerStatus.ACTIVE),
-              eq(mcpServersTable.status, McpServerStatus.INACTIVE)
-            )
-      )
-    )
-    .orderBy(desc(mcpServersTable.created_at));
+  const supabase = await createClient();
+  let query = supabase
+    .from('mcp_servers') // Use table name string
+    .select('*')
+    .eq('profile_uuid', profileUuid); // Filter by profile
 
-  return servers as McpServer[];
+  // Apply status filter
+  if (status) {
+    query = query.eq('status', status);
+  } else {
+    // Default to ACTIVE or INACTIVE if no specific status is provided
+    query = query.or(`status.eq.${McpServerStatus.ACTIVE},status.eq.${McpServerStatus.INACTIVE}`);
+  }
+
+  const { data: servers, error } = await query.order('created_at', { ascending: false });
+
+  if (error) {
+    console.error("Error fetching MCP servers:", error);
+    return []; // Return empty array on error
+  }
+
+  return (servers || []) as McpServer[]; // Return data or empty array, assert type
 }
 
 export async function getMcpServerByUuid(
   profileUuid: string,
   uuid: string
 ): Promise<McpServer | undefined> {
-  const server = await db.query.mcpServersTable.findFirst({
-    where: and(
-      eq(mcpServersTable.uuid, uuid),
-      eq(mcpServersTable.profile_uuid, profileUuid)
-    ),
-  });
+  const supabase = await createClient();
+  const { data: server, error } = await supabase
+    .from('mcp_servers') // Use table name string
+    .select('*')
+    .eq('uuid', uuid)
+    .eq('profile_uuid', profileUuid)
+    .maybeSingle(); // Expect single or null
+
+  if (error) {
+    console.error(`Error fetching MCP server ${uuid}:`, error);
+    return undefined; // Return undefined on error
+  }
   return server;
 }
 
@@ -51,14 +65,18 @@ export async function deleteMcpServerByUuid(
   profileUuid: string,
   uuid: string
 ): Promise<void> {
-  await db
-    .delete(mcpServersTable)
-    .where(
-      and(
-        eq(mcpServersTable.uuid, uuid),
-        eq(mcpServersTable.profile_uuid, profileUuid)
-      )
-    );
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('mcp_servers') // Use table name string
+    .delete()
+    .eq('uuid', uuid)
+    .eq('profile_uuid', profileUuid);
+
+  if (error) {
+    console.error(`Error deleting MCP server ${uuid}:`, error);
+    // Handle specific errors (e.g., not found) or throw
+    throw new Error('Failed to delete MCP server');
+  }
 }
 
 export async function toggleMcpServerStatus(
@@ -66,15 +84,18 @@ export async function toggleMcpServerStatus(
   uuid: string,
   newStatus: McpServerStatus
 ): Promise<void> {
-  await db
-    .update(mcpServersTable)
-    .set({ status: newStatus })
-    .where(
-      and(
-        eq(mcpServersTable.uuid, uuid),
-        eq(mcpServersTable.profile_uuid, profileUuid)
-      )
-    );
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('mcp_servers') // Use table name string
+    .update({ status: newStatus }) // Set the new status
+    .eq('uuid', uuid)
+    .eq('profile_uuid', profileUuid);
+
+  if (error) {
+    console.error(`Error toggling status for MCP server ${uuid}:`, error);
+    // Handle specific errors or throw
+    throw new Error('Failed to toggle MCP server status');
+  }
 }
 
 export async function updateMcpServer(
@@ -90,17 +111,18 @@ export async function updateMcpServer(
     type?: McpServerType;
   }
 ): Promise<void> {
-  await db
-    .update(mcpServersTable)
-    .set({
-      ...data,
-    })
-    .where(
-      and(
-        eq(mcpServersTable.uuid, uuid),
-        eq(mcpServersTable.profile_uuid, profileUuid)
-      )
-    );
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('mcp_servers') // Use table name string
+    .update({ ...data }) // Pass the update data object
+    .eq('uuid', uuid)
+    .eq('profile_uuid', profileUuid);
+
+  if (error) {
+    console.error(`Error updating MCP server ${uuid}:`, error);
+    // Handle specific errors or throw
+    throw new Error('Failed to update MCP server');
+  }
 }
 
 export async function createMcpServer(
@@ -115,10 +137,19 @@ export async function createMcpServer(
     type?: McpServerType;
   }
 ): Promise<void> {
-  await db.insert(mcpServersTable).values({
-    ...data,
-    profile_uuid: profileUuid,
-  });
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('mcp_servers') // Use table name string
+    .insert({
+      ...data,
+      profile_uuid: profileUuid, // Ensure profile_uuid is included
+    });
+
+  if (error) {
+    console.error("Error creating MCP server:", error);
+    // Handle specific errors or throw
+    throw new Error('Failed to create MCP server');
+  }
 }
 
 export async function bulkImportMcpServers(
@@ -144,21 +175,29 @@ export async function bulkImportMcpServers(
 
   const serverEntries = Object.entries(mcpServers);
 
-  for (const [name, serverConfig] of serverEntries) {
-    const serverData = {
-      name,
-      description: serverConfig.description || '',
-      command: serverConfig.command || null,
-      args: serverConfig.args || [],
-      env: serverConfig.env || {},
-      url: serverConfig.url || null,
-      type: serverConfig.type || McpServerType.STDIO,
-      profile_uuid: profileUuid,
-      status: McpServerStatus.ACTIVE,
-    };
+  const serversToInsert = serverEntries.map(([name, serverConfig]) => ({
+    name,
+    description: serverConfig.description || '',
+    command: serverConfig.command || null,
+    args: serverConfig.args || [],
+    env: serverConfig.env || {},
+    url: serverConfig.url || null,
+    type: serverConfig.type || McpServerType.STDIO,
+    profile_uuid: profileUuid,
+    status: McpServerStatus.ACTIVE,
+  }));
 
-    // Insert the server into the database
-    await db.insert(mcpServersTable).values(serverData);
+  if (serversToInsert.length > 0) {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('mcp_servers') // Use table name string
+      .insert(serversToInsert); // Batch insert
+
+    if (error) {
+      console.error("Error bulk importing MCP servers:", error);
+      // Handle specific errors or throw
+      throw new Error('Failed to bulk import MCP servers');
+    }
   }
 
   return { success: true, count: serverEntries.length };

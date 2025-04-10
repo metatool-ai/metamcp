@@ -1,8 +1,7 @@
-import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { db } from '@/db';
-import { toolExecutionLogsTable } from '@/db/schema';
+import { createClient } from '@/utils/supabase/server';
+import { toolExecutionLogsTable } from '@/db/schema'; // Keep for $inferInsert type
 
 import { authenticateApiKey } from '../../auth';
 
@@ -44,20 +43,34 @@ export async function PUT(
     }
 
     // Update the tool execution log entry
-    const updatedLog = await db
-      .update(toolExecutionLogsTable)
-      .set(updateData)
-      .where(eq(toolExecutionLogsTable.id, parseInt(logId)))
-      .returning();
+    const supabase = await createClient();
 
-    if (updatedLog.length === 0) {
+    const { data: updatedLog, error: updateError } = await supabase
+      .from('tool_execution_logs') // Use table name string
+      .update(updateData) // Pass the dynamically built update object
+      .eq('id', parseInt(logId)) // Filter by log ID
+      .select() // Select the updated row
+      .single(); // Expect a single row back
+
+    if (updateError) {
+      console.error('Supabase log update error:', updateError);
+      // Handle potential errors like log not found (e.g., check error code)
+      // Supabase might return an error or empty data if the row doesn't exist
+      return NextResponse.json(
+        { error: 'Failed to update tool execution log', details: updateError.message },
+        { status: 500 } // Or 404 if error indicates not found
+      );
+    }
+
+    // Check if data is null, which might indicate the log wasn't found for the given ID
+    if (!updatedLog) {
       return NextResponse.json(
         { error: 'Tool execution log not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(updatedLog[0]);
+    return NextResponse.json(updatedLog); // Return the single object
   } catch (error) {
     console.error(error);
     return NextResponse.json(
