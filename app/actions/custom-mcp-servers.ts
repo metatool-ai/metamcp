@@ -3,7 +3,6 @@
 // Remove Drizzle imports
 // import { and, desc, eq, or } from 'drizzle-orm';
 
-import { createClient } from '@/utils/supabase/server';
 import { McpServerStatus } from '@/db/schema'; // Keep enum
 // Remove unused schema imports
 // import { codesTable, customMcpServersTable } from '@/db/schema';
@@ -12,6 +11,7 @@ import {
   CreateCustomMcpServerData,
   UpdateCustomMcpServerData,
 } from '@/types/custom-mcp-server';
+import { createClient } from '@/utils/supabase/server';
 
 export async function getCustomMcpServers(profileUuid: string) {
   const supabase = await createClient();

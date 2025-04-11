@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 
-import { createClient } from '@/utils/supabase/server';
 import { ToolExecutionStatus } from '@/db/schema'; // Keep enum for status
+import { createClient } from '@/utils/supabase/server';
+
 // Remove unused schema table imports if not needed for types
 // import { mcpServersTable, toolExecutionLogsTable } from '@/db/schema';
-
 import { authenticateApiKey } from '../auth';
 
 export async function POST(request: Request) {

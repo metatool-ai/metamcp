@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'MetaMCP Dashboard',
-  description: 'The internal tool for MetaMCP.',
+  title: 'mcp.garden',
+  description: 'Welcome to the mcp.garden.',
 };
 
 export default function RootLayout({

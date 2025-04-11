@@ -4,10 +4,10 @@
 // import { and, eq } from 'drizzle-orm';
 import { customAlphabet } from 'nanoid';
 
-import { createClient } from '@/utils/supabase/server';
 // Remove unused schema import
 // import { apiKeysTable } from '@/db/schema';
 import { ApiKey } from '@/types/api-key';
+import { createClient } from '@/utils/supabase/server';
 
 const nanoid = customAlphabet(
   '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
@@ -43,6 +43,7 @@ export async function getFirstApiKey(projectUuid: string) {
   }
 
   const supabase = await createClient();
+  // eslint-disable-next-line prefer-const -- apiKey needs to be let, but fetchError doesn't change
   let { data: apiKey, error: fetchError } = await supabase
     .from('api_keys') // Use table name string
     .select('*')

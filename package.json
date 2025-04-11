@@ -8,8 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate"
+    "supabase:types": "supabase gen types typescript --project-id idqvgldmnrqchzzrubah --schema public > types/supabase.ts",
+    "supabase:dump:schema": "supabase db dump --schema public > supabase_schema.sql"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

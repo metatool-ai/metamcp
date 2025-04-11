@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { createClient } from '@/utils/supabase/server';
 import { toolExecutionLogsTable } from '@/db/schema'; // Keep for $inferInsert type
+import { createClient } from '@/utils/supabase/server';
 
 import { authenticateApiKey } from '../../auth';
 

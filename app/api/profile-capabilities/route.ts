@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 
 import { createClient } from '@/utils/supabase/server';
+
 // Remove unused schema import if not needed for types
 // import { profilesTable } from '@/db/schema';
-
 import { authenticateApiKey } from '../auth';
 
 export async function GET(request: Request) {

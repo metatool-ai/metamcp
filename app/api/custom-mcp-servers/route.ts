@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { createClient } from '@/utils/supabase/server';
 import { McpServerStatus } from '@/db/schema'; // Keep enum for status values
+import { createClient } from '@/utils/supabase/server';
 
 import { authenticateApiKey } from '../auth';
 

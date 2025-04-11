@@ -3,11 +3,11 @@
 // Remove Drizzle imports
 // import { and, desc, eq, or } from 'drizzle-orm';
 
-import { createClient } from '@/utils/supabase/server';
 import { McpServerStatus, McpServerType } from '@/db/schema'; // Keep enums
 // Remove unused schema import
 // import { mcpServersTable } from '@/db/schema';
 import { McpServer } from '@/types/mcp-server';
+import { createClient } from '@/utils/supabase/server';
 
 export async function getMcpServers(
   profileUuid: string,

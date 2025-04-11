@@ -3,8 +3,8 @@
 // Remove Drizzle imports
 // import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
-import { createClient } from '@/utils/supabase/server';
 import { ToolExecutionStatus } from '@/db/schema'; // Keep enum
+import { createClient } from '@/utils/supabase/server';
 // Remove unused schema table imports
 // import { mcpServersTable, toolExecutionLogsTable } from '@/db/schema';
 
@@ -47,7 +47,7 @@ export async function getToolExecutionLogs({
   }
 
   // Build the where conditions
-  const whereConditions = [];
+  // const whereConditions = []; // Removed unused variable
 
   // Filter by MCP servers that belong to the current profile
   const supabase = await createClient();

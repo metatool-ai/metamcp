@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { createClient } from '@/utils/supabase/server'; // Use the server helper
 import { McpServerStatus } from '@/db/schema'; // Keep enum for status check
+import { createClient } from '@/utils/supabase/server'; // Use the server helper
 
 import { authenticateApiKey } from '../auth';
 
@@ -16,7 +16,8 @@ export async function GET(request: Request) {
     const { data: activeMcpServers, error: fetchError } = await supabase
       .from('mcp_servers') // Use table name as string
       .select('*')
-      .eq('status', McpServerStatus.ACTIVE); // Use enum value 'ACTIVE'
+      .eq('status', McpServerStatus.ACTIVE) // Use enum value 'ACTIVE'
+      .eq('profile_uuid', auth.activeProfile.uuid); // Filter by active profile
 
     if (fetchError) {
       console.error('Supabase fetch error:', fetchError);
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
         env,
         url,
         status, // Use status from body
-        // profile_uuid: auth.activeProfile.uuid, // Omitted as requested
+        profile_uuid: auth.activeProfile.uuid, // Associate with active profile
       })
       .select()
       .single(); // Assuming insert returns the single created row

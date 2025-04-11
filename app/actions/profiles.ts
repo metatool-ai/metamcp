@@ -3,8 +3,8 @@
 // Remove Drizzle imports
 // import { eq } from 'drizzle-orm';
 
-import { createClient } from '@/utils/supabase/server';
 import { ProfileCapability } from '@/db/schema'; // Keep enum
+import { createClient } from '@/utils/supabase/server';
 // Remove unused schema imports
 // import { profilesTable } from '@/db/schema';
 // import { projectsTable } from '@/db/schema';

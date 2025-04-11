@@ -12,6 +12,14 @@ export async function createProject(name: string) {
   // This is refactored as sequential operations. Consider using a DB function (RPC) for atomicity.
   const supabase = await createClient();
 
+  // Get current user
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    console.error("Error getting user:", userError);
+    throw new Error('User not authenticated');
+  }
+  const userId = user.id;
+
   // 1. Create the project
   const { data: project, error: projectError } = await supabase
     .from('projects')
@@ -52,24 +60,58 @@ export async function createProject(name: string) {
     throw new Error('Failed to link profile to project');
   }
 
+  // 4. Link user to the project in the junction table
+  const { error: linkError } = await supabase
+    .from('users_projects') // Use the correct junction table name
+    .insert({ user_uuid: userId, project_uuid: project.uuid }); // Corrected column name
+
+  if (linkError) {
+    console.error("Error linking user to project:", linkError);
+    // Attempt cleanup?
+    throw new Error('Failed to link user to project');
+  }
+
   return updatedProject;
 }
 
 export async function getProject(projectUuid: string) {
   const supabase = await createClient();
+  // Get current user
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+  const userId = user.id;
+
+  // Check if user is linked to the project
+  const { data: link, error: linkError } = await supabase
+    .from('users_projects')
+    .select('project_uuid') // Select minimal data
+    .eq('user_uuid', userId) // Corrected column name
+    .eq('project_uuid', projectUuid)
+    .maybeSingle();
+
+  if (linkError || !link) {
+    console.error(`Auth check failed for user ${userId} and project ${projectUuid}:`, linkError);
+    throw new Error('Project not found or user lacks access');
+  }
+
+  // User has access, now fetch the project details
   const { data: project, error } = await supabase
-    .from('projects') // Use table name string
+    .from('projects')
     .select('*')
     .eq('uuid', projectUuid)
-    .maybeSingle(); // Returns object or null
+    .single(); // Use single() as we know it exists from the link check
 
   if (error) {
     console.error(`Error fetching project ${projectUuid}:`, error);
     throw new Error('Failed to fetch project'); // Throw error on DB failure
   }
 
-  if (!project) {
-    throw new Error('Project not found'); // Throw error if null (not found)
+  // Error handling for the project fetch itself (though unlikely if link exists)
+  if (error || !project) {
+    console.error(`Error fetching project details ${projectUuid} after auth check:`, error);
+    throw new Error('Failed to fetch project details');
   }
 
   return project; // Return the single object
@@ -77,21 +119,45 @@ export async function getProject(projectUuid: string) {
 
 export async function getProjects() {
   const supabase = await createClient();
-  let { data: projects, error } = await supabase
-    .from('projects') // Use table name string
-    .select('*');
+  // Get current user
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    console.error("Error getting user for getProjects:", userError);
+    return []; // Return empty if no user
+  }
+  const userId = user.id;
 
-  if (error) {
-    console.error("Error fetching projects:", error);
-    // Decide how to handle - throw, or return empty? Original created one.
-    // Let's try creating one as fallback, mimicking original logic.
-    projects = [];
+  // Get project UUIDs user is linked to
+  const { data: userProjectLinks, error: linkError } = await supabase
+    .from('users_projects')
+    .select('project_uuid')
+    .eq('user_uuid', userId); // Corrected column name
+
+  if (linkError) {
+    console.error(`Error fetching project links for user ${userId}:`, linkError);
+    return []; // Return empty on error
   }
 
-  // Ensure projects is an array even if fetch failed slightly differently
-  if (!Array.isArray(projects)) {
-    projects = [];
+  const projectUuids = userProjectLinks?.map(link => link.project_uuid) || [];
+
+  let projects = [];
+  if (projectUuids.length > 0) {
+    // Fetch details for those projects
+    const { data: projectDetails, error: projectsError } = await supabase
+      .from('projects')
+      .select('*')
+      .in('uuid', projectUuids);
+
+    if (projectsError) {
+      console.error(`Error fetching project details for user ${userId}:`, projectsError);
+      // Fall through to potentially create default project? Or return empty?
+      // Let's return empty for now if fetching details fails.
+      return [];
+    }
+    projects = projectDetails || [];
   }
+
+  // (Error handling and array initialization done above)
 
   if (projects.length === 0) {
     try {
@@ -110,20 +176,27 @@ export async function getProjects() {
 export async function updateProjectName(projectUuid: string, newName: string) {
   // Fetch first to ensure it exists before updating
   const supabase = await createClient();
-  const { data: project, error: fetchError } = await supabase
-    .from('projects')
-    .select('uuid') // Only need UUID to check existence
-    .eq('uuid', projectUuid)
+  // Get current user
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+  const userId = user.id;
+
+  // Check if user is linked to the project
+  const { data: link, error: linkError } = await supabase
+    .from('users_projects')
+    .select('project_uuid')
+    .eq('user_uuid', userId) // Corrected column name
+    .eq('project_uuid', projectUuid)
     .maybeSingle();
 
-  if (fetchError) {
-    console.error(`Error checking existence of project ${projectUuid}:`, fetchError);
-    throw new Error('Failed to check project existence before update');
+  if (linkError || !link) {
+    console.error(`Auth check failed for user ${userId} and project ${projectUuid}:`, linkError);
+    throw new Error('Project not found or user lacks access');
   }
 
-  if (!project) {
-    throw new Error('Project not found');
-  }
+  // (Authorization check done above)
 
   // Now perform the update
   const { data: updatedProject, error: updateError } = await supabase
@@ -143,21 +216,42 @@ export async function updateProjectName(projectUuid: string, newName: string) {
 
 export async function deleteProject(projectUuid: string) {
   const supabase = await createClient();
-  // No need to fetch the project first if we check the count
+  // Get current user
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+  const userId = user.id;
+
+  // Check if user is linked to the project they are trying to delete
+  const { data: link, error: linkError } = await supabase
+    .from('users_projects')
+    .select('project_uuid')
+    .eq('user_uuid', userId) // Corrected column name
+    .eq('project_uuid', projectUuid)
+    .maybeSingle();
+
+  if (linkError || !link) {
+    console.error(`Auth check failed for user ${userId} and project ${projectUuid}:`, linkError);
+    throw new Error('Project not found or user lacks access');
+  }
 
   // Check if this is the last project
   // Check project count first
-  const { count: projectCount, error: countError } = await supabase
-    .from('projects')
-    .select('*', { count: 'exact', head: true }); // Efficiently get count
+  // Check if this is the user's *only* project
+  const { count: userProjectCount, error: countError } = await supabase
+    .from('users_projects')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_uuid', userId); // Corrected column name
 
   if (countError) {
-    console.error("Error counting projects:", countError);
-    throw new Error('Failed to count projects before deletion');
+    console.error(`Error counting projects for user ${userId}:`, countError);
+    throw new Error('Failed to count user projects before deletion');
   }
 
-  if (projectCount === 1) {
-    throw new Error('Cannot delete the last project');
+  // Use userProjectCount now
+  if (userProjectCount === 1) {
+    throw new Error('Cannot delete the last project associated with this user');
   }
 
   // Perform delete
@@ -179,17 +273,39 @@ export async function deleteProject(projectUuid: string) {
 }
 
 export async function setActiveProject(projectUuid: string) {
-  // This function seems identical to getProject, refactor similarly
+  // Refactor setActiveProject - check user link first, then fetch project
   const supabase = await createClient();
+  // Get current user
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+  const userId = user.id;
+
+  // Check if user is linked to the project
+  const { data: link, error: linkError } = await supabase
+    .from('users_projects')
+    .select('project_uuid')
+    .eq('user_uuid', userId) // Corrected column name
+    .eq('project_uuid', projectUuid)
+    .maybeSingle();
+
+  if (linkError || !link) {
+    console.error(`Auth check failed for user ${userId} and project ${projectUuid}:`, linkError);
+    throw new Error('Project not found or user lacks access');
+  }
+
+  // User has access, now fetch the project details
   const { data: project, error } = await supabase
-    .from('projects') // Use table name string
+    .from('projects')
     .select('*')
     .eq('uuid', projectUuid)
-    .maybeSingle(); // Returns object or null
+    .single(); // Use single() as we know it exists
 
-  if (error) {
-    console.error(`Error fetching project ${projectUuid} for setActiveProject:`, error);
-    throw new Error('Failed to fetch project'); // Throw error on DB failure
+  // Error handling for the project fetch itself
+  if (error || !project) {
+    console.error(`Error fetching project details ${projectUuid} after auth check:`, error);
+    throw new Error('Failed to fetch project details');
   }
 
   if (!project) {

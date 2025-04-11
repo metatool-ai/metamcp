@@ -3,11 +3,11 @@
 // Remove Drizzle imports
 // import { eq } from 'drizzle-orm';
 
-import { createClient } from '@/utils/supabase/server';
 import { ToggleStatus } from '@/db/schema'; // Keep enum
 // Remove unused schema import
 // import { toolsTable } from '@/db/schema';
 import { Tool } from '@/types/tool';
+import { createClient } from '@/utils/supabase/server';
 
 export async function getToolsByMcpServerUuid(
   mcpServerUuid: string

@@ -8,7 +8,7 @@
       ],
       "env": {
         "METAMCP_API_KEY": "sk_mt_f6lzDAhAyqslGj50pnuY6o2ywSaLBGshNQCPPc2WF2FWiKKKJ92MQMh3wk2dM3Kk",
-        "METAMCP_API_BASE_URL": "http://mcp.garden"
+        "METAMCP_API_BASE_URL": "http://localhost:12005"
       },
       "disabled": false,
       "alwaysAllow": []

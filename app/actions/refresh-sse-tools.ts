@@ -2,12 +2,12 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+
+import { McpServerType } from '@/db/schema'; // Keep enum
 // Remove drizzle imports
 // import { eq } from 'drizzle-orm';
 // import { sql } from 'drizzle-orm';
-
 import { createClient } from '@/utils/supabase/server';
-import { McpServerType } from '@/db/schema'; // Keep enum
 // Remove unused schema imports
 // import { mcpServersTable } from '@/db/schema';
 // import { toolsTable } from '@/db/schema';

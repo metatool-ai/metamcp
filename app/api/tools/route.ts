@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 
 import { createClient } from '@/utils/supabase/server';
+import { toolsTable } from '@/db/schema';
+
 // Remove unused schema imports if not needed for types
 // import { mcpServersTable, toolsTable } from '@/db/schema';
-
 import { authenticateApiKey } from '../auth';
 
 export async function POST(request: Request) {
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
       validTools.push({
         name,
         description,
-        toolSchema,
+        tool_schema: toolSchema, // Explicitly use snake_case for DB column
         mcp_server_uuid,
       });
     }
