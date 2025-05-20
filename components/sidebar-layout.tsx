@@ -47,6 +47,7 @@ import { useToast } from '@/hooks/use-toast';
 
 import { ProfileSwitcher } from './profile-switcher';
 import { ProjectSwitcher } from './project-switcher';
+import LogoutButton from './LogoutButton';
 
 export default function SidebarLayout({
   children,
@@ -175,6 +176,9 @@ export default function SidebarLayout({
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                      <LogoutButton />
+                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
