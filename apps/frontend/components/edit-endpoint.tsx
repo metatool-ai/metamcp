@@ -67,8 +67,9 @@ export function EditEndpoint({
   const updateEndpointMutation = trpc.frontend.endpoints.update.useMutation({
     onSuccess: (data) => {
       if (data.success && data.data) {
-        // Invalidate both the list and individual endpoint queries
+        // Invalidate both the list and individual endpoint queries, and MCP servers list
         utils.frontend.endpoints.list.invalidate();
+        utils.frontend.mcpServers.list.invalidate();
         if (endpoint) {
           utils.frontend.endpoints.get.invalidate({ uuid: endpoint.uuid });
         }

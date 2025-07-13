@@ -86,6 +86,7 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
     onSuccess: () => {
       toast.success(t("endpoints:list.deleteSuccess"));
       utils.frontend.endpoints.list.invalidate();
+      utils.frontend.mcpServers.list.invalidate();
       setDeleteDialogOpen(false);
       setEndpointToDelete(null);
       onRefresh?.();

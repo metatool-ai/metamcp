@@ -20,7 +20,7 @@ import {
 } from "@/lib/i18n";
 
 export function LanguageSwitcher() {
-  const { t, locale: currentLocale } = useTranslations();
+  const { locale: currentLocale } = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
 

@@ -186,10 +186,10 @@ function McpInspectorContent() {
         <div className="flex items-center gap-3">
           <SearchCode className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">{t("inspector:title")}</h1>
-            <p className="text-muted-foreground">
-              {t("inspector:subtitle")}
-            </p>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {t("inspector:title")}
+            </h1>
+            <p className="text-muted-foreground">{t("inspector:subtitle")}</p>
           </div>
         </div>
 
@@ -197,7 +197,9 @@ function McpInspectorContent() {
 
         {/* MCP Server Selection */}
         <div className="flex items-center gap-4">
-          <span className="text-sm font-medium">{t("inspector:serverSelection")}</span>
+          <span className="text-sm font-medium">
+            {t("inspector:serverSelection")}
+          </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -205,14 +207,18 @@ function McpInspectorContent() {
                 className="justify-between min-w-[300px]"
               >
                 <span>
-                  {selectedServer ? selectedServer.name : t("inspector:selectServerDropdown")}
+                  {selectedServer
+                    ? selectedServer.name
+                    : t("inspector:selectServerDropdown")}
                 </span>
                 <ChevronDown className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-[300px]">
               {serversLoading ? (
-                <DropdownMenuItem disabled>{t("inspector:loadingServers")}</DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  {t("inspector:loadingServers")}
+                </DropdownMenuItem>
               ) : servers.length === 0 ? (
                 <DropdownMenuItem disabled>
                   {t("inspector:noServersAvailable")}
@@ -239,7 +245,9 @@ function McpInspectorContent() {
           {/* Connection Status and Controls */}
           {selectedServer && (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{t("inspector:connectionStatus")}</span>
+              <span className="text-sm text-muted-foreground">
+                {t("inspector:connectionStatus")}
+              </span>
               <span className={`text-sm font-medium ${connectionInfo.color}`}>
                 {connectionInfo.text}
               </span>
@@ -300,7 +308,9 @@ function McpInspectorContent() {
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Server className="h-12 w-12 text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">{t("inspector:noServerSelected")}</h3>
+            <h3 className="text-lg font-semibold mb-2">
+              {t("inspector:noServerSelected")}
+            </h3>
             <p className="text-sm text-muted-foreground max-w-md">
               {t("inspector:noServerSelectedDesc")}
             </p>

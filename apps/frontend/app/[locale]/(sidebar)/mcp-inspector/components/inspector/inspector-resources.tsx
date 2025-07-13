@@ -110,7 +110,7 @@ export function InspectorResources({
         setLoading(false);
       }
     },
-    [makeRequest, enabled],
+    [makeRequest, enabled, t],
   );
 
   const fetchResourceTemplates = useCallback(
@@ -160,7 +160,7 @@ export function InspectorResources({
         setTemplatesLoading(false);
       }
     },
-    [makeRequest, enabled],
+    [makeRequest, enabled, t],
   );
 
   const clearResources = () => {
