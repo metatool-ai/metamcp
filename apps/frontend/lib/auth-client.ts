@@ -1,9 +1,7 @@
 import { genericOAuthClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
-import { getAppUrl } from "./env";
-
 export const authClient = createAuthClient({
-  baseURL: getAppUrl(),
+  baseURL: `${window.location.origin}/api/auth`, // Use absolute URL with window origin
   plugins: [genericOAuthClient()],
 }) as ReturnType<typeof createAuthClient>;

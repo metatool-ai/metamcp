@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-import { DomainWarningBanner } from "@/components/domain-warning-banner";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,7 +78,7 @@ function LoginForm() {
       } else {
         router.push(callbackUrl);
       }
-    } catch (err) {
+    } catch (_err) {
       setError(t("auth:signInError"));
     } finally {
       setIsLoading(false);
@@ -197,7 +196,6 @@ export default function LoginPage() {
         <LanguageSwitcher />
       </div>
       <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
-        <DomainWarningBanner />
         <Suspense fallback={<div>Loading...</div>}>
           <LoginForm />
         </Suspense>

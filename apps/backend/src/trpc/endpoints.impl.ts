@@ -81,8 +81,10 @@ export const endpointsImplementations = {
           const mcpServerName = `${input.name}-endpoint`;
           const mcpServerDescription = `Auto-generated MCP server for endpoint "${input.name}"`;
 
-          const baseUrl = process.env.APP_URL;
-          const endpointUrl = `${baseUrl}/metamcp/${input.name}/mcp`;
+          // Use the origin from the frontend or fallback to a generic URL
+          const endpointUrl = input.origin
+            ? `${input.origin}/metamcp/${input.name}/mcp`
+            : `<YOUR_DOMAIN>/metamcp/${input.name}/mcp`;
 
           // Get or create API key for bearer token
           let bearerToken = "";

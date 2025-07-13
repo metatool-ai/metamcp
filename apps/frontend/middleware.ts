@@ -70,7 +70,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Now handle authentication for the pathname without locale
-  const publicRoutes = ["/login", "/register", "/", "/cors-error"];
+  const publicRoutes = ["/login", "/register", "/"];
   if (publicRoutes.includes(pathnameWithoutLocale)) {
     return NextResponse.next();
   }

@@ -37,6 +37,7 @@ export const CreateEndpointRequestSchema = z.object({
   useQueryParamAuth: z.boolean().default(false),
   createMcpServer: z.boolean().default(true),
   user_id: z.string().nullable().optional(),
+  origin: z.string().url().optional(),
 });
 
 export const EndpointSchema = z.object({

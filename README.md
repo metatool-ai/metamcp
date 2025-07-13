@@ -24,9 +24,6 @@
 
 English | [中文](./README_cn.md)
 
-
-
-
 ## 📋 Table of Contents
 
 - [🎯 Use Cases](#-use-cases)
@@ -50,12 +47,12 @@ English | [中文](./README_cn.md)
 - [📄 License](#-license)
 - [🙏 Credits](#-credits)
 
-
 ## 🎯 Use Cases
+
 - 🏷️ **Group MCP servers into namespaces, host them as meta-MCPs, and assign public endpoints** (SSE or Streamable HTTP), with auth. One-click to switch a namespace for an endpoint.
--  🎯 **Pick tools you only need when remixing MCP servers.** Apply other **pluggable middleware** around observability, security, etc. (coming soon)
--  🔍 **Use as enhanced MCP inspector** with saved server configs, and inspect your MetaMCP endpoints in house to see if it works or not.
--  🔍 **Use as Elasticsearch for MCP tool selection** (coming soon)
+- 🎯 **Pick tools you only need when remixing MCP servers.** Apply other **pluggable middleware** around observability, security, etc. (coming soon)
+- 🔍 **Use as enhanced MCP inspector** with saved server configs, and inspect your MetaMCP endpoints in house to see if it works or not.
+- 🔍 **Use as Elasticsearch for MCP tool selection** (coming soon)
 
 Generally developers can use MetaMCP as **infrastructure** to host dynamically composed MCP servers through a unified endpoint, and build agents on top of it.
 
@@ -66,6 +63,7 @@ Quick demo video: https://youtu.be/Cf6jVd2saAs
 ## 📖 Concepts
 
 ### 🖥️ **MCP Server**
+
 A MCP server configuration that tells MetaMCP how to start a MCP server.
 
 ```json
@@ -77,22 +75,26 @@ A MCP server configuration that tells MetaMCP how to start a MCP server.
 ```
 
 ### 🏷️ **MetaMCP Namespace**
+
 - Group one or more MCP servers into a namespace
 - Enable/disable MCP servers or at tool level
 - Apply middlewares to MCP requests and responses
 
 ### 🌐 **MetaMCP Endpoint**
+
 - Create endpoints and assign namespace to endpoints
 - Multiple MCP servers in the namespace will be aggregated and emitted as a MetaMCP endpoint
 - Choose auth level and strategy
 - Host through **SSE** or **Streamable HTTP** transports in MCP and **OpenAPI** endpoints for clients like [Open WebUI](https://github.com/open-webui/open-webui)
 
 ### ⚙️ **Middleware**
+
 - Intercepts and transforms MCP requests and responses at namespace level
 - **Built-in example**: "Filter inactive tools" - optimizes tool context for LLMs
 - **Future ideas**: tool logging, error traces, validation, scanning
 
 ### 🔍 **Inspector**
+
 Similar to the official MCP inspector, but with **saved server configs** - MetaMCP automatically creates configurations so you can debug MetaMCP endpoints immediately.
 
 ## 🚀 Quick Start
@@ -107,8 +109,6 @@ cd metamcp
 cp example.env .env
 docker compose up -d
 ```
-
-If you modify APP_URL env vars, make sure you only access from the APP_URL, because MetaMCP enforces CORS policy on the URL, so no other URL is accessible.
 
 Note that the pg volume name may collide with your other pg dockers, which is global, consider rename it in `docker-compose.yml`:
 
@@ -199,6 +199,7 @@ Using SSE
 ```
 
 **Important notes:**
+
 - Replace `<YOUR_ENDPOINT_NAME>` with your actual endpoint name
 - Replace `<YOUR_API_KEY_HERE>` with your MetaMCP API key (format: `sk_mt_...`)
 
@@ -281,7 +282,7 @@ Since MCP leverages SSE for long connection, if you are using reverse proxy like
 
 ### 📊 Sequence Diagram
 
-*Note: Prompts and resources follow similar patterns to tools.*
+_Note: Prompts and resources follow similar patterns to tools._
 
 ```mermaid
 sequenceDiagram
@@ -329,9 +330,11 @@ Would appreciate if you mentioned with back links if your projects use the code.
 ## 🙏 Credits
 
 Some code inspired by:
+
 - [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
 - [MCP Proxy Server](https://github.com/adamwattis/mcp-proxy-server)
 
 Not directly used the code by took ideas from
+
 - https://github.com/open-webui/openapi-servers
 - https://github.com/open-webui/mcpo

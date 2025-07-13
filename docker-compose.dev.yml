@@ -17,10 +17,6 @@ services:
       # Database configuration (composed from above vars)
       DATABASE_URL: postgresql://${POSTGRES_USER:-metamcp_user}:${POSTGRES_PASSWORD:-m3t4mcp}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-metamcp_db}
       
-      # Application URL configuration
-      APP_URL: ${APP_URL:-http://localhost:12008}
-      NEXT_PUBLIC_APP_URL: ${APP_URL:-http://localhost:12008}
-      
       # Auth configuration
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-your-super-secret-key-change-this-in-production}
       

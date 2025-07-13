@@ -121,6 +121,7 @@ export default function EndpointsPage() {
         useQueryParamAuth: data.useQueryParamAuth,
         createMcpServer: data.createMcpServer,
         user_id: data.user_id,
+        origin: window.location.origin,
       };
 
       // Use tRPC mutation

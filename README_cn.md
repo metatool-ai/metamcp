@@ -109,8 +109,6 @@ cp example.env .env
 docker compose up -d
 ```
 
-如果你修改了 APP_URL 环境变量，确保只从 APP_URL 访问，因为 MetaMCP 在该 URL 上强制执行 CORS 策略，其他 URL 无法访问。
-
 注意：pg 卷名可能与其他 pg docker 冲突（全局），可在 `docker-compose.yml` 中重命名：
 
 ```

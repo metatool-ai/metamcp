@@ -10,12 +10,8 @@ import { configService } from "./lib/config.service";
 if (!process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET environment variable is required");
 }
-if (!process.env.APP_URL) {
-  throw new Error("APP_URL environment variable is required");
-}
 
 const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET;
-const BETTER_AUTH_URL = process.env.APP_URL;
 
 // OIDC Provider configuration - optional, only if environment variables are provided
 const oidcProviders = [];
@@ -37,7 +33,7 @@ if (process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET) {
 
 export const auth = betterAuth({
   secret: BETTER_AUTH_SECRET,
-  baseURL: BETTER_AUTH_URL,
+  // Remove baseURL to allow dynamic origin detection
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
@@ -47,17 +43,8 @@ export const auth = betterAuth({
       verification: schema.verificationsTable,
     },
   }),
-  trustedOrigins: [
-    "http://localhost", // Added this line to fix the "Invalid origin" error
-    "http://localhost:3000",
-    "http://localhost:12008",
-    "http://127.0.0.1", // Also added this for good measure
-    "http://127.0.0.1:12008",
-    "http://127.0.0.1:3000",
-    "http://0.0.0.0",
-    "http://0.0.0.0:3000",
-    "http://0.0.0.0:12008",
-  ],
+  // Allow all origins for flexible deployment
+  trustedOrigins: ["*"],
   plugins: [
     // Add generic OAuth plugin for OIDC support
     ...(oidcProviders.length > 0
@@ -82,7 +69,7 @@ export const auth = betterAuth({
   },
   advanced: {
     crossSubDomainCookies: {
-      enabled: true,
+      enabled: false,
     },
   },
   logger: {

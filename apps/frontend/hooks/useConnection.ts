@@ -38,10 +38,10 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { SESSION_KEYS } from "@/lib/constants";
+import { getAppUrl } from "@/lib/env";
 import { trpc } from "@/lib/trpc";
 
 import { ConnectionStatus } from "../lib/constants";
-import { getAppUrl } from "../lib/env";
 import {
   Notification,
   StdErrNotificationSchema,

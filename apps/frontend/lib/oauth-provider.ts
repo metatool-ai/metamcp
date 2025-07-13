@@ -6,7 +6,6 @@ import {
   OAuthTokensSchema,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 
-import { getAppUrl } from "./env";
 import { vanillaTrpcClient } from "./trpc";
 
 // OAuth client provider that works with a specific MCP server
@@ -20,7 +19,8 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   }
 
   get redirectUrl() {
-    return getAppUrl() + "/oauth/callback";
+    // Use window.location.origin for dynamic origin detection
+    return window.location.origin + "/oauth/callback";
   }
 
   get clientMetadata() {
