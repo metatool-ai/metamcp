@@ -1,4 +1,4 @@
-# 🚀 MetaMCP (Aggregate MCP servers & apply middlewares; host & emit unified MCP servers out)
+# 🚀 MetaMCP (MCP Aggregator, Orchestrator, Middleware, Gateway in one docker)
 
 <div align="center">
 
@@ -316,6 +316,12 @@ sequenceDiagram
 - [ ] 💬 Chat/Agent Playground
 - [ ] 🧪 Testing & Evaluation for MCP tool selection optimization
 - [ ] ⚡ Dynamically generate MCP servers
+
+## 🌐 i18n
+
+See [README-i18n.md](README-i18n.md)
+
+Currently en and zh locale are supported, but welcome contributions.
 
 ## 🤝 Contributing
 
