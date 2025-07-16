@@ -127,6 +127,7 @@
     "parameters": "Parameters",
     "required": "Required",
     "showFullSchemaJson": "Show full schema JSON",
+    "autoSaving": "Auto-saving...",
     "active": "ACTIVE",
     "inactive": "INACTIVE"
   },
@@ -161,10 +162,12 @@
     "noToolsAvailable": "No Tools Available",
     "noToolsDescription": "No tools have been found from MetaMCP or saved to this namespace yet. Connect to MetaMCP and refresh to discover tools from your servers.",
     "toolsRefreshed": "Tools refreshed successfully",
+    "toolsRefreshedDescription": "Tools have been refreshed from MetaMCP connection",
     "toolsRefreshFailed": "Failed to refresh tools",
     "noToolsFromMetaMCP": "No tools found in MetaMCP connection",
     "fetchToolsError": "Failed to fetch tools from MetaMCP connection",
-    "metaMCPNotAvailable": "MetaMCP connection not available, falling back to database refresh"
+    "metaMCPNotAvailable": "MetaMCP connection not available, falling back to database refresh",
+    "toolsAutoSaved": "Tools automatically discovered and saved"
   },
   "edit": {
     "title": "Edit Namespace",

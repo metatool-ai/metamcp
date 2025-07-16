@@ -127,6 +127,7 @@
     "parameters": "参数",
     "required": "必需",
     "showFullSchemaJson": "显示完整架构 JSON",
+    "autoSaving": "自动保存中...",
     "active": "活跃",
     "inactive": "非活跃"
   },
@@ -161,10 +162,12 @@
     "noToolsAvailable": "无可用工具",
     "noToolsDescription": "尚未从 MetaMCP 找到工具或保存到此命名空间。连接到 MetaMCP 并刷新以发现服务器中的工具。",
     "toolsRefreshed": "工具刷新成功",
+    "toolsRefreshedDescription": "工具已从 MetaMCP 连接刷新",
     "toolsRefreshFailed": "刷新工具失败",
     "noToolsFromMetaMCP": "MetaMCP 连接中未找到工具",
     "fetchToolsError": "从 MetaMCP 连接获取工具失败",
-    "metaMCPNotAvailable": "MetaMCP 连接不可用，回退到数据库刷新"
+    "metaMCPNotAvailable": "MetaMCP 连接不可用，回退到数据库刷新",
+    "toolsAutoSaved": "工具已自动发现并保存"
   },
   "edit": {
     "title": "编辑命名空间",

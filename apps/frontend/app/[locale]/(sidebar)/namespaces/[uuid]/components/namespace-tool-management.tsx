@@ -6,7 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { ToolStatusEnum } from "@repo/zod-types";
 import { AlertTriangle, Database, RefreshCw, Wrench } from "lucide-react";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -44,8 +44,8 @@ export function NamespaceToolManagement({
       inputSchema: Record<string, unknown>;
     }>
   >([]);
-  const [hasAttemptedInitialFetch, setHasAttemptedInitialFetch] =
-    useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const hasAttemptedInitialFetch = useRef(false);
 
   // Get translations
   const { t } = useTranslations();
@@ -64,20 +64,36 @@ export function NamespaceToolManagement({
 
   const namespaceTools = toolsResponse?.success ? toolsResponse.data : [];
 
-  // Refresh tools mutation
+  // Track if this is an auto-save operation (only for first load)
+  // const [isAutoSaving, setIsAutoSaving] = useState(false);
+
+  // Refresh tools mutation (used only for auto-save on first load)
   const refreshToolsMutation =
     trpc.frontend.namespaces.refreshTools.useMutation({
       onSuccess: (response) => {
         if (response.success) {
-          toast.success(t("namespaces:toolManagement.toolsRefreshed"), {
-            description: response.message,
+          // Always show the backend response message which contains useful details
+          const toastTitle = isAutoSaving
+            ? t("namespaces:toolManagement.toolsAutoSaved")
+            : t("namespaces:toolManagement.toolsRefreshed");
+
+          toast.success(toastTitle, {
+            description: response.message, // Backend provides the detailed message
           });
+
+          if (isAutoSaving) {
+            setIsAutoSaving(false);
+          }
+
           // Invalidate the namespace tools query to refresh the data
           utils.frontend.namespaces.getTools.invalidate({ namespaceUuid });
         } else {
           toast.error(t("namespaces:toolManagement.toolsRefreshFailed"), {
             description: response.message,
           });
+          if (isAutoSaving) {
+            setIsAutoSaving(false);
+          }
         }
       },
       onError: (error) => {
@@ -85,54 +101,83 @@ export function NamespaceToolManagement({
         toast.error(t("namespaces:toolManagement.toolsRefreshFailed"), {
           description: error.message,
         });
+        if (isAutoSaving) {
+          setIsAutoSaving(false);
+        }
       },
     });
 
   // Fetch tools from MetaMCP
-  const fetchMetaMCPTools = useCallback(async () => {
-    if (!makeRequest) {
-      console.warn("MetaMCP connection not available");
-      return;
-    }
+  const fetchMetaMCPTools = useCallback(
+    async (autoSave: boolean = false) => {
+      if (!makeRequest) {
+        console.warn("MetaMCP connection not available");
+        return;
+      }
 
-    try {
-      const listToolsRequest: ClientRequest = {
-        method: "tools/list",
-        params: {},
-      };
+      try {
+        const listToolsRequest: ClientRequest = {
+          method: "tools/list",
+          params: {},
+        };
 
-      const toolsListResponse = await makeRequest(
-        listToolsRequest,
-        ListToolsResultSchema,
-        { suppressToast: true },
-      );
+        const toolsListResponse = await makeRequest(
+          listToolsRequest,
+          ListToolsResultSchema,
+          { suppressToast: true },
+        );
 
-      if (toolsListResponse && toolsListResponse.tools) {
-        const mcpToolsData = toolsListResponse.tools.map((tool) => ({
-          name: tool.name,
-          description: tool.description || "",
-          inputSchema: tool.inputSchema,
-        }));
+        if (toolsListResponse && toolsListResponse.tools) {
+          const mcpToolsData = toolsListResponse.tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description || "",
+            inputSchema: tool.inputSchema,
+          }));
 
-        setMcpTools(mcpToolsData);
-      } else {
+          setMcpTools(mcpToolsData);
+
+          // Automatically save tools to namespace mappings when autoSave is true (first load only)
+          if (autoSave && toolsListResponse.tools.length > 0) {
+            const toolsForSubmission = toolsListResponse.tools.map((tool) => ({
+              name: tool.name, // Keep the full "ServerName__toolName" format
+              description: tool.description || "",
+              inputSchema: tool.inputSchema,
+            }));
+
+            // Set auto-saving flag for better user feedback
+            setIsAutoSaving(true);
+
+            // Submit the tools for update to namespace tool mapping records
+            refreshToolsMutation.mutate({
+              namespaceUuid,
+              tools: toolsForSubmission,
+            });
+          } else if (autoSave) {
+            // Auto-save requested but no tools found - this is fine
+          } else {
+            // Manual refresh - not auto-saving
+          }
+        } else {
+          setMcpTools([]);
+        }
+      } catch (error) {
+        console.error("Error fetching tools from MetaMCP:", error);
         setMcpTools([]);
       }
-    } catch (error) {
-      console.error("Error fetching tools from MetaMCP:", error);
-      setMcpTools([]);
-    }
-  }, [makeRequest]);
+    },
+    [makeRequest, refreshToolsMutation, namespaceUuid],
+  );
 
   // Safely auto-fetch MetaMCP tools when connection becomes available
   React.useEffect(() => {
-    if (makeRequest && !hasAttemptedInitialFetch) {
-      setHasAttemptedInitialFetch(true);
-      fetchMetaMCPTools();
+    if (makeRequest && !hasAttemptedInitialFetch.current) {
+      hasAttemptedInitialFetch.current = true;
+      // Auto-save tools on first fetch to create namespace mappings automatically
+      fetchMetaMCPTools(true);
     }
-  }, [makeRequest, hasAttemptedInitialFetch, fetchMetaMCPTools]);
+  }, [makeRequest, fetchMetaMCPTools]);
 
-  // Handle MCP refresh for all servers
+  // Handle MCP refresh for all servers (just refresh display, don't save again)
   const handleRefreshAllTools = async () => {
     if (!makeRequest) {
       console.warn(t("namespaces:toolManagement.metaMCPNotAvailable"));
@@ -147,40 +192,13 @@ export function NamespaceToolManagement({
 
     setLoading(true);
     try {
-      // First fetch the tools to see what's available from MetaMCP
-      await fetchMetaMCPTools();
+      // Just fetch and display the tools (no mutation call to avoid duplicate toast)
+      await fetchMetaMCPTools(false);
 
-      // Then update the namespace with the tools
-      const listToolsRequest: ClientRequest = {
-        method: "tools/list",
-        params: {},
-      };
-
-      const toolsListResponse = await makeRequest(
-        listToolsRequest,
-        ListToolsResultSchema,
-        { suppressToast: true },
-      );
-
-      if (toolsListResponse && toolsListResponse.tools) {
-        // The tools from MetaMCP already contain server names in the format "ServerName__toolName"
-        // The backend will parse these names to extract server names and resolve server UUIDs
-        const toolsForSubmission = toolsListResponse.tools.map((tool) => ({
-          name: tool.name, // Keep the full "ServerName__toolName" format
-          description: tool.description || "",
-          inputSchema: tool.inputSchema,
-          // Remove serverUuid - the backend will resolve it from the tool name
-        }));
-
-        // Submit the tools for update to namespace tool mapping records
-        refreshToolsMutation.mutate({
-          namespaceUuid,
-          tools: toolsForSubmission,
-        });
-      } else {
-        console.log("No tools found in MetaMCP response");
-        toast.info(t("namespaces:toolManagement.noToolsFromMetaMCP"));
-      }
+      // Show simple success message for manual refresh
+      toast.success(t("namespaces:toolManagement.toolsRefreshed"), {
+        description: t("namespaces:toolManagement.toolsRefreshedDescription"),
+      });
     } catch (error) {
       console.error("Error fetching tools from MetaMCP:", error);
       toast.error(t("namespaces:toolManagement.fetchToolsError"), {
@@ -360,6 +378,7 @@ export function NamespaceToolManagement({
             savedTools={namespaceTools}
             mcpTools={mcpTools}
             loading={false} // We handle loading state above
+            autoSaving={isAutoSaving}
             onRefreshTools={handleRefreshAllTools}
             namespaceUuid={namespaceUuid}
             servers={servers}

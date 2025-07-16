@@ -76,6 +76,7 @@ interface EnhancedNamespaceToolsTableProps {
   savedTools: NamespaceTool[];
   mcpTools: MCPTool[];
   loading?: boolean;
+  autoSaving?: boolean;
   onRefreshTools?: () => void;
   namespaceUuid: string;
   servers: Array<{
@@ -97,6 +98,7 @@ export function EnhancedNamespaceToolsTable({
   savedTools,
   mcpTools,
   loading = false,
+  autoSaving = false,
   onRefreshTools,
   namespaceUuid,
   servers,
@@ -477,11 +479,19 @@ export function EnhancedNamespaceToolsTable({
             className="pl-10"
           />
         </div>
-        <div className="text-sm text-muted-foreground">
-          {t("namespaces:enhancedToolsTable.toolsCount", {
-            count: filteredAndSortedTools.length,
-            total: enhancedTools.length,
-          })}
+        <div className="flex items-center gap-2">
+          <div className="text-sm text-muted-foreground">
+            {t("namespaces:enhancedToolsTable.toolsCount", {
+              count: filteredAndSortedTools.length,
+              total: enhancedTools.length,
+            })}
+          </div>
+          {autoSaving && (
+            <div className="flex items-center gap-1 text-xs text-blue-600">
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              <span>{t("namespaces:enhancedToolsTable.autoSaving")}</span>
+            </div>
+          )}
         </div>
       </div>
 

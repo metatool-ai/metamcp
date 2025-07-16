@@ -1,5 +1,6 @@
 "use client";
 
+import { McpServerTypeEnum } from "@repo/zod-types";
 import { ArrowLeft, Calendar, Edit, Hash, Plug, Server } from "lucide-react";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
@@ -88,9 +89,10 @@ export default function NamespaceDetailPage({
   // MetaMCP Connection setup - connect to the metamcp proxy endpoint for this namespace
   const connection = useConnection({
     mcpServerUuid: uuid, // Using namespace UUID as the "server" UUID for connection
+    transportType: McpServerTypeEnum.Enum.SSE,
     command: "", // Not needed for metamcp proxy
     args: "",
-    sseUrl: `/mcp-proxy/metamcp/${uuid}/sse`, // Connect to metamcp proxy endpoint
+    url: `/mcp-proxy/metamcp/${uuid}/sse`, // Connect to metamcp proxy endpoint
     env: {},
     bearerToken: undefined,
     isMetaMCP: true, // Indicate this is a MetaMCP connection
@@ -101,18 +103,20 @@ export default function NamespaceDetailPage({
     onStdErrNotification: (notification) => {
       console.error("MetaMCP StdErr:", notification);
     },
+    enabled: Boolean(namespace && !isLoading),
   });
 
-  // Auto-connect when namespace data is available and not already connected
+  // Auto-connect when hook is enabled and not already connected
   useEffect(() => {
     if (
       connection &&
       namespace &&
+      !isLoading &&
       connection.connectionStatus === "disconnected"
     ) {
       connection.connect();
     }
-  }, [namespace, connection]);
+  }, [namespace, connection, isLoading]);
 
   // Handle delete namespace
   const handleDeleteNamespace = async () => {
