@@ -1,4 +1,8 @@
-import { ApiKeyCreateInput, ApiKeyUpdateInput, ApiKeyType } from "@repo/zod-types";
+import {
+  ApiKeyCreateInput,
+  ApiKeyType,
+  ApiKeyUpdateInput,
+} from "@repo/zod-types";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 
