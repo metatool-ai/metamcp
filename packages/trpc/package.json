@@ -15,6 +15,7 @@
   "dependencies": {
     "@repo/zod-types": "workspace:*",
     "@trpc/server": "^11.4.1",
+    "trpc-to-openapi": "^2.3.2",
     "zod": "^3.25.64"
   },
   "devDependencies": {

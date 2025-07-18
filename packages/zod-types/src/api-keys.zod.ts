@@ -1,11 +1,15 @@
 import { z } from "zod";
 
+// API Key type enum
+export const ApiKeyTypeEnum = z.enum(["MCP", "ADMIN"]);
+
 // Base API Key schemas
 export const ApiKeySchema = z.object({
   uuid: z.string().uuid(),
   name: z.string(),
   key: z.string(),
   user_id: z.string().nullable(),
+  type: ApiKeyTypeEnum.default("MCP"),
   created_at: z.date(),
   is_active: z.boolean(),
 });
@@ -19,6 +23,7 @@ export const CreateApiKeyFormSchema = z.object({
       /^[a-zA-Z0-9_\s-]+$/,
       "Name can only contain letters, numbers, spaces, underscores, and hyphens",
     ),
+  type: ApiKeyTypeEnum.default("MCP"),
   user_id: z.string().nullable().optional(),
 });
 
@@ -31,6 +36,7 @@ export const CreateApiKeyRequestSchema = z.object({
       /^[a-zA-Z0-9_\s-]+$/,
       "Name can only contain letters, numbers, spaces, underscores, and hyphens",
     ),
+  type: ApiKeyTypeEnum.default("MCP"),
   user_id: z.string().nullable().optional(),
 });
 
@@ -38,6 +44,7 @@ export const CreateApiKeyResponseSchema = z.object({
   uuid: z.string().uuid(),
   name: z.string(),
   key: z.string(),
+  type: ApiKeyTypeEnum,
   created_at: z.date(),
 });
 
@@ -52,6 +59,7 @@ export const UpdateApiKeyRequestSchema = z.object({
       "Name can only contain letters, numbers, spaces, underscores, and hyphens",
     )
     .optional(),
+  type: ApiKeyTypeEnum.optional(),
   is_active: z.boolean().optional(),
 });
 
@@ -59,6 +67,7 @@ export const UpdateApiKeyResponseSchema = z.object({
   uuid: z.string().uuid(),
   name: z.string(),
   key: z.string(),
+  type: ApiKeyTypeEnum,
   created_at: z.date(),
   is_active: z.boolean(),
 });
@@ -78,6 +87,7 @@ export const ListApiKeysResponseSchema = z.object({
       uuid: z.string().uuid(),
       name: z.string(),
       key: z.string(),
+      type: ApiKeyTypeEnum,
       created_at: z.date(),
       is_active: z.boolean(),
       user_id: z.string().nullable(),
@@ -93,21 +103,25 @@ export const ValidateApiKeyResponseSchema = z.object({
   valid: z.boolean(),
   user_id: z.string().optional(),
   key_uuid: z.string().uuid().optional(),
+  type: ApiKeyTypeEnum.optional(),
 });
 
 // Repository schemas
 export const ApiKeyCreateInputSchema = z.object({
   name: z.string(),
+  type: ApiKeyTypeEnum.default("MCP"),
   user_id: z.string().nullable().optional(),
   is_active: z.boolean().optional().default(true),
 });
 
 export const ApiKeyUpdateInputSchema = z.object({
   name: z.string().optional(),
+  type: ApiKeyTypeEnum.optional(),
   is_active: z.boolean().optional(),
 });
 
 // Type exports
+export type ApiKeyType = z.infer<typeof ApiKeyTypeEnum>;
 export type ApiKey = z.infer<typeof ApiKeySchema>;
 export type CreateApiKeyForm = z.infer<typeof CreateApiKeyFormSchema>;
 export type CreateApiKeyRequest = z.infer<typeof CreateApiKeyRequestSchema>;

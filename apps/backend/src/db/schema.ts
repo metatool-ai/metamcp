@@ -1,6 +1,10 @@
 import { OAuthClientInformation } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { McpServerStatusEnum, McpServerTypeEnum } from "@repo/zod-types";
+import {
+  ApiKeyTypeEnum,
+  McpServerStatusEnum,
+  McpServerTypeEnum,
+} from "@repo/zod-types";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -22,6 +26,7 @@ export const mcpServerStatusEnum = pgEnum(
   "mcp_server_status",
   McpServerStatusEnum.options,
 );
+export const apiKeyTypeEnum = pgEnum("api_key_type", ApiKeyTypeEnum.options);
 
 export const mcpServersTable = pgTable(
   "mcp_servers",
@@ -343,11 +348,13 @@ export const apiKeysTable = pgTable(
       .notNull()
       .defaultNow(),
     is_active: boolean("is_active").notNull().default(true),
+    type: apiKeyTypeEnum("type").notNull().default("MCP"),
   },
   (table) => [
     index("api_keys_user_id_idx").on(table.user_id),
     index("api_keys_key_idx").on(table.key),
     index("api_keys_is_active_idx").on(table.is_active),
+    index("api_keys_type_idx").on(table.type),
     unique("api_keys_name_per_user_idx").on(table.user_id, table.name),
   ],
 );

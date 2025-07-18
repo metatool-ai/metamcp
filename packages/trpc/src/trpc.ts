@@ -1,4 +1,5 @@
 import { initTRPC, TRPCError } from "@trpc/server";
+import { OpenApiMeta } from "trpc-to-openapi";
 
 // Create context interface that can be extended by backend
 export interface BaseContext {
@@ -8,10 +9,20 @@ export interface BaseContext {
   session?: any;
 }
 
-// Initialize tRPC with base context
+// Initialize tRPC for frontend (without OpenAPI meta)
 const t = initTRPC.context<BaseContext>().create();
 
-// Export router and procedure helpers
+// Initialize tRPC for headless API (with OpenAPI meta)
+export const createHeadlessRouter = () => {
+  // Import OpenAPI meta dynamically to avoid affecting frontend
+  const headlessTRPC = initTRPC
+    .context<BaseContext>()
+    .meta<OpenApiMeta>()
+    .create();
+  return headlessTRPC;
+};
+
+// Export router and procedure helpers for frontend
 export const router = t.router;
 export const publicProcedure = t.procedure;
 export const createTRPCRouter = t.router;

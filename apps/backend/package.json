@@ -34,6 +34,7 @@
     "pg": "^8.16.0",
     "shell-quote": "^1.8.3",
     "spawn-rx": "^5.1.2",
+    "trpc-to-openapi": "^2.3.2",
     "zod": "^3.25.64"
   },
   "devDependencies": {

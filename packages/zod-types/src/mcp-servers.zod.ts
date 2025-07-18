@@ -339,6 +339,30 @@ export const UpdateMcpServerResponseSchema = z.object({
   error: z.string().optional(),
 });
 
+// Headless API response schemas (simplified without success/failure wrappers)
+// Since we now throw TRPCErrors directly, these schemas only represent successful responses
+export const HeadlessCreateMcpServerResponseSchema = z.object({
+  data: McpServerSchema,
+  message: z.string(),
+});
+
+export const HeadlessListMcpServersResponseSchema = z.object({
+  data: z.array(McpServerSchema),
+});
+
+export const HeadlessGetMcpServerResponseSchema = z.object({
+  data: McpServerSchema,
+});
+
+export const HeadlessDeleteMcpServerResponseSchema = z.object({
+  message: z.string(),
+});
+
+export const HeadlessUpdateMcpServerResponseSchema = z.object({
+  data: McpServerSchema,
+  message: z.string(),
+});
+
 export type DeleteMcpServerRequest = z.infer<
   typeof DeleteMcpServerRequestSchema
 >;

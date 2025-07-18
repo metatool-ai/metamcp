@@ -36,12 +36,9 @@ const trpcRouter = express.Router();
 
 // Apply security middleware for frontend communication
 trpcRouter.use(helmet());
-trpcRouter.use(
-  cors({
-    origin: process.env.APP_URL,
-    credentials: true,
-  }),
-);
+
+// CORS setup for trpc routes
+trpcRouter.use(cors());
 
 // Better-auth integration now handled in tRPC context
 

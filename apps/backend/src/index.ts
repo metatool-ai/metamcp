@@ -2,6 +2,7 @@ import express from "express";
 
 import { auth } from "./auth";
 import { initializeIdleServers } from "./lib/startup";
+import headlessApiRouter from "./routers/headless-openapi";
 import mcpProxyRouter from "./routers/mcp-proxy";
 import publicEndpointsRouter from "./routers/public-metamcp";
 import trpcRouter from "./routers/trpc";
@@ -10,8 +11,12 @@ const app = express();
 
 // Global JSON middleware for non-proxy routes
 app.use((req, res, next) => {
-  if (req.path.startsWith("/mcp-proxy/") || req.path.startsWith("/metamcp/")) {
-    // Skip JSON parsing for all MCP proxy routes and public endpoints to allow raw stream access
+  if (
+    req.path.startsWith("/mcp-proxy/") ||
+    req.path.startsWith("/metamcp/") ||
+    req.path.startsWith("/api/headless/")
+  ) {
+    // Skip JSON parsing for all MCP proxy routes, public endpoints, and headless API to allow raw stream access
     next();
   } else {
     express.json()(req, res, next);
@@ -72,6 +77,9 @@ app.use(async (req, res, next) => {
 // Mount public endpoints routes (must be before JSON middleware to handle raw streams)
 app.use("/metamcp", publicEndpointsRouter);
 
+// Mount headless API routes
+app.use("/api/headless", headlessApiRouter);
+
 // Mount MCP proxy routes
 app.use("/mcp-proxy", mcpProxyRouter);
 
@@ -83,6 +91,10 @@ app.listen(12009, async () => {
   console.log(`Auth routes available at: http://localhost:12009/api/auth`);
   console.log(
     `Public MetaMCP endpoints available at: http://localhost:12009/metamcp`,
+  );
+  console.log(`Headless API available at: http://localhost:12009/api/headless`);
+  console.log(
+    `OpenAPI docs available at: http://localhost:12009/api/headless/openapi.json`,
   );
   console.log(
     `MCP Proxy routes available at: http://localhost:12009/mcp-proxy`,
