@@ -316,6 +316,9 @@ export function EditEndpoint({
                   <p className="text-xs text-muted-foreground">
                     {t("endpoints:edit.enableApiKeyAuthDescription")}
                   </p>
+                  <p className="text-xs text-blue-600">
+                    {t("endpoints:apiKeyTypeHelp")}
+                  </p>
                 </div>
                 <Switch
                   checked={editForm.watch("enableApiKeyAuth")}

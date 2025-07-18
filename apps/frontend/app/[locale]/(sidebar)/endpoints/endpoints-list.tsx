@@ -269,35 +269,37 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
           toast.success(t("endpoints:list.openApiSchemaUrlCopied"));
         };
 
-        const getApiKey = () => {
+        const getApiKey = (type: "MCP" | "ADMIN" = "MCP") => {
           const apiKeys = apiKeysResponse?.apiKeys || [];
-          const activeApiKey = apiKeys.find((key) => key.is_active);
-          return activeApiKey?.key || "YOUR_API_KEY";
+          const activeApiKey = apiKeys.find(
+            (key) => key.is_active && key.type === type,
+          );
+          return activeApiKey?.key || `YOUR_${type}_API_KEY`;
         };
 
         const copyFullSseUrlWithApiKey = () => {
-          const apiKey = getApiKey();
+          const apiKey = getApiKey("MCP");
           const baseUrl = `${getAppUrl()}/metamcp/${endpoint.name}/sse?api_key=${apiKey}`;
           navigator.clipboard.writeText(baseUrl);
           toast.success(t("endpoints:list.sseUrlWithApiKeyCopied"));
         };
 
         const copyFullShttpUrlWithApiKey = () => {
-          const apiKey = getApiKey();
+          const apiKey = getApiKey("MCP");
           const baseUrl = `${getAppUrl()}/metamcp/${endpoint.name}/mcp?api_key=${apiKey}`;
           navigator.clipboard.writeText(baseUrl);
           toast.success(t("endpoints:list.shttpUrlWithApiKeyCopied"));
         };
 
         const copyFullApiUrlWithApiKey = () => {
-          const apiKey = getApiKey();
+          const apiKey = getApiKey("MCP");
           const baseUrl = `${getAppUrl()}/metamcp/${endpoint.name}/api?api_key=${apiKey}`;
           navigator.clipboard.writeText(baseUrl);
           toast.success(t("endpoints:list.openApiUrlWithApiKeyCopied"));
         };
 
         const copyFullOpenApiSchemaUrlWithApiKey = () => {
-          const apiKey = getApiKey();
+          const apiKey = getApiKey("MCP");
           const baseUrl = `${getAppUrl()}/metamcp/${endpoint.name}/api/openapi.json?api_key=${apiKey}`;
           navigator.clipboard.writeText(baseUrl);
           toast.success(t("endpoints:list.openApiSchemaUrlWithApiKeyCopied"));

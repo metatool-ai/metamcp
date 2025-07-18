@@ -40,7 +40,7 @@ const openApiDocument = generateOpenApiDocument(headlessAppRouter, {
   title: "MetaMCP Headless API",
   description: "Admin API for managing MetaMCP resources programmatically",
   version: "1.0.0",
-  baseUrl: "http://localhost:12009/api/headless",
+  baseUrl: `${process.env.APP_URL}/api/headless`,
   tags: ["MCP Servers"],
 });
 

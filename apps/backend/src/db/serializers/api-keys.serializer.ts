@@ -1,9 +1,11 @@
+import { ApiKeyType } from "@repo/zod-types";
+
 export class ApiKeysSerializer {
   static serializeApiKey(dbApiKey: {
     uuid: string;
     name: string;
     key: string;
-    type: string;
+    type: ApiKeyType;
     created_at: Date;
     is_active: boolean;
   }) {
@@ -22,7 +24,7 @@ export class ApiKeysSerializer {
       uuid: string;
       name: string;
       key: string;
-      type: string;
+      type: ApiKeyType;
       created_at: Date;
       is_active: boolean;
       user_id: string | null;
@@ -43,7 +45,7 @@ export class ApiKeysSerializer {
     uuid: string;
     name: string;
     key: string;
-    type: string;
+    type: ApiKeyType;
     user_id: string | null;
     created_at: Date;
   }) {

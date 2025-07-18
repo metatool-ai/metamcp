@@ -1,4 +1,4 @@
-import { ApiKeyCreateInput, ApiKeyUpdateInput } from "@repo/zod-types";
+import { ApiKeyCreateInput, ApiKeyUpdateInput, ApiKeyType } from "@repo/zod-types";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 
@@ -25,7 +25,7 @@ export class ApiKeysRepository {
     uuid: string;
     name: string;
     key: string;
-    type: string;
+    type: ApiKeyType;
     user_id: string | null;
     created_at: Date;
   }> {
@@ -179,7 +179,7 @@ export class ApiKeysRepository {
     valid: boolean;
     user_id?: string | null;
     key_uuid?: string;
-    type?: string;
+    type?: ApiKeyType;
   }> {
     const [apiKey] = await db
       .select({

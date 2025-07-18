@@ -24,23 +24,14 @@ export const authenticateAdminApiKey = async (
   const authReq = req as AdminAuthenticatedRequest;
 
   try {
-    // Extract API key from Authorization header or query parameter
-    const authHeader = req.headers.authorization;
-    const queryApiKey = req.query.api_key as string;
-
-    let apiKey: string | undefined;
-
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      apiKey = authHeader.substring(7);
-    } else if (queryApiKey) {
-      apiKey = queryApiKey;
-    }
+    // Extract API key from X-API-Key header only
+    const apiKey = req.headers["x-api-key"] as string;
 
     if (!apiKey) {
       return res.status(401).json({
         error: "missing_api_key",
         error_description:
-          "Admin API key is required. Provide it in Authorization header as 'Bearer YOUR_KEY' or as 'api_key' query parameter.",
+          "Admin API key is required. Provide it in the 'X-API-Key' header.",
         timestamp: new Date().toISOString(),
       });
     }
@@ -65,9 +56,18 @@ export const authenticateAdminApiKey = async (
       });
     }
 
+    // Ensure key_uuid is present for valid keys
+    if (!validation.key_uuid) {
+      return res.status(500).json({
+        error: "internal_server_error",
+        error_description: "Invalid API key validation response",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     // Attach admin API key info to request
     authReq.adminApiKey = {
-      uuid: validation.key_uuid!,
+      uuid: validation.key_uuid,
       user_id: validation.user_id,
       type: validation.type,
     };

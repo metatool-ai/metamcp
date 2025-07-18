@@ -351,6 +351,9 @@ export default function EndpointsPage() {
                       <p className="text-xs text-muted-foreground">
                         {t("endpoints:apiKeyAuthDescription")}
                       </p>
+                      <p className="text-xs text-blue-600">
+                        {t("endpoints:apiKeyTypeHelp")}
+                      </p>
                     </div>
                     <Switch
                       checked={form.watch("enableApiKeyAuth")}

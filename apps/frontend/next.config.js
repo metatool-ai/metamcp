@@ -25,6 +25,11 @@ const nextConfig = {
         source: "/api/auth/:path*",
         destination: `${backendUrl}/api/auth/:path*`,
       },
+      // Headless API endpoints
+      {
+        source: "/api/headless/:path*",
+        destination: `${backendUrl}/api/headless/:path*`,
+      },
       // Register endpoint for dynamic client registration
       {
         source: "/register",

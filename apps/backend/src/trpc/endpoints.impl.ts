@@ -97,6 +97,7 @@ export const endpointsImplementations = {
               // Create a new API key if none exists
               const newApiKey = await apiKeysRepository.create({
                 name: "Auto-generated for MCP Server",
+                type: "MCP",
                 user_id: userId,
                 is_active: true,
               });
