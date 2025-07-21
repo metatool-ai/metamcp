@@ -35,7 +35,7 @@ export const createHeadlessMcpServersRouter = (implementations: {
       .meta({
         openapi: {
           method: "GET",
-          path: "/headless/mcp-servers",
+          path: "/mcp-servers",
           tags: ["MCP Servers"],
           summary: "List all MCP servers",
           description:
@@ -53,7 +53,7 @@ export const createHeadlessMcpServersRouter = (implementations: {
       .meta({
         openapi: {
           method: "GET",
-          path: "/headless/mcp-servers/{uuid}",
+          path: "/mcp-servers/{uuid}",
           tags: ["MCP Servers"],
           summary: "Get MCP server by UUID",
           description:
@@ -75,7 +75,7 @@ export const createHeadlessMcpServersRouter = (implementations: {
       .meta({
         openapi: {
           method: "POST",
-          path: "/headless/mcp-servers",
+          path: "/mcp-servers",
           tags: ["MCP Servers"],
           summary: "Create a new MCP server",
           description:
@@ -93,7 +93,7 @@ export const createHeadlessMcpServersRouter = (implementations: {
       .meta({
         openapi: {
           method: "DELETE",
-          path: "/headless/mcp-servers/{uuid}",
+          path: "/mcp-servers/{uuid}",
           tags: ["MCP Servers"],
           summary: "Delete MCP server",
           description:
@@ -118,7 +118,7 @@ export const createHeadlessMcpServersRouter = (implementations: {
       .meta({
         openapi: {
           method: "PUT",
-          path: "/headless/mcp-servers/{uuid}",
+          path: "/mcp-servers/{uuid}",
           tags: ["MCP Servers"],
           summary: "Update MCP server",
           description:
