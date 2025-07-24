@@ -5,6 +5,8 @@ on:
     tags: 
       - '[0-9]+.[0-9]+.[0-9]+'
       - 'v[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-test'
+      - 'v[0-9]+.[0-9]+.[0-9]+-test'
   workflow_dispatch:
 
 env:
@@ -29,8 +31,12 @@ jobs:
     - name: Check branch for tag
       id: check-branch
       run: |
+        # Check if the tag name contains -test suffix
+        if [[ "${{ github.ref_name }}" == *"-test" ]]; then
+          echo "on-main=false" >> $GITHUB_OUTPUT
+          echo "on-test=true" >> $GITHUB_OUTPUT
         # Check if the current tag is reachable from main branch
-        if git merge-base --is-ancestor ${{ github.sha }} origin/main; then
+        elif git merge-base --is-ancestor ${{ github.sha }} origin/main; then
           echo "on-main=true" >> $GITHUB_OUTPUT
           echo "on-test=false" >> $GITHUB_OUTPUT
         # Check if the current tag is reachable from test branch
@@ -73,9 +79,7 @@ jobs:
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
-          type=semver,pattern={{version}}-test
-          type=semver,pattern={{major}}.{{minor}}-test
-          type=semver,pattern={{major}}-test
+          type=raw,value=${{ github.ref_name }}
           type=raw,value=test
 
     - name: Build and push Docker image for main branch
