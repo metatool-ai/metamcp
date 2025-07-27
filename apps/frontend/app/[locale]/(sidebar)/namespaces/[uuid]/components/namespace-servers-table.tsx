@@ -257,9 +257,12 @@ export function NamespaceServersTable({
         }
 
         return (
-          <div className="text-sm space-y-1">
+          <div className="text-sm space-y-1 w-full">
             {details.map((detail, index) => (
-              <div key={index} className="text-muted-foreground">
+              <div
+                key={index}
+                className="text-muted-foreground break-words whitespace-normal overflow-wrap-anywhere"
+              >
                 {detail}
               </div>
             ))}
@@ -435,7 +438,14 @@ export function NamespaceServersTable({
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id}>
+                    <TableHead
+                      key={header.id}
+                      className={
+                        header.column.id === "details"
+                          ? "text-foreground h-10 px-2 text-left align-middle font-medium whitespace-normal w-full [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]"
+                          : undefined
+                      }
+                    >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -456,7 +466,14 @@ export function NamespaceServersTable({
                   data-state={row.getIsSelected() && "selected"}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell
+                      key={cell.id}
+                      className={
+                        cell.column.id === "details"
+                          ? "p-2 align-middle whitespace-normal w-full [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]"
+                          : undefined
+                      }
+                    >
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),

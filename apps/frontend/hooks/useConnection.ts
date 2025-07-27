@@ -415,6 +415,13 @@ export function useConnection({
                   headers,
                   credentials: "include",
                 },
+                // TODO these should be configurable...
+                reconnectionOptions: {
+                  maxReconnectionDelay: 30000,
+                  initialReconnectionDelay: 1000,
+                  reconnectionDelayGrowFactor: 1.5,
+                  maxRetries: 2,
+                },
               };
               break;
 
@@ -436,6 +443,13 @@ export function useConnection({
                 requestInit: {
                   headers,
                   credentials: "include",
+                },
+                // TODO these should be configurable...
+                reconnectionOptions: {
+                  maxReconnectionDelay: 30000,
+                  initialReconnectionDelay: 1000,
+                  reconnectionDelayGrowFactor: 1.5,
+                  maxRetries: 2,
                 },
               };
               break;

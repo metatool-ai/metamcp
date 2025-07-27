@@ -98,7 +98,7 @@ export function ExportImportButtons() {
 
     servers.forEach((server) => {
       const config: Record<string, unknown> = {
-        type: server.type,
+        type: server.type.toUpperCase(),
       };
 
       if (server.description) {
@@ -264,17 +264,17 @@ export function ExportImportButtons() {
         "KEY": "value"
       },
       "description": "Optional description",
-      "type": "stdio" // optional, defaults to "stdio"
+      "type": "stdio" // optional, defaults to "stdio" (case-insensitive)
     },
     "UrlBasedServerName": {
       "url": "https://example.com/sse",
       "description": "Optional description",
-      "type": "sse" // optional, defaults to "stdio"
+      "type": "sse" // optional, defaults to "stdio" (case-insensitive)
     },
     "StreamableHttpServerName": {
       "url": "https://example.com/mcp",
       "description": "Optional description",
-      "type": "streamable_http"
+      "type": "streamable_http" // case-insensitive
     }
   }
 }`}

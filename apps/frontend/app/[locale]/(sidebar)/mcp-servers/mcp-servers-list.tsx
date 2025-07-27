@@ -138,6 +138,7 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
   const columns: ColumnDef<McpServer>[] = [
     {
       accessorKey: "name",
+      size: 200,
       header: ({ column }) => {
         return (
           <Button
@@ -165,6 +166,7 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
     },
     {
       accessorKey: "type",
+      size: 120,
       header: ({ column }) => {
         return (
           <Button
@@ -189,6 +191,7 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
     },
     {
       accessorKey: "user_id",
+      size: 120,
       header: ({ column }) => {
         return (
           <Button
@@ -247,9 +250,12 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
         }
 
         return (
-          <div className="text-sm space-y-1">
+          <div className="text-sm space-y-1 w-full">
             {details.map((detail, index) => (
-              <div key={index} className="text-muted-foreground">
+              <div
+                key={index}
+                className="text-muted-foreground break-words whitespace-normal overflow-wrap-anywhere"
+              >
                 {detail}
               </div>
             ))}
@@ -259,6 +265,7 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
     },
     {
       accessorKey: "created_at",
+      size: 180,
       header: ({ column }) => {
         return (
           <Button
@@ -281,6 +288,7 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
     },
     {
       id: "actions",
+      size: 100,
       header: t("mcp-servers:list.actions"),
       cell: ({ row }) => {
         const server = row.original;
@@ -523,7 +531,14 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
                     return (
-                      <TableHead key={header.id}>
+                      <TableHead
+                        key={header.id}
+                        className={
+                          header.column.id === "details"
+                            ? "text-foreground h-10 px-2 text-left align-middle font-medium whitespace-normal w-full [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]"
+                            : undefined
+                        }
+                      >
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -544,7 +559,14 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
                     data-state={row.getIsSelected() && "selected"}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
+                      <TableCell
+                        key={cell.id}
+                        className={
+                          cell.column.id === "details"
+                            ? "p-2 align-middle whitespace-normal w-full [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]"
+                            : undefined
+                        }
+                      >
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext(),

@@ -169,13 +169,13 @@ Export all your configured MCP servers to a JSON file:
 {
   "mcpServers": {
     "HackerNews": {
-      "type": "STDIO",
+      "type": "stdio",
       "command": "uvx",
       "args": ["mcp-hn"],
       "description": "Access HackerNews stories and comments"
     },
     "TimeServer": {
-      "type": "STDIO", 
+      "type": "stdio", 
       "command": "uvx",
       "args": ["mcp-server-time"],
       "env": {
@@ -184,7 +184,7 @@ Export all your configured MCP servers to a JSON file:
       "description": "Time and timezone utilities"
     },
     "RemoteAPI": {
-      "type": "STREAMABLE_HTTP",
+      "type": "streamable_http",
       "url": "https://api.example.com/mcp",
       "bearerToken": "your-bearer-token",
       "description": "Remote MCP server via HTTP"
@@ -208,7 +208,7 @@ Import multiple MCP servers from a JSON configuration:
 {
   "mcpServers": {
     "ServerName": {
-      "type": "STDIO",
+      "type": "stdio",
       "command": "uvx",
       "args": ["package-name"],
       "env": {
@@ -224,7 +224,7 @@ Import multiple MCP servers from a JSON configuration:
 {
   "mcpServers": {
     "ServerName": {
-      "type": "SSE",
+      "type": "sse",
       "url": "https://api.example.com/sse",
       "bearerToken": "your-token",
       "description": "Optional description"
@@ -237,7 +237,7 @@ Import multiple MCP servers from a JSON configuration:
 {
   "mcpServers": {
     "ServerName": {
-      "type": "STREAMABLE_HTTP", 
+      "type": "streamable_http", 
       "url": "https://api.example.com/mcp",
       "bearerToken": "your-token",
       "description": "Optional description"
@@ -246,6 +246,13 @@ Import multiple MCP servers from a JSON configuration:
 }
 ```
 </CodeGroup>
+
+<Note>
+**Type Values (Case-Insensitive):**
+- `"stdio"`, `"STDIO"`, `"std"` → STDIO
+- `"sse"`, `"SSE"` → SSE  
+- `"streamable_http"`, `"STREAMABLE_HTTP"`, `"streamablehttp"`, `"http"` → STREAMABLE_HTTP
+</Note>
 
 <Note>
 **Import Behavior:**

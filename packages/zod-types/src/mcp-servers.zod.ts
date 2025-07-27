@@ -212,7 +212,25 @@ export const BulkImportMcpServerSchema = z
     env: z.record(z.string()).optional(),
     url: z.string().optional(),
     description: z.string().optional(),
-    type: McpServerTypeEnum.optional(),
+    type: z
+      .string()
+      .optional()
+      .transform((val) => {
+        if (!val) return undefined;
+        // Convert to uppercase for case-insensitive matching
+        const upperVal = val.toUpperCase();
+        // Map common variations to the correct enum values
+        if (upperVal === "STDIO" || upperVal === "STD") return "STDIO";
+        if (upperVal === "SSE") return "SSE";
+        if (
+          upperVal === "STREAMABLE_HTTP" ||
+          upperVal === "STREAMABLEHTTP" ||
+          upperVal === "HTTP"
+        )
+          return "STREAMABLE_HTTP";
+        return upperVal; // Return as-is if it doesn't match known patterns
+      })
+      .pipe(McpServerTypeEnum.optional()),
   })
   .refine(
     (data) => {
