@@ -2,6 +2,10 @@ import { DatabaseEndpoint } from "@repo/zod-types";
 import express from "express";
 
 import { ApiKeysRepository } from "../db/repositories/api-keys.repo";
+import {
+  authRateLimiter,
+  getAuthRateLimitIdentifier,
+} from "../lib/auth-rate-limiter";
 
 // Extend Express Request interface for our custom properties
 export interface ApiKeyAuthenticatedRequest extends express.Request {
@@ -204,7 +208,19 @@ export const authenticateApiKey = async (
 
         return next();
       } else {
-        // API key invalid - return 401 without OAuth challenge to prevent inspector retries
+        // API key invalid - check rate limiting
+        const rateLimitId = getAuthRateLimitIdentifier(req, endpoint);
+        authRateLimiter.recordFailedAttempt(rateLimitId);
+
+        if (authRateLimiter.isRateLimited(rateLimitId)) {
+          return res.status(429).json({
+            error: "too_many_requests",
+            error_description:
+              "Too many failed authentication attempts. Please try again later.",
+            timestamp: new Date().toISOString(),
+          });
+        }
+
         return res.status(401).json({
           error: "invalid_api_key",
           error_description: "The provided API key is invalid or expired",
@@ -262,10 +278,23 @@ export const authenticateApiKey = async (
 
         return next();
       } else {
-        // Both OAuth and API key failed - return 401 with rate limiting
-        return res.status(429).json({
+        // Both OAuth and API key failed - check rate limiting
+        const rateLimitId = getAuthRateLimitIdentifier(req, endpoint);
+        authRateLimiter.recordFailedAttempt(rateLimitId);
+
+        if (authRateLimiter.isRateLimited(rateLimitId)) {
+          return res.status(429).json({
+            error: "too_many_requests",
+            error_description:
+              "Too many failed authentication attempts. Please try again later.",
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        return res.status(401).json({
           error: "invalid_credentials",
-          error_description: "Authentication failed. Too many attempts.",
+          error_description:
+            "Authentication failed. Invalid credentials provided.",
           timestamp: new Date().toISOString(),
         });
       }
@@ -297,11 +326,23 @@ export const authenticateApiKey = async (
 
         return next();
       } else {
-        // OAuth token invalid - return 401 with rate limiting to prevent retries
-        return res.status(429).json({
+        // OAuth token invalid - check rate limiting
+        const rateLimitId = getAuthRateLimitIdentifier(req, endpoint);
+        authRateLimiter.recordFailedAttempt(rateLimitId);
+
+        if (authRateLimiter.isRateLimited(rateLimitId)) {
+          return res.status(429).json({
+            error: "too_many_requests",
+            error_description:
+              "Too many failed authentication attempts. Please try again later.",
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        return res.status(401).json({
           error: "invalid_token",
           error_description:
-            "The provided OAuth token is invalid. Too many attempts.",
+            "The provided OAuth token is invalid or has expired.",
           timestamp: new Date().toISOString(),
         });
       }
