@@ -1,0 +1,252 @@
+---
+title: "Open WebUI 集成"
+description: "使用 MetaMCP 来管理 Open WebUI 的工具"
+---
+
+## 前置要求
+
+在开始之前，请确保您具备以下条件：
+- 已安装 Docker 和 Docker Compose
+- Open WebUI 正在运行（本地或已部署）
+- MetaMCP 已部署并正确配置了 `APP_URL`（默认为 `http://localhost:12008`）
+
+## 步骤 1：部署 MetaMCP 并进行正确配置
+
+<AccordionGroup>
+  <Accordion icon="github" title="克隆和设置 MetaMCP">
+    如果还没有，请克隆 MetaMCP 并进行设置：
+    
+    ```bash
+    git clone https://github.com/metatool-ai/metamcp.git
+    cd metamcp
+    cp example.env .env
+    ```
+  </Accordion>
+
+  <Accordion icon="settings" title="为 Open WebUI 访问配置 APP_URL">
+    **重要**：在 `.env` 文件中正确配置您的 `APP_URL` 以支持 Open WebUI 集成：
+    
+    ```bash
+    # 本地 Open WebUI 访问本地 MetaMCP
+    APP_URL=http://localhost:12008
+    
+    # 已部署的 Open WebUI 访问已部署的 MetaMCP
+    APP_URL=https://your-metamcp-domain.com
+    
+    # 本地 Open WebUI 访问已部署的 MetaMCP
+    APP_URL=https://your-metamcp-domain.com
+    ```
+    
+    <Warning>
+      Open WebUI 必须能够通过配置的 `APP_URL` 访问您的 MetaMCP 实例。确保防火墙规则和网络配置允许此访问。
+    </Warning>
+    
+    同时配置其他生产设置：
+    ```bash
+    POSTGRES_PASSWORD=your_secure_password
+    BETTER_AUTH_SECRET=your_auth_secret  # 使用以下命令生成：openssl rand -hex 32 | base64
+    ```
+  </Accordion>
+
+  <Accordion icon="docker" title="启动 MetaMCP">
+    使用 Docker Compose 启动 MetaMCP：
+    
+    ```bash
+    docker compose up -d
+    ```
+    
+    通过访问您配置的 `APP_URL` 来验证它是否正在运行。
+  </Accordion>
+</AccordionGroup>
+
+## 步骤 2：为 Open WebUI 配置 MetaMCP
+
+<AccordionGroup>
+  <Accordion icon="user" title="创建 MetaMCP 账户">
+    1. 打开浏览器并访问您的 `APP_URL`（例如，`http://localhost:12008`）
+    2. **创建账户**或登录
+    3. **（推荐）**在**设置**中禁用新用户注册以确保安全
+  </Accordion>
+
+  <Accordion icon="server" title="添加 MCP 服务器">
+    添加您想要暴露给 Open WebUI 的 MCP 服务器：
+    
+    1. 在侧边栏中导航到 **MCP 服务器**
+    2. 点击 **"添加服务器"** 按钮
+    3. 配置您的服务器（以文件系统服务器为例）：
+    
+    **基本信息：**
+    - **名称**：`hacker-news-server`
+    - **描述**：`用于获取故事和评论的 Hacker News 集成`
+    - **类型**：`STDIO`
+    
+    **服务器配置：**
+    - **命令**：`uvx`
+    - **参数**：`mcp-hn`
+    - **环境变量**：（如果需要）
+    
+    **所有权：**
+    - 选择 **"所有人（公开）"** 以允许 Open WebUI 访问
+    
+    4. 点击 **"创建服务器"**
+    
+    <Tip>
+      对您想要提供给 Open WebUI 的所有 MCP 服务器重复此过程。
+    </Tip>
+  </Accordion>
+
+  <Accordion icon="package" title="创建命名空间">
+    将您的 MCP 服务器分组到命名空间中供 Open WebUI 使用：
+    
+    1. 在侧边栏中转到 **命名空间**
+    2. 点击 **"创建命名空间"**
+    3. 配置命名空间：
+    
+    **基本信息：**
+    - **名称**：`openwebui-tools`
+    - **描述**：`Open WebUI 集成的聚合工具`
+    
+    **所有权：**
+    - 选择 **"所有人（公开）"**
+    
+    **选择 MCP 服务器：**
+    - 勾选您想要包含的所有服务器
+    - 这些将聚合到一个端点中
+    
+    4. 点击 **"创建命名空间"**
+  </Accordion>
+
+  <Accordion icon="wrench" title="管理工具（可选）">
+    微调可用的工具：
+    
+    1. 点击您的 **"openwebui-tools"** 命名空间
+    2. 查看 **工具管理** 部分
+    3. 禁用您不希望 Open WebUI 访问的任何工具
+    4. 这有助于保持工具集的专注性和安全性
+  </Accordion>
+</AccordionGroup>
+
+## 步骤 3：创建 OpenAPI 端点
+
+<AccordionGroup>
+  <Accordion icon="link" title="创建公共端点">
+    创建一个 Open WebUI 可以使用的端点：
+    
+    1. 在侧边栏中导航到 **端点**
+    2. 点击 **"创建端点"**
+    3. 配置端点：
+    
+    **基本信息：**
+    - **名称**：`openwebui-api`
+    - **描述**：`Open WebUI 集成的 OpenAPI 端点`
+    
+    **所有权：**
+    - 选择 **"所有人（公开）"**
+    
+    **命名空间选择：**
+    - 选择您的 **"openwebui-tools"** 命名空间
+    
+    **API 密钥认证：**
+    - **启用 API 密钥认证**：切换为开启
+    - **使用查询参数认证**：切换为关闭（Open WebUI 支持 Bearer 令牌）
+    
+    **MCP 服务器创建：**
+    - 勾选 **"自动为此端点创建 MCP 服务器"**
+    
+    4. 点击 **"创建端点"**
+    
+    **您的 OpenAPI 端点将在以下位置可用：**
+    - OpenAPI UI：`{APP_URL}/metamcp/openwebui-api/api`
+    - OpenAPI 架构：`{APP_URL}/metamcp/openwebui-api/api/openapi.json`
+  </Accordion>
+</AccordionGroup>
+
+## 步骤 4：生成 API 密钥
+
+<Tip>在上一步中，如果您选择 **"自动为此端点创建 MCP 服务器"** 选项，那么至少会为您自动生成一个 API 密钥。您可以随意使用它，而不必创建新的。</Tip>
+<AccordionGroup>
+  <Accordion icon="key" title="为 Open WebUI 创建 API 密钥">
+    1. 在侧边栏中转到 **API 密钥**
+    2. 点击 **"生成密钥"**
+    3. 配置 API 密钥：
+    
+    **密钥信息：**
+    - **描述**：`Open WebUI 集成密钥`
+    - **范围**：**公开**（以便 Open WebUI 可以使用）
+    
+    4. 点击 **"生成密钥"**
+    5. **重要**：复制生成的密钥（以 `sk_mt_` 开头）
+    
+    <Warning>
+      安全保存此密钥 - 它只显示一次，将需要用于 Open WebUI 配置。
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## 步骤 5：配置 Open WebUI
+
+<AccordionGroup>
+  <Accordion title="步骤 5.1：打开 Web UI">
+    打开您的 Open Web UI 页面。找到设置。
+    <img src="/images/open-web-ui/1.png" alt="OpenWebUI 截图 1" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+  <Accordion title="步骤 5.2：设置 > 工具">
+    在设置弹出窗口中。转到"工具"。
+    <img src="/images/open-web-ui/2.png" alt="OpenWebUI 截图 2" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+  <Accordion title="步骤 5.3：设置 > 工具 > 添加连接">
+    在右上角的 **"管理工具服务器"** 下点击 **"+"** 按钮添加连接。
+    <br /> 
+    对于 **URL > 基础 URL** 输入 `{APP_URL}/metamcp/openwebui-api/api`。例如，如果 `APP_URL` 是 `http://localhost:12008`，则输入 `http://localhost:12008/metamcp/openwebui-api/api`。
+    <br /> 
+    对于 **URL > openapi.json 路径** 输入 `{APP_URL}/metamcp/openwebui-api/api/openapi.json`。例如，如果 `APP_URL` 是 `http://localhost:12008`，则输入 `http://localhost:12008/metamcp/openwebui-api/api/openapi.json`。
+    <br /> 
+    将前面步骤生成的 **"API 密钥"** 放入 **"Auth Bearer"** 字段。
+    <br /> 
+    使用"刷新"按钮测试连接。
+    <img src="/images/open-web-ui/3.png" alt="OpenWebUI 截图 3" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+  <Accordion title="步骤 5.4：返回聊天并验证列出的工具">
+    关闭任何弹出窗口。在主页点击新聊天。然后检查可用工具。
+    <img src="/images/open-web-ui/4.png" alt="OpenWebUI 截图 4" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+    <img src="/images/open-web-ui/5.png" alt="OpenWebUI 截图 5" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+  <Accordion title="步骤 5.5：使用工具调用的聊天">
+    在新聊天中，"显示热门黑客新闻"的查询将如下所示：
+    <img src="/images/open-web-ui/6.png" alt="OpenWebUI 截图 6" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+</AccordionGroup>
+
+<Tip>然后在新聊天中，使用支持工具调用的模型，如果需要，应该自动尝试调用工具。</Tip>
+## 故障排除
+
+<AccordionGroup>
+  <Accordion icon="warning" title="常见问题">
+    **连接错误：**
+    - 验证 `APP_URL` 可以从 Open WebUI 访问
+    - 检查防火墙和网络配置
+    - 确保 API 密钥配置正确。首先关闭认证以测试是否有效。
+    - 关闭认证后，您可以手动访问例如 `http://localhost:12008/metamcp/openwebui-api/api/openapi.json` 来验证 `openapi.json`。
+    
+    **认证问题：**
+    - 验证 API 密钥格式（应以 `sk_mt_` 开头）
+    - 确保在 Open WebUI 中正确配置了 Bearer 令牌认证
+    - 验证授权头格式：`Bearer {your_api_key}`
+    
+    **工具执行失败：**
+    - 在 MetaMCP 仪表板中检查 MCP 服务器状态
+    - 查看命名空间设置中的工具权限
+    - 监控日志以获取特定错误消息
+    
+    **CORS 错误：**
+    - 确保允许 Open WebUI 域名
+    - 检查 MetaMCP CORS 配置
+    - 验证 APP_URL 与访问 URL 匹配
+  </Accordion>
+
+  <Accordion icon="question" title="需要帮助？">
+    - 查看 [MetaMCP GitHub Issues](https://github.com/metatool-ai/metamcp/issues)
+    - 加入我们的 [Discord 社区](https://discord.gg/mNsyat7mFX)
+    - 如有必要，查看 Open WebUI 文档
+  </Accordion>
+</AccordionGroup>

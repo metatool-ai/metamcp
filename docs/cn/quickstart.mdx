@@ -1,0 +1,333 @@
+---
+title: "快速开始"
+description: "在几分钟内启动 MetaMCP 并配置您的第一个 MCP 服务器"
+---
+
+在几分钟内启动 MetaMCP 并配置您的第一个 MCP 服务器聚合。
+
+## 前置要求
+
+在开始之前，请确保您拥有：
+- 已安装 Docker 和 Docker Compose
+- Git 用于克隆仓库
+- 对 MCP（模型上下文协议）的基本理解
+
+## 步骤 1：安装
+
+<AccordionGroup>
+  <Accordion icon="github" title="克隆仓库">
+    从 GitHub 克隆 MetaMCP 并导航到项目目录：
+    
+    ```bash
+    git clone https://github.com/metatool-ai/metamcp.git
+    cd metamcp
+    ```
+  </Accordion>
+
+  <Accordion icon="settings" title="配置环境">
+    复制示例环境文件并根据需要进行自定义：
+    
+    ```bash
+    cp example.env .env
+    ```
+    
+    <Note>
+      如果您在 `.env` 文件中修改了 `APP_URL`，请确保仅从该 URL 访问 MetaMCP，因为 CORS 策略强制执行。
+    </Note>
+    <Warning>在生产环境中，请确保修改 POSTGRES_PASSWORD 和 BETTER_AUTH_SECRET。同时使用 HTTPS。生成密钥的典型方法是 `openssl rand -hex 32 | base64`</Warning>
+  </Accordion>
+
+  <Accordion icon="docker" title="使用 Docker Compose 启动">
+    使用 Docker Compose 启动 MetaMCP：
+    
+    ```bash
+    docker compose up -d
+    ```
+    
+    这将启动：
+    - MetaMCP 全栈 Docker 镜像
+    - PostgreSQL 数据库
+    
+    <Tip>
+      首次启动可能需要几分钟，因为需要拉取和下载 Docker 镜像。
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+## 步骤 2：访问 MetaMCP
+
+容器运行后：
+
+1. **打开浏览器**并访问 `http://localhost:12008`（或您配置的 `APP_URL`）
+2. **创建账户**或登录
+3. **探索仪表板** - 您将看到 MCP 服务器、命名空间和端点的部分
+4. **（可选）禁用注册** 您可能只允许您和您的团队访问 MetaMCP，因此一旦设置账户，您可以在设置页面禁用新用户注册。
+
+## 步骤 3：配置您的第一个 MCP 服务器
+
+<AccordionGroup>
+  <Accordion icon="server" title="步骤 3.1：添加 MCP 服务器">
+    1. 导航到侧边栏中的 **MCP 服务器**（或您可以从**探索和搜索**页面快速添加一个）
+    2. 点击 **"添加服务器"** 按钮（右上角）
+    3. 在打开的对话框中，填写服务器配置：
+    
+    **基本信息：**
+    - **名称**：`hackernews-server`（必须是 URL 兼容的：仅限字母、数字、下划线、连字符）
+    - **描述**：`用于获取故事和评论的 HackerNews MCP 服务器`
+    - **类型**：从下拉菜单中选择 `STDIO`
+    
+    **服务器配置：**
+    - **命令**：`uvx`
+    - **参数**：`mcp-hn`（空格分隔的参数）
+    - **环境变量**：留空（格式：`KEY=value`，每行一个）
+    
+    **所有权：**
+    - 选择 **"仅限我自己（私有）"** 或 **"所有人（公共）"**
+    - 私有服务器仅对您可访问
+    - 公共服务器对所有用户可访问
+    
+    4. 点击 **"创建服务器"**
+    5. 您应该看到成功消息："MCP 服务器已创建"
+    
+    <Note>
+      创建服务器后，您可以点击它查看详细信息、测试连接并查看可用工具。
+    </Note>
+  </Accordion>
+
+  <Accordion icon="package" title="步骤 3.2：创建命名空间">
+    **为什么需要命名空间？** 命名空间将多个 MCP 服务器分组在一起，并为外部访问提供统一端点。
+    
+    1. 转到侧边栏中的 **命名空间**
+    2. 点击 **"创建命名空间"** 按钮（右上角）
+    3. 填写命名空间表单：
+    
+    **基本信息：**
+    - **名称**：`news-information`（服务器组的描述性名称）
+    - **描述**：`包含新闻和信息检索工具的命名空间`
+    
+    **所有权：**
+    - 选择 **"仅限我自己（私有）"** 或 **"所有人（公共）"**
+    
+    **选择 MCP 服务器：**
+    - 您将看到带有复选框的可用 MCP 服务器列表
+    - 勾选您的 **"hackernews-server"** 旁边的复选框
+    - 您可以为一个命名空间选择多个服务器
+    - 每个服务器显示其类型（STDIO、SSE 等）和描述
+    
+    4. 点击 **"创建命名空间"**
+    5. 成功消息："命名空间已创建"
+    
+    <Tip>
+      您稍后可以通过编辑命名空间来添加或删除服务器。
+    </Tip>
+  </Accordion>
+
+
+</AccordionGroup>
+
+## 步骤 4：管理命名空间中的工具
+
+<AccordionGroup>
+  <Accordion icon="wrench" title="审查并禁用未使用的工具">
+    **为什么要管理工具？** 每个 MCP 服务器可能暴露许多工具，但您可能只想通过端点提供某些工具。
+    
+    1. 转到侧边栏中的 **命名空间**
+    2. 点击您的 **"news-information"** 命名空间查看详细信息
+    3. 您将看到三个主要部分：
+    
+    **连接状态：**
+    - 检查命名空间是否可以连接到其 MCP 服务器
+    - 绿色状态表示所有服务器都可访问
+    - 如果需要，点击 **"连接"** 建立连接
+    
+    **MCP 服务器：**
+    - 查看分配给此命名空间的所有服务器
+    - 查看服务器状态（活动/非活动/错误）
+    - 监控服务器健康状态和配置
+    
+    **工具管理：**
+    - 查看来自服务器的所有可用工具
+    - 每个工具显示：
+      - **工具名称**（例如，`get_top_stories`、`get_story`）
+      - **源服务器**（哪个服务器提供此工具）
+      - **描述**和输入模式
+      - **状态**（启用/禁用）
+    
+    4. **禁用不需要的工具：**
+    - 取消勾选您不想通过端点暴露的工具
+    - 例如，您可能保留 `get_top_stories` 但禁用 `get_user_info`
+    - 这有助于保持端点专注和安全
+    
+    5. 如果需要，**刷新工具**以从服务器获取最新工具
+    
+    <Note>
+      只有启用的工具在外部应用程序使用您的端点时才可用。
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+## 步骤 5：创建端点
+
+<AccordionGroup>
+  <Accordion icon="link" title="创建您的公共端点">
+    **什么是端点？** 端点通过其他应用程序可以使用的 HTTP API 为您的命名空间提供外部访问。
+    
+    1. 导航到侧边栏中的 **端点**
+    2. 点击 **"创建端点"** 按钮（右上角）
+    3. 配置您的端点：
+    
+    **基本信息：**
+    - **名称**：`news-endpoint`（URL 兼容名称 - 这变成 `/metamcp/news-endpoint`）
+    - **描述（可选）**：`新闻和信息工具的公共端点`
+    
+    **所有权：**
+    - 选择 **"仅限我自己（私有）"** 或 **"所有人（公共）"**
+    
+    **命名空间选择：**
+    - 点击 **"选择命名空间"** 下拉菜单
+    - 选择您的 **"news-information"** 命名空间
+    - 您将在下拉菜单中看到命名空间名称和描述
+    
+    **API 密钥身份验证：**
+    - **启用 API 密钥身份验证**：切换开启（推荐）
+      - 这需要 API 密钥进行端点访问
+    - **使用查询参数身份验证**：切换开启/关闭
+      - 开启时：允许 URL 中的 `?api_key=xxx`
+      - 关闭时：仅在 `Authorization: Bearer xxx` 标头中接受 API 密钥
+    
+    **MCP 服务器创建：**
+    - **"自动为此端点创建 MCP 服务器"**：勾选此框
+    - 这会创建一个用于检查的可流式 HTTP MCP 服务器配置
+    
+    4. 点击 **"创建端点"**
+    5. 成功消息："端点已创建"
+    
+    **您的端点将在以下位置可用：**
+    - SSE：`http://localhost:12008/metamcp/news-endpoint/sse`
+    - 可流式 HTTP：`http://localhost:12008/metamcp/news-endpoint/mcp`
+    - OpenAPI：`http://localhost:12008/metamcp/news-endpoint/api`
+    - 模式：`http://localhost:12008/metamcp/news-endpoint/api/openapi.json`
+  </Accordion>
+</AccordionGroup>
+
+## 步骤 6：生成 API 密钥
+
+<AccordionGroup>
+  <Accordion icon="key" title="创建 API 密钥">
+    1. 转到侧边栏中的 **API 密钥**
+    2. 点击 **"生成密钥"** 按钮
+    3. 填写 API 密钥表单：
+    
+    **密钥信息：**
+    - **描述**：`我的第一个 MetaMCP API 密钥，用于新闻端点`
+    - **作用域**：
+      - **私有**：只有您可以使用此密钥
+      - **公共**：所有用户都可以使用此密钥
+    
+    4. 点击 **"生成密钥"**
+    5. **重要**：复制并安全保存密钥 - 它以 `sk_mt_` 开头
+    6. 此密钥将用于对端点请求进行身份验证
+    
+    <Warning>
+      API 密钥只显示一次。请确保立即复制它。
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## 步骤 7：管理您的配置
+
+<AccordionGroup>
+  <Accordion icon="settings" title="管理 MCP 服务器">
+    **查看服务器详细信息：**
+    - 点击 MCP 服务器列表中的任何服务器
+    - 查看连接状态、可用工具和配置
+    - 测试服务器连接并检查工具
+    
+    **编辑服务器：**
+    - 使用每个服务器旁边的操作菜单（⋯）
+    - 修改配置、添加环境变量
+    - 更新命令和参数
+    
+    **服务器状态：**
+    - **活动**：服务器正在运行且可用
+    - **非活动**：服务器已配置但未运行
+    - **错误**：服务器有连接问题
+  </Accordion>
+
+  <Accordion icon="layers" title="管理命名空间">
+    **查看命名空间详细信息：**
+    - 点击任何命名空间查看其服务器和工具
+    - 监控命名空间中哪些服务器处于活动状态
+    - 查看来自所有服务器的聚合工具
+    
+    **编辑命名空间：**
+    - 从现有命名空间添加或删除服务器
+    - 更新名称和描述
+    - 更改所有权设置
+    
+    **工具管理：**
+    - 查看命名空间中所有服务器可用的工具
+    - 启用/禁用特定工具
+    - 查看工具模式和文档
+  </Accordion>
+
+  <Accordion icon="link" title="管理端点">
+    **端点 URL：**
+    每个端点提供多种访问方法：
+    - **SSE**：用于实时通信的服务器发送事件
+    - **可流式 HTTP**：基于 HTTP 的 MCP 通信
+    - **OpenAPI**：带有 OpenAPI 文档的 REST API
+    - **模式**：用于集成的 OpenAPI JSON 模式
+    
+    **复制 URL：**
+    - 使用操作菜单（⋯）复制特定 URL
+    - 复制带有或不带有嵌入 API 密钥的 URL
+    - 为不同集成使用不同格式
+    
+    **编辑端点：**
+    - 更改端点映射到的命名空间
+    - 更新身份验证设置
+    - 修改访问权限
+  </Accordion>
+</AccordionGroup>
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="添加更多服务器" icon="plus" href="/concepts/mcp-servers">
+    了解如何配置不同类型的 MCP 服务器（STDIO、HTTP 等）
+  </Card>
+  
+  <Card title="配置中间件" icon="filter" href="/concepts/middleware">
+    应用中间件来过滤工具和转换请求/响应
+  </Card>
+  
+  <Card title="连接到 Cursor" icon="mouse-pointer-2" href="/integrations/cursor">
+    配置 Cursor IDE 使用您的 MetaMCP 端点
+  </Card>
+  
+  <Card title="连接到 Claude Desktop" icon="monitor-dot" href="/integrations/claude-desktop">
+    使用 mcp-proxy 设置 Claude Desktop 与 MetaMCP
+  </Card>
+</CardGroup>
+
+## 故障排除
+
+<AccordionGroup>
+  <Accordion icon="warning" title="常见问题">
+    **CORS 错误**：确保您从 `APP_URL` 中指定的 URL 访问 MetaMCP。
+    
+    **数据库连接**：使用 `docker ps` 检查 PostgreSQL 容器是否正在运行。
+    
+    **内存问题**：MetaMCP 需要至少 2GB RAM 以获得最佳性能。
+    
+    **服务器连接失败**：在服务器详细信息页面检查 MCP 服务器日志。
+    
+    **身份验证问题**：验证 API 密钥是否处于活动状态且格式正确。
+  </Accordion>
+
+  <Accordion icon="question" title="需要帮助？">
+    - 浏览 [GitHub Issues](https://github.com/metatool-ai/metamcp/issues)
+    - 加入我们的 [Discord 社区](https://discord.gg/mNsyat7mFX)
+  </Accordion>
+</AccordionGroup>

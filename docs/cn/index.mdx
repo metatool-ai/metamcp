@@ -1,0 +1,137 @@
+---
+title: "MetaMCP 文档"
+description: "MCP 聚合器、编排器、中间件、网关一体化 Docker 解决方案"
+---
+
+<div align="center">
+
+<img src="/images/metamcp.svg" alt="MetaMCP 架构图" style={{ width: "100%", maxWidth: "600px", margin: "2rem 0" }} />
+
+**MetaMCP** 是一个 MCP 代理，让您能够动态地将 MCP 服务器聚合到统一的 MCP 服务器中，并应用中间件。MetaMCP 本身就是一个 MCP 服务器，因此可以轻松地插入到**任何** MCP 客户端中。
+
+</div>
+
+## 🎯 使用场景
+
+<CardGroup cols={2}>
+  <Card title="分组和托管 MCP 服务器" icon="folder-open">
+    将 MCP 服务器分组到命名空间中，作为元 MCP 托管它们，并为公共端点（SSE 或可流式 HTTP）分配身份验证。
+  </Card>
+  <Card title="精选工具" icon="pointer">
+    在重新混合 MCP 服务器时，只选择您需要的工具。应用可插拔中间件以实现可观察性和安全性。
+  </Card>
+  <Card title="增强检查器" icon="search-code">
+    用作增强的 MCP 检查器，具有保存的服务器配置，并检查您的 MetaMCP 端点。
+  </Card>
+  <Card title="MCP 上下文工程引擎" icon="search">
+    用作 MCP 工具选择的 Elasticsearch（即将推出）。
+  </Card>
+</CardGroup>
+
+通常，开发人员可以将 MetaMCP 用作**基础设施**，通过统一端点托管动态组合的 MCP 服务器，并在其上构建代理。
+
+<div align="center">
+  <img src="/images/metamcp_screenshot.png" alt="MetaMCP 截图" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+</div>
+
+## 快速开始
+
+使用 Docker Compose 在几分钟内启动 MetaMCP：
+
+<CodeGroup>
+```bash 克隆和设置
+git clone https://github.com/metatool-ai/metamcp.git
+cd metamcp
+cp example.env .env
+```
+
+```bash 使用 Docker 启动
+docker compose up -d
+```
+</CodeGroup>
+
+<Card title="继续快速开始指南" icon="rocket" href="/quickstart">
+  按照我们的完整设置指南配置您的第一个 MCP 服务器和命名空间。
+</Card>
+
+## 核心概念
+
+理解这些关键概念将帮助您充分利用 MetaMCP：
+
+<CardGroup cols={2}>
+  <Card title="MCP 服务器" icon="server" href="/concepts/mcp-servers">
+    了解如何配置和管理 MCP 服务器实例。
+  </Card>
+  <Card title="命名空间" icon="package" href="/concepts/namespaces">
+    将 MCP 服务器分组并在命名空间级别应用中间件。
+  </Card>
+  <Card title="端点" icon="globe" href="/concepts/endpoints">
+    为您的命名空间创建具有不同传输选项的公共端点。
+  </Card>
+  <Card title="中间件" icon="filter" href="/concepts/middleware">
+    使用可插拔中间件转换 MCP 请求和响应。
+  </Card>
+</CardGroup>
+
+## 集成
+
+将 MetaMCP 连接到您喜欢的工具和平台：
+
+<CardGroup cols={2}>
+  <Card title="Cursor" icon="mouse-pointer-2" href="/integrations/cursor">
+    通过 mcp.json 配置 Cursor 使用 MetaMCP 端点
+  </Card>
+  <Card title="Claude Desktop" icon="monitor-dot" href="/integrations/claude-desktop">
+    使用 mcp-proxy 连接 Claude Desktop 以实现 STDIO 兼容性
+  </Card>
+</CardGroup>
+
+## 功能特性
+
+<AccordionGroup>
+  <Accordion icon="shield" title="企业级身份验证">
+    - 前端和后端的更好身份验证
+    - 安全连接的会话 cookie
+    - 外部访问的 API 密钥身份验证
+    - 企业 SSO 的 OpenID Connect (OIDC) 支持
+    - 具有公共/私有作用域的多租户
+  </Accordion>
+
+  <Accordion icon="network" title="多种传输选项">
+    - **SSE（服务器发送事件）**用于 MCP 向后兼容性和实时连接
+    - **可流式 HTTP**用于基于可流式 HTTP 的 MCP 通信（现在是标准远程 MCP 连接）
+    - **OpenAPI 端点**与 Open WebUI 等客户端兼容
+    - **STDIO 兼容性**通过本地代理
+  </Accordion>
+
+  <Accordion icon="globe" title="国际化">
+    - 内置英语和中文支持
+    - 易于添加其他语言
+    - 基于区域设置的路由和内容
+  </Accordion>
+
+  <Accordion icon="chart-line" title="性能和可扩展性">
+    - 预分配空闲会话以减少冷启动时间
+    - 可配置的会话管理
+    - 专为至少 2GB-4GB 内存实例设计
+    - 基于 Docker 的部署，支持 nginx
+    - 集群扩展和 MCP 管理器与工作器分离将在未来发布。
+  </Accordion>
+</AccordionGroup>
+
+## 获取帮助
+
+<CardGroup cols={2}>
+  <Card title="为 MetaMCP 做贡献" icon="code" href="/development/contributing">
+    设置本地开发环境并为 MetaMCP 做贡献。
+  </Card>
+   <Card title="API 参考" icon="book" href="/api-reference/introduction">
+    探索 MetaMCP 端点的完整 API 文档。
+  </Card>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/metatool-ai/metamcp/issues">
+    报告错误、请求功能或浏览现有问题。
+  </Card>
+  <Card title="Discord 社区" icon="discord" href="https://discord.gg/mNsyat7mFX">
+    加入我们的 Discord 服务器获取支持和社区讨论。
+  </Card>
+</CardGroup>

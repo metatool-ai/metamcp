@@ -27,7 +27,7 @@ publicEndpointsRouter.use(
 publicEndpointsRouter.use((req, res, next) => {
   // Only apply JSON parsing for OpenAPI tool execution endpoints
   if (req.path.includes("/api/tools/") && req.method === "POST") {
-    return express.json()(req, res, next);
+    return express.json({ limit: "50mb" })(req, res, next);
   }
   next();
 });

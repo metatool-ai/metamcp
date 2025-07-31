@@ -15,7 +15,7 @@ app.use((req, res, next) => {
     // Skip JSON parsing for all MCP proxy routes and public endpoints to allow raw stream access
     next();
   } else {
-    express.json()(req, res, next);
+    express.json({ limit: "50mb" })(req, res, next);
   }
 });
 

@@ -1,0 +1,63 @@
+---
+title: "端点"
+description: "创建公共端点，将命名空间暴露为可访问的 MCP 服务器"
+---
+
+**MetaMCP 端点**是一个公共接口，将命名空间暴露为可访问的 MCP 服务器。端点处理身份验证并提供 MCP 客户端可以连接的 URL。
+
+## 什么是端点？
+
+端点作为内部命名空间和外部 MCP 客户端之间的桥梁：
+
+- **将命名空间暴露**为公共 MCP 服务器
+- **通过 API 密钥处理身份验证**
+- **支持多种传输**（SSE、可流式 HTTP、OpenAPI）
+
+<Card title="端点 URL 示例" icon="link">
+```
+https://your-metamcp.com/metamcp/my-endpoint/sse
+https://your-metamcp.com/metamcp/my-endpoint/mcp
+https://your-metamcp.com/metamcp/my-endpoint/api
+https://your-metamcp.com/metamcp/my-endpoint/api/openapi.json
+```
+</Card>
+
+## 端点管理
+
+### 可用操作
+
+从端点仪表板，您可以：
+
+- **编辑**端点设置
+- **复制不同传输类型的 URL**
+- **查看**关联的命名空间
+- **删除**端点
+
+### URL 格式
+
+每个端点提供多种 URL 格式：
+
+- **SSE**：`/metamcp/{name}/sse`
+- **可流式 HTTP**：`/metamcp/{name}/mcp`
+- **OpenAPI**：`/metamcp/{name}/api`
+- **OpenAPI 模式**：`/metamcp/{name}/api/openapi.json`
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="API 密钥" icon="key" href="/api-keys">
+    生成 API 密钥以安全访问端点
+  </Card>
+  
+  <Card title="命名空间" icon="package" href="/namespaces">
+    了解如何将 MCP 服务器组织到命名空间中
+  </Card>
+  
+  <Card title="集成指南" icon="plug" href="/integrations/cursor">
+    将您的端点连接到 MCP 客户端
+  </Card>
+  
+  <Card title="MCP 服务器" icon="server" href="/mcp-servers">
+    管理命名空间内的 MCP 服务器
+  </Card>
+</CardGroup> 

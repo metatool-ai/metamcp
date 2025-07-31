@@ -1,0 +1,538 @@
+---
+title: "中间件"
+description: "使用可插拔中间件转换 MCP 请求和响应"
+---
+
+MetaMCP 中的**中间件**允许您在命名空间级别拦截和转换 MCP 请求和响应。这个强大的功能使您能够添加过滤、日志记录、验证和安全等功能，而无需修改各个 MCP 服务器。
+
+## 什么是中间件？
+
+中间件函数按顺序为每个 MCP 请求执行，允许您：
+
+- **过滤工具**以减少上下文大小并提高 LLM 性能
+- **记录请求**用于调试和分析
+- **验证输入**以确保数据质量和安全性
+- **转换响应**以标准化数据格式
+- **实现安全**措施如速率限制
+- **添加可观察性**与指标和跟踪
+
+<Card title="中间件流程" icon="flow">
+```
+MCP 客户端 → 命名空间 → 中间件 1 → 中间件 2 → MCP 服务器
+                     ←              ←              ←
+```
+
+每个中间件可以在请求到达服务器之前修改请求，在响应返回客户端之前修改响应。
+</Card>
+
+## 内置中间件
+
+MetaMCP 提供几个内置中间件选项：
+
+<AccordionGroup>
+  <Accordion icon="filter" title="过滤非活动工具">
+    **目的**：移除当前不可用或无用的工具
+    
+    ```json
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "checkHealth": true,
+        "removeUnavailable": true,
+        "maxToolsPerServer": 50,
+        "excludePatterns": ["debug_*", "test_*"],
+        "includePatterns": ["core_*"]
+      }
+    }
+    ```
+    
+    **配置选项：**
+    - `checkHealth`：在包含之前测试工具可用性
+    - `removeUnavailable`：过滤掉无响应的工具
+    - `maxToolsPerServer`：限制每个服务器的工具以防止上下文溢出
+    - `excludePatterns`：要排除的工具的正则表达式模式
+    - `includePatterns`：要包含的工具的正则表达式模式（优先）
+    
+    **好处：**
+    - 减少 LLM 上下文大小
+    - 提高工具选择准确性
+    - 防止损坏工具的错误
+    - 大型工具集的更好性能
+  </Accordion>
+
+  <Accordion icon="chart-line" title="请求日志记录">
+    **目的**：记录所有 MCP 请求和响应用于调试和分析
+    
+    ```json
+    {
+      "type": "request-logging",
+      "config": {
+        "logLevel": "info",
+        "includeHeaders": false,
+        "includeBody": true,
+        "sanitizeSecrets": true,
+        "maxBodySize": 1024,
+        "destination": "console"
+      }
+    }
+    ```
+    
+    **配置选项：**
+    - `logLevel`：`debug`、`info`、`warn`、`error`
+    - `includeHeaders`：记录请求/响应标头
+    - `includeBody`：记录请求/响应正文
+    - `sanitizeSecrets`：从日志中移除敏感数据
+    - `maxBodySize`：要记录的最大正文大小（字节）
+    - `destination`：`console`、`file`、`database`
+  </Accordion>
+
+  <Accordion icon="shield" title="速率限制">
+    **目的**：防止滥用和管理资源使用
+    
+    ```json
+    {
+      "type": "rate-limiting",
+      "config": {
+        "requestsPerMinute": 60,
+        "burstLimit": 10,
+        "keyStrategy": "api-key",
+        "skipPaths": ["/health", "/status"],
+        "errorMessage": "Rate limit exceeded"
+      }
+    }
+    ```
+    
+    **配置选项：**
+    - `requestsPerMinute`：持续速率限制
+    - `burstLimit`：短期突发允许
+    - `keyStrategy`：`api-key`、`ip-address`、`user-id`
+    - `skipPaths`：从速率限制中排除的路径
+    - `errorMessage`：自定义错误消息
+  </Accordion>
+
+  <Accordion icon="lock" title="输入验证">
+    **目的**：验证和清理传入请求
+    
+    ```json
+    {
+      "type": "input-validation",
+      "config": {
+        "maxInputLength": 10000,
+        "allowedTools": ["specific_tool_1", "specific_tool_2"],
+        "blockedPatterns": ["system\\(", "eval\\("],
+        "sanitizeHtml": true,
+        "requireAuth": true
+      }
+    }
+    ```
+    
+    **配置选项：**
+    - `maxInputLength`：最大输入大小（字符）
+    - `allowedTools`：允许工具的 whitelist（可选）
+    - `blockedPatterns`：要阻止的正则表达式模式
+    - `sanitizeHtml`：从输入中移除 HTML 标签
+    - `requireAuth`：对请求强制执行身份验证
+  </Accordion>
+
+  <Accordion icon="cache" title="响应缓存">
+    **目的**：缓存响应以提高性能
+    
+    ```json
+    {
+      "type": "response-caching",
+      "config": {
+        "ttl": 300,
+        "keyPattern": "{tool}:{hash}",
+        "cacheableTools": ["search_*", "lookup_*"],
+        "excludeErrors": true,
+        "maxCacheSize": "100MB"
+      }
+    }
+    ```
+    
+    **配置选项：**
+    - `ttl`：生存时间（秒）
+    - `keyPattern`：缓存键模板
+    - `cacheableTools`：要缓存的工具（支持模式）
+    - `excludeErrors`：不缓存错误响应
+    - `maxCacheSize`：最大缓存大小
+  </Accordion>
+</AccordionGroup>
+
+## 自定义中间件
+
+您可以为特定用例创建自定义中间件：
+
+### 中间件接口
+
+```typescript
+interface MiddlewareContext {
+  request: MCPRequest;
+  response?: MCPResponse;
+  namespace: Namespace;
+  server: MCPServer;
+  metadata: Record<string, any>;
+}
+
+type Middleware = (
+  context: MiddlewareContext,
+  next: () => Promise<MCPResponse>
+) => Promise<MCPResponse>;
+```
+
+### 示例：内容过滤中间件
+
+```javascript
+{
+  "type": "custom",
+  "name": "content-filter",
+  "config": {
+    "removeAds": true,
+    "extractMainContent": true,
+    "blockDomains": ["spam.com", "malware.site"],
+    "maxContentLength": 50000
+  }
+}
+```
+
+### 示例：翻译中间件
+
+```javascript
+{
+  "type": "custom", 
+  "name": "auto-translate",
+  "config": {
+    "targetLanguage": "en",
+    "translateResponses": true,
+    "apiKey": "translation-api-key",
+    "skipTools": ["code_*", "math_*"]
+  }
+}
+```
+
+## 中间件配置
+
+### 基本设置
+
+向命名空间配置添加中间件：
+
+```json
+{
+  "namespace": "development-tools",
+  "middleware": [
+    {
+      "type": "request-logging",
+      "enabled": true,
+      "config": {
+        "logLevel": "info"
+      }
+    },
+    {
+      "type": "filter-inactive-tools", 
+      "enabled": true,
+      "config": {
+        "maxToolsPerServer": 30
+      }
+    }
+  ]
+}
+```
+
+### 中间件顺序
+
+中间件按指定顺序执行：
+
+```json
+{
+  "middleware": [
+    {
+      "type": "input-validation",
+      "order": 1
+    },
+    {
+      "type": "rate-limiting", 
+      "order": 2
+    },
+    {
+      "type": "request-logging",
+      "order": 3
+    },
+    {
+      "type": "response-caching",
+      "order": 4
+    }
+  ]
+}
+```
+
+### 条件中间件
+
+根据条件应用中间件：
+
+```json
+{
+  "type": "filter-inactive-tools",
+  "conditions": {
+    "tools": ["web_*", "search_*"],
+    "servers": ["web-server"],
+    "userRoles": ["developer", "admin"]
+  },
+  "config": {
+    "maxToolsPerServer": 20
+  }
+}
+```
+
+## 中间件示例
+
+### 开发环境
+
+完美用于调试和开发：
+
+```json
+{
+  "middleware": [
+    {
+      "type": "request-logging",
+      "config": {
+        "logLevel": "debug",
+        "includeHeaders": true,
+        "includeBody": true
+      }
+    },
+    {
+      "type": "input-validation",
+      "config": {
+        "maxInputLength": 50000,
+        "sanitizeHtml": true
+      }
+    },
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "checkHealth": true,
+        "maxToolsPerServer": 100
+      }
+    }
+  ]
+}
+```
+
+### 生产环境
+
+针对性能和安全性优化：
+
+```json
+{
+  "middleware": [
+    {
+      "type": "rate-limiting",
+      "config": {
+        "requestsPerMinute": 120,
+        "burstLimit": 20
+      }
+    },
+    {
+      "type": "input-validation",
+      "config": {
+        "maxInputLength": 10000,
+        "blockedPatterns": ["system\\(", "eval\\(", "__"],
+        "requireAuth": true
+      }
+    },
+    {
+      "type": "response-caching",
+      "config": {
+        "ttl": 300,
+        "cacheableTools": ["search_*", "lookup_*"]
+      }
+    },
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "maxToolsPerServer": 50,
+        "removeUnavailable": true
+      }
+    },
+    {
+      "type": "request-logging",
+      "config": {
+        "logLevel": "warn",
+        "sanitizeSecrets": true
+      }
+    }
+  ]
+}
+```
+
+### 内容创建工作流
+
+专门用于内容和媒体处理：
+
+```json
+{
+  "middleware": [
+    {
+      "type": "custom",
+      "name": "content-filter",
+      "config": {
+        "removeAds": true,
+        "extractMainContent": true,
+        "maxContentLength": 100000
+      }
+    },
+    {
+      "type": "response-caching",
+      "config": {
+        "ttl": 1800,
+        "cacheableTools": ["web_scraper", "image_search"]
+      }
+    },
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "includePatterns": ["content_*", "image_*", "text_*"]
+      }
+    }
+  ]
+}
+```
+
+## 性能考虑
+
+### 中间件影响
+
+<Card title="性能提示" icon="zap">
+- **顺序很重要**：将快速中间件放在前面
+- **积极缓存**：对昂贵操作使用缓存
+- **早期过滤**：移除不必要的工具以减少处理
+- **监控性能**：跟踪中间件执行时间
+- **异步处理**：尽可能使用非阻塞操作
+</Card>
+
+### 优化策略
+
+```json
+{
+  "middleware": [
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "maxToolsPerServer": 25,
+        "checkHealth": false
+      }
+    },
+    {
+      "type": "response-caching",
+      "config": {
+        "ttl": 600,
+        "maxCacheSize": "50MB"
+      }
+    },
+    {
+      "type": "request-logging",
+      "config": {
+        "logLevel": "error",
+        "includeBody": false
+      }
+    }
+  ]
+}
+```
+
+## 监控中间件
+
+### 性能指标
+
+跟踪中间件性能：
+
+- 每个中间件的**执行时间**
+- 缓存中间件的**缓存命中率**
+- 工具过滤的**过滤效果**
+- 按中间件类型的**错误率**
+- **资源使用**和内存消耗
+
+### 调试信息
+
+```bash
+# 启用中间件调试
+DEBUG=metamcp:middleware pnpm dev
+
+# 查看中间件执行日志
+GET /api/admin/middleware/logs?namespace=development-tools
+```
+
+## 故障排除
+
+<AccordionGroup>
+  <Accordion icon="warning" title="中间件错误">
+    **常见原因：**
+    - 无效的配置参数
+    - 缺少必需的依赖项
+    - 冲突的中间件交互
+    - 资源限制
+    
+    **调试步骤：**
+    1. 检查中间件配置语法
+    2. 查看错误日志了解具体问题
+    3. 使用最小中间件设置进行测试
+    4. 验证资源可用性
+    5. 检查中间件顺序和依赖项
+  </Accordion>
+
+  <Accordion icon="slow" title="性能问题">
+    **优化策略：**
+    - 减少中间件链长度
+    - 优化配置参数
+    - 有效使用缓存中间件
+    - 监控和分析中间件执行
+    - 考虑对重操作使用异步处理
+  </Accordion>
+
+  <Accordion icon="bug" title="意外行为">
+    **常见问题：**
+    - 中间件顺序影响结果
+    - 中间件之间的配置冲突
+    - 不一致的错误处理
+    - 自定义中间件中的内存泄漏
+    
+    **解决方案：**
+    1. 检查中间件执行顺序
+    2. 检查配置冲突
+    3. 实现适当的错误处理
+    4. 监控内存使用模式
+    5. 隔离测试中间件
+  </Accordion>
+</AccordionGroup>
+
+## 最佳实践
+
+<Card title="中间件最佳实践" icon="checklist">
+- ✅ **从简单开始**：从基本中间件开始，逐渐添加复杂性
+- ✅ **彻底测试**：使用各种输入验证中间件行为
+- ✅ **监控性能**：跟踪执行时间和资源使用
+- ✅ **优雅处理错误**：实现适当的错误处理和回退
+- ✅ **记录配置**：为自定义中间件维护清晰的文档
+- ✅ **版本中间件**：对自定义中间件更改使用版本控制
+- ✅ **安全第一**：在自定义中间件中验证和清理所有输入
+</Card>
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="检查器" icon="magnifying-glass" href="/concepts/inspector">
+    了解用于调试中间件的 MetaMCP 检查器
+  </Card>
+  
+  <Card title="命名空间配置" icon="folder" href="/concepts/namespaces">
+    了解如何使用中间件配置命名空间
+  </Card>
+  
+  <Card title="自定义开发" icon="code" href="/development/contributing">
+    了解如何开发自定义中间件
+  </Card>
+  
+  <Card title="性能监控" icon="chart-line" href="/configuration/monitoring">
+    为您的中间件堆栈设置监控
+  </Card>
+</CardGroup> 

@@ -1,0 +1,129 @@
+---
+title: "命名空间"
+description: "分组 MCP 服务器并通过统一端点管理工具"
+---
+
+MetaMCP 中的**命名空间**是 MCP 服务器的逻辑分组，允许您将多个服务器组织到单个统一的 MCP 端点中。
+
+## 什么是命名空间？
+
+命名空间允许您：
+
+- **将多个 MCP 服务器分组**到统一集合中
+- **创建单个 MCP 端点**，聚合来自所有服务器的工具
+- **启用/禁用命名空间内**的各个服务器
+- **通过启用/禁用特定工具**来控制工具可见性
+- **支持私有和公共**命名空间访问
+
+## 命名空间如何工作
+
+当您创建命名空间时：
+
+1. **选择 MCP 服务器**包含在命名空间中
+2. **自动发现工具**来自所有活动服务器
+3. **工具带有前缀**服务器名称（例如，`ServerName__toolName`）
+4. **创建公共端点**以外部暴露命名空间
+
+## 创建命名空间
+
+1. **导航**到 MetaMCP 仪表板中的命名空间
+2. **点击**"创建命名空间"
+3. **配置**基本详细信息：
+   - **名称**：命名空间的唯一标识符
+   - **描述**：命名空间用途的可选描述
+   - **所有权**：私有（您使用）或公共（组织范围）
+4. **选择 MCP 服务器**包含在命名空间中
+5. **保存**命名空间
+
+### 所有权类型
+
+- **私有命名空间**：仅创建者可访问
+- **公共命名空间**：整个组织可访问
+
+**注意**：公共命名空间只能包含公共 MCP 服务器。
+
+## 管理服务器和工具
+
+### 服务器管理
+
+- **查看服务器状态**在命名空间服务器表中
+- **启用/禁用服务器**使用状态切换单独控制
+- **添加或删除服务器**通过编辑命名空间
+- **监控服务器健康状态**和连接性
+
+### 工具管理
+
+- **自动发现**：从所有活动服务器发现工具
+- **工具前缀**：工具带有服务器名称前缀以避免冲突
+- **状态控制**：按命名空间启用/禁用各个工具
+- **工具过滤**：非活动工具自动从列表中过滤
+
+### 工具命名约定
+
+工具遵循模式：`{ServerName}__{originalToolName}`
+
+示例：来自 "WebSearch" 服务器的 `search` 工具变成 `WebSearch__search`
+
+## 公共访问
+
+要外部暴露命名空间：
+
+1. **创建端点**指向您的命名空间
+2. **配置身份验证**（推荐 API 密钥）
+3. **与外部用户共享端点 URL**
+
+端点提供：
+- **MCP 访问**：标准 MCP 协议支持
+- **REST API**：每个工具的 HTTP 端点
+- **OpenAPI 文档**：自动生成的 API 文档
+
+## 示例
+
+包含文件系统和 git 服务器的开发命名空间：
+
+```json
+{
+  "name": "development-tools",
+  "description": "Essential development tools",
+  "servers": [
+    {
+      "name": "filesystem",
+      "status": "ACTIVE",
+      "tools": ["read_file", "write_file", "list_directory"]
+    },
+    {
+      "name": "git-helper", 
+      "status": "ACTIVE",
+      "tools": ["git_status", "git_commit", "git_diff"]
+    }
+  ]
+}
+```
+
+通过命名空间可用的工具：
+- `filesystem__read_file`
+- `filesystem__write_file` 
+- `filesystem__list_directory`
+- `git-helper__git_status`
+- `git-helper__git_commit`
+- `git-helper__git_diff`
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="创建端点" icon="link" href="/concepts/endpoints">
+    通过公共端点暴露您的命名空间
+  </Card>
+  
+  <Card title="MCP 服务器" icon="server" href="/concepts/mcp-servers">
+    了解配置 MCP 服务器
+  </Card>
+  
+  <Card title="集成设置" icon="plug" href="/integrations/cursor">
+    将您的命名空间连接到 MCP 客户端
+  </Card>
+  
+  <Card title="检查器" icon="search-code" href="/concepts/inspector">
+    测试和调试您的命名空间工具
+  </Card>
+</CardGroup> 

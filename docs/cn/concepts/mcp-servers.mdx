@@ -1,0 +1,366 @@
+---
+title: "MCP 服务器"
+description: "了解如何在 MetaMCP 中配置和管理 MCP 服务器实例"
+---
+
+**MCP 服务器**是一个配置，告诉 MetaMCP 如何启动和管理模型上下文协议服务器。这些服务器提供工具、资源和提示，可以通过 MetaMCP 端点聚合和暴露。
+
+## 什么是 MCP 服务器？
+
+MCP 服务器是 MetaMCP 的构建块。每个服务器配置定义：
+
+- **如何启动服务器**（命令、参数、环境）
+- **服务器类型**（STDIO、SSE、可流式 HTTP）
+- **身份验证要求**（如果有）
+- **资源依赖**（Python 包、Node 模块等）
+
+<Card title="配置示例" icon="code">
+```json
+{
+  "name": "HackerNews",
+  "type": "STDIO", 
+  "command": "uvx",
+  "args": ["mcp-hn"],
+  "description": "访问 HackerNews 故事和评论"
+}
+```
+</Card>
+
+## 服务器类型
+
+MetaMCP 支持三种类型的 MCP 服务器：
+
+<AccordionGroup>
+  <Accordion icon="terminal" title="STDIO 服务器">
+    **最常见类型** - 通过标准输入/输出流通信
+    
+    ```json
+    {
+      "type": "STDIO",
+      "command": "uvx", 
+      "args": ["mcp-server-package"],
+      "env": {
+        "API_KEY": "your-api-key"
+      }
+    }
+    ```
+    
+    **使用场景：**
+    - 通过 `uvx` 安装的 Python 包
+    - 通过 `npx` 的 Node.js 包
+    - 自定义可执行脚本
+  </Accordion>
+
+  <Accordion icon="globe" title="SSE 服务器">
+    **服务器发送事件** - 通过 SSE（服务器发送事件）通信
+    
+    ```json
+    {
+      "type": "SSE",
+      "url": "https://api.example.com/sse",
+      "bearerToken": "your-bearer-token"
+    }
+    ```
+
+    <Info>如果服务器使用 OAuth，您可以将 bearerToken 留空。</Info>
+  </Accordion>
+
+  <Accordion icon="globe" title="可流式 HTTP 服务器">
+    **基于 HTTP 的流式传输** - 可流式 HTTP 现在是远程 MCP 的标准
+    
+    ```json
+    {
+      "type": "STREAMABLE_HTTP",
+      "url": "https://api.example.com/mcp",
+      "bearerToken": "your-bearer-token"
+    }
+    ```
+
+    <Info>如果服务器使用 OAuth，您可以将 bearerToken 留空。</Info>
+  </Accordion>
+</AccordionGroup>
+
+## 配置选项
+
+### 基本配置
+
+<CodeGroup>
+```json 必填字段
+{
+  "name": "unique-server-name",
+  "type": "STDIO|SSE|STREAMABLE_HTTP",
+  "command": "command-to-run", // 仅 STDIO
+  "args": ["arg1", "arg2"],     // 仅 STDIO
+  "url": "https://...",         // 仅 SSE/STREAMABLE_HTTP
+}
+```
+
+```json 可选字段
+{
+  "description": "人类可读的描述",
+  "env": {
+    "KEY": "value"
+  },
+  "bearerToken": "auth-token"   // 仅 SSE/STREAMABLE_HTTP
+}
+```
+</CodeGroup>
+
+### 环境变量
+
+向 STDIO 服务器传递环境变量：
+
+```json
+{
+  "name": "TimeServer",
+  "type": "STDIO",
+  "command": "uvx",
+  "args": ["mcp-server-time", "--local-timezone=America/New_York"],
+  "env": {
+    "TZ": "America/New_York"
+  }
+}
+```
+
+### 身份验证
+
+对于需要身份验证的服务器：
+
+<CodeGroup>
+```json 带有 API 密钥的 STDIO
+{
+  "env": {
+    "API_KEY": "your-secret-key"
+  }
+}
+```
+
+```json 带有 Bearer Token 的远程服务器
+{
+  "bearerToken": "your-bearer-token"
+}
+```
+</CodeGroup>
+
+## 管理 MCP 服务器
+
+### 添加服务器
+
+1. **导航**到 MetaMCP 仪表板中的 MCP 服务器
+2. **点击**"添加服务器"
+3. **配置**服务器详细信息
+4. **测试**配置
+5. **保存**使其可用于命名空间
+
+### 批量导入/导出
+
+MetaMCP 支持批量导入和导出 MCP 服务器配置，便于迁移和备份。
+
+#### 导出服务器
+
+将所有配置的 MCP 服务器导出到 JSON 文件：
+
+1. **导航**到仪表板中的 MCP 服务器
+2. **点击**"导出 JSON"按钮
+3. **选择**下载文件或复制到剪贴板
+
+<Card title="导出格式" icon="code">
+```json
+{
+  "mcpServers": {
+    "HackerNews": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-hn"],
+      "description": "访问 HackerNews 故事和评论"
+    },
+    "TimeServer": {
+      "type": "stdio", 
+      "command": "uvx",
+      "args": ["mcp-server-time"],
+      "env": {
+        "TZ": "America/New_York"
+      },
+      "description": "时间和时区实用工具"
+    },
+    "RemoteAPI": {
+      "type": "streamable_http",
+      "url": "https://api.example.com/mcp",
+      "bearerToken": "your-bearer-token",
+      "description": "通过 HTTP 的远程 MCP 服务器"
+    }
+  }
+}
+```
+</Card>
+
+#### 导入服务器
+
+从 JSON 配置导入多个 MCP 服务器：
+
+1. **导航**到仪表板中的 MCP 服务器
+2. **点击**"导入 JSON"按钮
+3. **粘贴**或输入您的 JSON 配置
+4. **点击**"导入"添加服务器
+
+<CodeGroup>
+```json STDIO 服务器格式
+{
+  "mcpServers": {
+    "ServerName": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["package-name"],
+      "env": {
+        "API_KEY": "your-key"
+      },
+      "description": "可选描述"
+    }
+  }
+}
+```
+
+```json SSE 服务器格式
+{
+  "mcpServers": {
+    "ServerName": {
+      "type": "sse",
+      "url": "https://api.example.com/sse",
+      "bearerToken": "your-token",
+      "description": "可选描述"
+    }
+  }
+}
+```
+
+```json 可流式 HTTP 格式
+{
+  "mcpServers": {
+    "ServerName": {
+      "type": "streamable_http", 
+      "url": "https://api.example.com/mcp",
+      "bearerToken": "your-token",
+      "description": "可选描述"
+    }
+  }
+}
+```
+</CodeGroup>
+
+<Note>
+**类型值（不区分大小写）：**
+- `"stdio"`, `"STDIO"`, `"std"` → STDIO
+- `"sse"`, `"SSE"` → SSE  
+- `"streamable_http"`, `"STREAMABLE_HTTP"`, `"streamablehttp"`, `"http"` → STREAMABLE_HTTP
+</Note>
+
+<Note>
+**导入行为：**
+- 具有现有名称的服务器将使用新配置**更新**
+- 新服务器将被**创建**
+- 无效配置将被**跳过**并显示错误消息
+- 导入过程显示成功/失败计数
+</Note>
+
+<Tip>
+使用批量导入/导出用于：
+- **环境迁移**（开发 → 测试 → 生产）
+- **团队协作**（共享服务器配置）
+- **备份和恢复**（配置备份）
+- **快速设置**（一次部署多个服务器）
+</Tip>
+
+### 空闲会话管理
+
+MetaMCP 预分配空闲会话以获得更好的性能：
+
+<Card title="冷启动优化" icon="zap">
+- **默认**：每个服务器 1 个空闲会话
+- **可配置**：根据使用模式调整
+- **自动扩展**：按需创建会话
+- **清理**：超时后回收空闲会话
+</Card>
+
+## 依赖项的自定义 Dockerfile
+
+如果您的 MCP 服务器需要 `uvx` 或 `npx` 之外的额外依赖项，您可以自定义 MetaMCP Dockerfile：
+
+```dockerfile
+FROM metamcp:latest
+
+# 安装 Python 依赖项
+RUN pip install requests beautifulsoup4
+
+# 安装系统包
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 全局安装 Node.js 包
+RUN npm install -g some-mcp-package
+```
+
+<Warning>
+自定义依赖项会增加 Docker 镜像大小和启动时间。尽可能考虑使用轻量级替代方案。
+</Warning>
+
+## 故障排除
+
+<AccordionGroup>
+  <Accordion icon="triangle-alert" title="服务器无法启动">
+    **常见原因：**
+    - 缺少依赖项（通过自定义 Dockerfile 安装）
+    - 命令或参数不正确
+    - 环境变量未设置
+    - 网络连接问题（对于 SSE/可流式 HTTP）
+    
+    **调试步骤：**
+    1. 在 MetaMCP 仪表板中检查服务器日志
+    2. 在终端中手动测试命令
+    3. 验证环境变量
+    4. 检查网络连接
+  </Accordion>
+
+  <Accordion icon="clock" title="性能缓慢">
+    **优化策略：**
+    - 为频繁使用的服务器增加空闲会话计数
+    - 尽可能使用本地服务器而不是远程服务器
+    - 在自定义 Docker 镜像中预安装依赖项
+    - 配置适当的超时值
+  </Accordion>
+
+  <Accordion icon="shield" title="身份验证问题">
+    **常见问题：**
+    - API 密钥或 bearer token 过期
+    - 环境变量名称不正确
+    - 缺少必需的标头
+    - 外部 API 的速率限制
+    
+    **解决方案：**
+    1. 刷新 API 密钥/token
+    2. 检查服务器文档了解必需的身份验证
+    3. 实现适当的错误处理
+    4. 添加带有退避的重试逻辑
+  </Accordion>
+</AccordionGroup>
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="创建命名空间" icon="package" href="/concepts/namespaces">
+    将您的 MCP 服务器分组到有组织的命名空间中
+  </Card>
+  
+  <Card title="设置端点" icon="link" href="/concepts/endpoints">
+    创建公共端点以访问您的服务器
+  </Card>
+  
+  <Card title="添加中间件" icon="filter" href="/concepts/middleware">
+    转换和过滤 MCP 请求和响应
+  </Card>
+  
+  <Card title="集成指南" icon="plug" href="/integrations/cursor">
+    将您配置的服务器连接到 MCP 客户端
+  </Card>
+</CardGroup> 

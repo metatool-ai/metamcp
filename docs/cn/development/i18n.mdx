@@ -1,0 +1,517 @@
+---
+title: "国际化 (i18n)"
+description: "使用 Next.js 区域路由和客户端翻译为 MetaMCP 添加多语言支持"
+---
+
+MetaMCP 使用 **Next.js 基于区域的路由** 和 **客户端翻译** 来支持多种语言。本指南解释了 i18n 系统以及如何添加新语言。
+
+## 当前语言支持
+
+MetaMCP 目前支持：
+
+- **英语 (en)** - 默认语言
+- **简体中文 (zh)** - 完整翻译可用
+
+作者维护两种语言以确保翻译准确性，但欢迎为其他语言做出贡献。
+
+## 项目结构
+
+国际化系统按以下方式组织：
+
+```bash
+apps/frontend/
+├── app/
+│   └── [locale]/                  # 基于区域的路由
+│       ├── layout.tsx            # 区域布局
+│       ├── (sidebar)/            # 侧边栏布局组
+│       └── ...
+├── public/locales/
+│   ├── en/                       # 英语翻译
+│   │   ├── common.json
+│   │   ├── auth.json
+│   │   ├── navigation.json
+│   │   ├── mcp-servers.json
+│   │   ├── namespaces.json
+│   │   ├── endpoints.json
+│   │   ├── api-keys.json
+│   │   ├── settings.json
+│   │   ├── search.json
+│   │   ├── inspector.json
+│   │   ├── logs.json
+│   │   └── validation.json
+│   └── zh/                       # 中文翻译
+│       └── (相同结构)
+├── lib/
+│   └── i18n.ts                  # 客户端 i18n 工具
+├── hooks/
+│   ├── useLocale.ts             # 获取当前区域的 Hook
+│   └── useTranslations.ts       # 客户端翻译的 Hook
+├── components/
+│   └── language-switcher.tsx    # 语言切换组件
+└── middleware.ts                # 区域检测和路由
+```
+
+## 工作原理
+
+### URL 结构
+
+MetaMCP 使用基于区域的路由：
+
+- **英语 (默认)**: `/mcp-servers`, `/settings`, `/namespaces`
+- **中文**: `/zh/mcp-servers`, `/zh/settings`, `/zh/namespaces`
+
+### 中间件
+
+`middleware.ts` 文件处理：
+
+- **区域检测** 从 URL、cookie 和 Accept-Language 头部
+- **自动重定向** 到适当的区域
+- **身份验证检查**
+
+<CodeGroup>
+```typescript middleware.ts
+import { NextRequest } from 'next/server';
+import { getLocale, getLocalizedPath } from '@/lib/i18n';
+
+export function middleware(request: NextRequest) {
+  // 从 URL、cookie 或头部检测区域
+  const locale = getLocale(request);
+  
+  // 如果需要则重定向
+  if (!request.nextUrl.pathname.startsWith(`/${locale}`)) {
+    const localizedPath = getLocalizedPath(request.nextUrl.pathname, locale);
+    return Response.redirect(new URL(localizedPath, request.url));
+  }
+}
+```
+
+```typescript lib/i18n.ts
+export function getLocalizedPath(path: string, locale: string): string {
+  if (locale === 'en') {
+    return path; // 默认区域不需要前缀
+  }
+  return `/${locale}${path}`;
+}
+
+export function detectLocale(request: NextRequest): string {
+  // 首先检查 URL，然后检查 cookie，然后检查 Accept-Language
+  // 返回检测到的区域或回退到 'en'
+}
+```
+</CodeGroup>
+
+## 使用翻译
+
+### 客户端组件
+
+对于客户端组件，使用 `useTranslations` Hook：
+
+<CodeGroup>
+```tsx 基本用法
+"use client";
+
+import { useTranslations } from "@/hooks/useTranslations";
+
+function ClientComponent() {
+  const { t, isLoading, locale } = useTranslations();
+  
+  if (isLoading) return <div>加载中...</div>;
+  
+  return (
+    <div>
+      <h1>{t('common:title')}</h1>
+      <button>{t('auth:signIn')}</button>
+    </div>
+  );
+}
+```
+
+```tsx 带参数
+// 在翻译文件中: "welcome": "欢迎，{{name}}！"
+<span>{t('common:welcome', { name: 'John' })}</span>
+
+// 带计数: "itemCount": "找到 {{count}} 个项目"
+<span>{t('search:itemCount', { count: 42 })}</span>
+```
+
+```tsx 条件翻译
+const { t, locale } = useTranslations();
+
+return (
+  <div>
+    <p>{t('common:currentLanguage')}: {locale}</p>
+    {locale === 'zh' && (
+      <p>{t('common:chineseSpecificMessage')}</p>
+    )}
+  </div>
+);
+```
+</CodeGroup>
+
+### 翻译键格式
+
+使用冒号分隔的命名空间进行组织：
+
+```json
+{
+  "server": {
+    "create": "创建服务器",
+    "edit": "编辑服务器",
+    "delete": "删除服务器",
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "error": "错误"
+    },
+    "validation": {
+      "nameRequired": "服务器名称是必需的",
+      "commandRequired": "命令是必需的"
+    }
+  }
+}
+```
+
+**用法**: `t('mcp-servers:server.create')`, `t('mcp-servers:server.status.online')`
+
+## 翻译文件组织
+
+### 命名空间结构
+
+每个翻译命名空间都有特定用途：
+
+<AccordionGroup>
+  <Accordion icon="globe" title="common.json">
+    **共享 UI 元素和通用术语**
+    
+    ```json
+    {
+      "actions": {
+        "save": "保存",
+        "cancel": "取消",
+        "delete": "删除",
+        "edit": "编辑",
+        "create": "创建",
+        "search": "搜索"
+      },
+      "status": {
+        "loading": "加载中...",
+        "error": "错误",
+        "success": "成功"
+      },
+      "form": {
+        "required": "此字段是必需的",
+        "invalid": "无效输入"
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="lock" title="auth.json">
+    **身份验证相关文本**
+    
+    ```json
+    {
+      "signIn": "登录",
+      "signOut": "登出",
+      "signUp": "注册",
+      "email": "邮箱",
+      "password": "密码",
+      "forgotPassword": "忘记密码？",
+      "createAccount": "创建账户",
+      "loginWithOIDC": "使用 OIDC 登录"
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="navigation" title="navigation.json">
+    **菜单项和导航文本**
+    
+    ```json
+    {
+      "dashboard": "仪表板",
+      "mcpServers": "MCP 服务器",
+      "namespaces": "命名空间",
+      "endpoints": "端点",
+      "apiKeys": "API 密钥",
+      "settings": "设置",
+      "inspector": "MCP 检查器",
+      "logs": "实时日志"
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="server" title="mcp-servers.json">
+    **MCP 服务器特定翻译**
+    
+    ```json
+    {
+      "server": {
+        "create": "创建服务器",
+        "edit": "编辑服务器",
+        "name": "服务器名称",
+        "type": "服务器类型",
+        "command": "命令",
+        "args": "参数",
+        "env": "环境变量"
+      },
+      "types": {
+        "stdio": "STDIO",
+        "http": "HTTP",
+        "websocket": "WebSocket"
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### 翻译键最佳实践
+
+<Card title="翻译键指南" icon="key">
+- **使用描述性、层次化的键**: `server.validation.nameRequired`
+- **使用 camelCase 保持一致性**: `signIn`, `mcpServers`
+- **分组相关翻译**: 所有服务器相关术语放在 `server` 下
+- **保持上下文清晰**: 如果不同，使用 `auth:signIn` vs `form:signIn`
+- **使用插值处理动态内容**: `"welcome": "欢迎，{{name}}！"`
+</Card>
+
+## 添加新语言
+
+### 步骤 1: 创建翻译文件
+
+1. **在 `public/locales/` 中创建语言目录**:
+   ```bash
+   mkdir -p public/locales/es  # 西班牙语
+   ```
+
+2. **复制英语文件作为模板**:
+   ```bash
+   cp -r public/locales/en/* public/locales/es/
+   ```
+
+3. **翻译每个 JSON 文件中的内容**:
+   ```json
+   // public/locales/es/common.json
+   {
+     "actions": {
+       "save": "Guardar",
+       "cancel": "Cancelar",
+       "delete": "Eliminar",
+       "edit": "Editar",
+       "create": "Crear"
+     }
+   }
+   ```
+
+### 步骤 2: 更新配置
+
+将新区域添加到 i18n 配置中：
+
+<CodeGroup>
+```typescript lib/i18n.ts
+export const SUPPORTED_LOCALES = ['en', 'zh', 'es'] as const;
+export type Locale = typeof SUPPORTED_LOCALES[number];
+
+export const LOCALE_NAMES: Record<Locale, string> = {
+  en: 'English',
+  zh: '中文',
+  es: 'Español'
+};
+```
+
+```typescript middleware.ts
+import { SUPPORTED_LOCALES } from '@/lib/i18n';
+
+export function middleware(request: NextRequest) {
+  // 更新区域检测以包含新语言
+  const supportedLocales = SUPPORTED_LOCALES;
+  // ... 其余中间件逻辑
+}
+```
+</CodeGroup>
+
+### 步骤 3: 更新语言切换器
+
+语言切换器将自动包含新语言：
+
+```tsx
+// components/language-switcher.tsx
+import { LOCALE_NAMES, SUPPORTED_LOCALES } from '@/lib/i18n';
+
+export function LanguageSwitcher() {
+  return (
+    <select>
+      {SUPPORTED_LOCALES.map(locale => (
+        <option key={locale} value={locale}>
+          {LOCALE_NAMES[locale]}
+        </option>
+      ))}
+    </select>
+  );
+}
+```
+
+### 步骤 4: 测试实现
+
+1. **在新语言中添加测试内容**
+2. **导航到** `/{locale}/` URL（例如，`/es/mcp-servers`）
+3. **验证翻译** 正确显示
+4. **测试语言切换** 功能
+5. **检查回退** 对缺失翻译的处理
+
+## 翻译工作流程
+
+### 新功能
+
+在向 MetaMCP 添加新功能时：
+
+1. **首先添加英语翻译** 到适当的命名空间
+2. **使用描述性键** 在上下文中有意义
+3. **用英语测试** 确保键工作正确
+4. **添加其他语言**（或标记为待翻译）
+5. **在部署前测试所有语言**
+
+### 贡献者
+
+<AccordionGroup>
+  <Accordion icon="translate" title="翻译贡献者">
+    **贡献翻译：**
+    
+    1. Fork 仓库
+    2. 创建新的语言文件或更新现有文件
+    3. 遵循现有的键结构
+    4. 在本地测试你的翻译
+    5. 提交包含你更改的 Pull Request
+    
+    **提示：**
+    - 保持翻译简洁但清晰
+    - 保持术语一致性
+    - 考虑文化背景，不仅仅是字面翻译
+    - 测试较长文本以确保 UI 仍然工作
+  </Accordion>
+
+  <Accordion icon="robot" title="AI 辅助翻译">
+    **使用 Cursor/Claude 等 AI 工具：**
+    
+    ```prompt
+    将此英语 JSON 文件翻译为西班牙语，保持相同的结构和键：
+    
+    {
+      "server": {
+        "create": "Create Server",
+        "edit": "Edit Server"
+      }
+    }
+    
+    保持 "MCP" 和 "API" 等技术术语不变。
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## 故障排除
+
+### 常见问题
+
+<AccordionGroup>
+  <Accordion icon="warning" title="缺失翻译">
+    **当翻译不显示时：**
+    
+    1. 检查翻译键是否存在于 JSON 文件中
+    2. 验证命名空间是否正确（`common:save` vs `auth:save`）
+    3. 确保区域文件存在且是有效的 JSON
+    4. 检查浏览器控制台是否有缺失键警告
+    5. 验证组件是否正确使用 `useTranslations`
+  </Accordion>
+
+  <Accordion icon="bug" title="水合错误">
+    **服务器/客户端翻译不匹配：**
+    
+    1. 确保服务器和客户端之间的区域检测一致
+    2. 使用 `useTranslations` 的 `isLoading` 状态
+    3. 如果区域可能改变，避免在 SSR 期间渲染翻译
+    4. 禁用 JavaScript 测试以检查 SSR 行为
+  </Accordion>
+
+  <Accordion icon="globe" title="区域路由问题">
+    **URL 路由问题：**
+    
+    1. 检查新区域的中间件配置
+    2. 验证 `getLocalizedPath` 函数处理新语言
+    3. 测试直接导航到本地化 URL
+    4. 确保回退行为正确工作
+  </Accordion>
+</AccordionGroup>
+
+### 调试工具
+
+<CodeGroup>
+```bash 开发调试
+# 检查缺失的翻译键
+grep -r "t('" apps/frontend/app --include="*.tsx" | \
+  grep -v "useTranslations"
+
+# 验证 JSON 文件
+for file in public/locales/*/*.json; do
+  echo "检查 $file"
+  cat "$file" | jq . > /dev/null
+done
+```
+
+```typescript 调试组件
+"use client";
+
+import { useTranslations } from "@/hooks/useTranslations";
+
+export function TranslationDebugger() {
+  const { t, locale, isLoading } = useTranslations();
+  
+  return (
+    <div className="debug-panel">
+      <p>当前区域: {locale}</p>
+      <p>正在加载: {isLoading.toString()}</p>
+      <p>测试翻译: {t('common:save')}</p>
+    </div>
+  );
+}
+```
+</CodeGroup>
+
+## 未来增强
+
+### 计划功能
+
+- **RTL 语言支持** 用于阿拉伯语、希伯来语
+- **日期/时间本地化** 具有适当的格式
+- **基于区域的数字格式**
+- **货币格式** 用于定价功能
+- **复数规则** 用于复杂的语言要求
+
+### 贡献指南
+
+<Card title="i18n 贡献指南" icon="checklist">
+- 📝 **首先添加英语**: 始终从英语翻译开始
+- 🔍 **彻底测试**: 验证所有区域工作正确
+- 📊 **使用一致术语**: 维护技术术语词汇表
+- 🌍 **考虑上下文**: 适应文化差异，不仅仅是语言
+- 📱 **测试 UI 影响**: 确保较长翻译不会破坏布局
+- 🤝 **协作**: 尽可能与母语者合作
+</Card>
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="贡献指南" icon="handshake" href="/development/contributing">
+    了解如何为 MetaMCP 开发做出贡献
+  </Card>
+  
+  <Card title="前端开发" icon="code" href="/development">
+    了解前端架构和开发设置
+  </Card>
+  
+  <Card title="组件开发" icon="component" href="/development#frontend-development">
+    了解使用 i18n 的 UI 组件开发
+  </Card>
+  
+  <Card title="测试指南" icon="test" href="/development#testing">
+    测试你的国际化更改
+  </Card>
+</CardGroup> 

@@ -33,44 +33,93 @@
     ]
   },
   "navigation": {
-    "groups": [
+    "languages": [
       {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
+        "language": "en",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "en/index",
+              "en/quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "en/concepts/mcp-servers",
+              "en/concepts/namespaces",
+              "en/concepts/endpoints",
+              "en/concepts/middleware",
+              "en/concepts/inspector"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "en/deployment/custom-deployment"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "en/integrations/cursor",
+              "en/integrations/claude-desktop",
+              "en/integrations/open-web-ui"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "en/development/contributing",
+              "en/development/i18n",
+              "en/development/architecture"
+            ]
+          }
         ]
       },
       {
-        "group": "Core Concepts",
-        "pages": [
-          "concepts/mcp-servers",
-          "concepts/namespaces",
-          "concepts/endpoints",
-          "concepts/middleware",
-          "concepts/inspector"
-        ]
-      },
-      {
-        "group": "Deployment",
-        "pages": [
-          "deployment/custom-deployment"
-        ]
-      },
-      {
-        "group": "Integrations",
-        "pages": [
-          "integrations/cursor",
-          "integrations/claude-desktop",
-          "integrations/open-web-ui"
-        ]
-      },
-      {
-        "group": "Development",
-        "pages": [
-          "development/contributing",
-          "development/i18n",
-          "development/architecture"
+        "language": "cn",
+        "groups": [
+          {
+            "group": "快速开始",
+            "pages": [
+              "cn/index",
+              "cn/quickstart"
+            ]
+          },
+          {
+            "group": "核心概念",
+            "pages": [
+              "cn/concepts/mcp-servers",
+              "cn/concepts/namespaces",
+              "cn/concepts/endpoints",
+              "cn/concepts/middleware",
+              "cn/concepts/inspector"
+            ]
+          },
+          {
+            "group": "部署",
+            "pages": [
+              "cn/deployment/custom-deployment"
+            ]
+          },
+          {
+            "group": "集成",
+            "pages": [
+              "cn/integrations/cursor",
+              "cn/integrations/claude-desktop",
+              "cn/integrations/open-web-ui"
+            ]
+          },
+          {
+            "group": "开发",
+            "pages": [
+              "cn/development/contributing",
+              "cn/development/i18n",
+              "cn/development/architecture"
+            ]
+          }
         ]
       }
     ]
