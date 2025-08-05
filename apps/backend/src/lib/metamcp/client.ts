@@ -144,7 +144,10 @@ export const connectMetaMcpClient = async (
   while (retry) {
     try {
       // Create fresh client and transport for each attempt
-      const { client, transport } = createMetaMcpClient(serverUuid, serverParams);
+      const { client, transport } = createMetaMcpClient(
+        serverUuid,
+        serverParams,
+      );
       if (!client || !transport) {
         return undefined;
       }

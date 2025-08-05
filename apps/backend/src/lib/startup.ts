@@ -1,8 +1,8 @@
 import { ServerParameters } from "@repo/zod-types";
 
 import { mcpServersRepository, namespacesRepository } from "../db/repositories";
-import { convertDbServerToParams } from "./metamcp/utils";
 import { dockerManager } from "./metamcp/docker-manager";
+import { convertDbServerToParams } from "./metamcp/utils";
 
 /**
  * Startup function to initialize Docker containers for all MCP servers
@@ -43,7 +43,6 @@ export async function initializeIdleServers() {
     console.log(
       `Successfully converted ${Object.keys(allServerParams).length} MCP servers to ServerParameters format`,
     );
-
 
     console.log(
       "✅ Successfully completed startup initialization for all MCP servers",
