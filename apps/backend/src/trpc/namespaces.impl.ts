@@ -82,7 +82,6 @@ export const namespacesImplementations = {
         user_id: effectiveUserId,
       });
 
-
       return {
         success: true as const,
         data: NamespacesSerializer.serializeNamespace(result),
@@ -251,7 +250,6 @@ export const namespacesImplementations = {
         };
       }
 
-
       return {
         success: true as const,
         message: "Namespace deleted successfully",
@@ -339,7 +337,6 @@ export const namespacesImplementations = {
         mcpServerUuids: input.mcpServerUuids,
       });
 
-
       return {
         success: true as const,
         data: NamespacesSerializer.serializeNamespace(result),
@@ -394,7 +391,6 @@ export const namespacesImplementations = {
           message: "Server not found in namespace",
         };
       }
-
 
       return {
         success: true as const,
@@ -659,7 +655,6 @@ export const namespacesImplementations = {
           `Processed ${tools.length} tools for server "${serverName}" (${serverUuid})`,
         );
       }
-
 
       return {
         success: true as const,
