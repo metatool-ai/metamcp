@@ -6,7 +6,6 @@ import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import express from "express";
 
 import { createServer } from "../../lib/metamcp/index";
-import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
 
 const metamcpRouter = express.Router();
@@ -55,8 +54,7 @@ const cleanupSession = async (sessionId: string) => {
     await serverInstance.cleanup();
   }
 
-  // Clean up session connections
-  await mcpServerPool.cleanupSession(sessionId);
+  // Clean up session connections - no longer needed with Docker approach
 };
 
 metamcpRouter.get("/:uuid/mcp", async (req, res) => {

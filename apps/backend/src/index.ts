@@ -1,7 +1,7 @@
 import express from "express";
 
 import { auth } from "./auth";
-import { initializeIdleServers } from "./lib/startup";
+import { initializeIdleServers, initializeDockerContainers } from "./lib/startup";
 import mcpProxyRouter from "./routers/mcp-proxy";
 import oauthRouter from "./routers/oauth";
 import publicEndpointsRouter from "./routers/public-metamcp";
@@ -98,9 +98,10 @@ app.listen(12009, async () => {
   console.log(
     "Waiting for server to be fully ready before initializing idle servers...",
   );
-  await new Promise((resolve) => setTimeout(resolve, 3000)).then(
-    initializeIdleServers,
-  );
+  await new Promise((resolve) => setTimeout(resolve, 3000)).then(async () => {
+    await initializeDockerContainers();
+    await initializeIdleServers();
+  });
 });
 
 app.get("/health", (req, res) => {

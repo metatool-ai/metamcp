@@ -1,20 +1,19 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import {
-  StdioClientTransport,
-  StdioServerParameters,
-} from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ServerParameters } from "@repo/zod-types";
 
+import { dockerManager } from "./docker-manager";
 import { metamcpLogStore } from "./log-store";
 
 const sleep = (time: number) =>
   new Promise<void>((resolve) => setTimeout(() => resolve(), time));
+
 export interface ConnectedClient {
   client: Client;
   cleanup: () => Promise<void>;
+  serverUuid: string;
 }
 
 /**
@@ -31,43 +30,29 @@ export const transformDockerUrl = (url: string): string => {
   return url;
 };
 
+/**
+ * Creates a client for an MCP server based on its type
+ */
 export const createMetaMcpClient = (
+  serverUuid: string,
   serverParams: ServerParameters,
 ): { client: Client | undefined; transport: Transport | undefined } => {
   let transport: Transport | undefined;
 
-  // Create the appropriate transport based on server type
-  // Default to "STDIO" if type is undefined
+  // For STDIO servers, use Docker container URL
   if (!serverParams.type || serverParams.type === "STDIO") {
-    const stdioParams: StdioServerParameters = {
-      command: serverParams.command || "",
-      args: serverParams.args || undefined,
-      env: serverParams.env || undefined,
-      stderr: "pipe",
-    };
-    transport = new StdioClientTransport(stdioParams);
-
-    // Handle stderr stream when set to "pipe"
-    if ((transport as StdioClientTransport).stderr) {
-      const stderrStream = (transport as StdioClientTransport).stderr;
-
-      stderrStream?.on("data", (chunk: Buffer) => {
-        metamcpLogStore.addLog(
-          serverParams.name,
-          "error",
-          chunk.toString().trim(),
-        );
-      });
-
-      stderrStream?.on("error", (error: Error) => {
-        metamcpLogStore.addLog(
-          serverParams.name,
-          "error",
-          "stderr error",
-          error,
-        );
-      });
+    const dockerUrl = dockerManager.getServerUrl(serverUuid);
+    if (!dockerUrl) {
+      metamcpLogStore.addLog(
+        serverParams.name,
+        "error",
+        `No Docker container found for stdio server: ${serverUuid}`,
+      );
+      return { client: undefined, transport: undefined };
     }
+
+    // Use Streamable HTTP for Docker containers
+    transport = new StreamableHTTPClientTransport(new URL(dockerUrl));
   } else if (serverParams.type === "SSE" && serverParams.url) {
     // Transform the URL if TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL is set to "true"
     const transformedUrl = transformDockerUrl(serverParams.url);
@@ -144,7 +129,11 @@ export const createMetaMcpClient = (
   return { client, transport };
 };
 
+/**
+ * Connect to an MCP server without session management
+ */
 export const connectMetaMcpClient = async (
+  serverUuid: string,
   serverParams: ServerParameters,
 ): Promise<ConnectedClient | undefined> => {
   const waitFor = 5000;
@@ -155,7 +144,7 @@ export const connectMetaMcpClient = async (
   while (retry) {
     try {
       // Create fresh client and transport for each attempt
-      const { client, transport } = createMetaMcpClient(serverParams);
+      const { client, transport } = createMetaMcpClient(serverUuid, serverParams);
       if (!client || !transport) {
         return undefined;
       }
@@ -164,6 +153,7 @@ export const connectMetaMcpClient = async (
 
       return {
         client,
+        serverUuid,
         cleanup: async () => {
           await transport.close();
           await client.close();
@@ -171,9 +161,9 @@ export const connectMetaMcpClient = async (
       };
     } catch (error) {
       metamcpLogStore.addLog(
-        "client",
+        serverParams.name,
         "error",
-        `Error connecting to MetaMCP client (attempt ${count + 1}/${retries})`,
+        `Error connecting to MCP client (attempt ${count + 1}/${retries})`,
         error,
       );
       count++;

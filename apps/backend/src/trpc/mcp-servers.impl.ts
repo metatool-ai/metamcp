@@ -16,8 +16,7 @@ import {
   namespaceMappingsRepository,
 } from "../db/repositories";
 import { McpServersSerializer } from "../db/serializers";
-import { mcpServerPool } from "../lib/metamcp/mcp-server-pool";
-import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
+import { dockerManager } from "../lib/metamcp/docker-manager";
 import { convertDbServerToParams } from "../lib/metamcp/utils";
 
 export const mcpServersImplementations = {
@@ -42,22 +41,24 @@ export const mcpServersImplementations = {
         };
       }
 
-      // Ensure fixed session for the newly created server (async)
+      // Create Docker container for stdio servers (async)
       const serverParams = await convertDbServerToParams(createdServer);
       if (serverParams) {
-        mcpServerPool
-          .ensureFixedSessionForNewServer(createdServer.uuid, serverParams)
-          .then(() => {
-            console.log(
-              `Ensured fixed session for newly created server: ${createdServer.name} (${createdServer.uuid})`,
-            );
-          })
-          .catch((error) => {
-            console.error(
-              `Error ensuring fixed session for newly created server ${createdServer.name} (${createdServer.uuid}):`,
-              error,
-            );
-          });
+        if (!serverParams.type || serverParams.type === "STDIO") {
+          dockerManager
+            .createContainer(createdServer.uuid, serverParams)
+            .then(() => {
+              console.log(
+                `Created Docker container for newly created server: ${createdServer.name} (${createdServer.uuid})`,
+              );
+            })
+            .catch((error) => {
+              console.error(
+                `Error creating Docker container for newly created server ${createdServer.name} (${createdServer.uuid}):`,
+                error,
+              );
+            });
+        }
       }
 
       return {
@@ -144,29 +145,29 @@ export const mcpServersImplementations = {
           await mcpServersRepository.bulkCreate(serversToInsert);
         imported = serversToInsert.length;
 
-        // Ensure fixed sessions for all imported servers (async)
+        // Create Docker containers for stdio servers (async)
         if (createdServers && createdServers.length > 0) {
           createdServers.forEach(async (server) => {
             try {
               const params = await convertDbServerToParams(server);
-              if (params) {
-                mcpServerPool
-                  .ensureFixedSessionForNewServer(server.uuid, params)
+              if (params && (!params.type || params.type === "STDIO")) {
+                dockerManager
+                  .createContainer(server.uuid, params)
                   .then(() => {
                     console.log(
-                      `Ensured fixed session for bulk imported server: ${server.name} (${server.uuid})`,
+                      `Created Docker container for bulk imported server: ${server.name} (${server.uuid})`,
                     );
                   })
                   .catch((error) => {
                     console.error(
-                      `Error ensuring fixed session for bulk imported server ${server.name} (${server.uuid}):`,
+                      `Error creating Docker container for bulk imported server ${server.name} (${server.uuid}):`,
                       error,
                     );
                   });
               }
             } catch (error) {
               console.error(
-                `Error processing fixed session for bulk imported server ${server.name} (${server.uuid}):`,
+                `Error processing Docker container for bulk imported server ${server.name} (${server.uuid}):`,
                 error,
               );
             }
@@ -263,8 +264,8 @@ export const mcpServersImplementations = {
           input.uuid,
         );
 
-      // Clean up any fixed sessions for this server
-      await mcpServerPool.cleanupFixedSession(input.uuid);
+      // Clean up Docker container for this server if it's stdio
+      await dockerManager.removeContainer(input.uuid);
 
       const deletedServer = await mcpServersRepository.deleteByUuid(input.uuid);
 
@@ -275,37 +276,7 @@ export const mcpServersImplementations = {
         };
       }
 
-      // Invalidate idle MetaMCP servers for all affected namespaces (async)
-      if (affectedNamespaceUuids.length > 0) {
-        metaMcpServerPool
-          .invalidateIdleServers(affectedNamespaceUuids)
-          .then(() => {
-            console.log(
-              `Invalidated idle MetaMCP servers for ${affectedNamespaceUuids.length} namespaces after deleting server: ${deletedServer.name} (${deletedServer.uuid})`,
-            );
-          })
-          .catch((error) => {
-            console.error(
-              `Error invalidating idle MetaMCP servers after deleting server ${deletedServer.uuid}:`,
-              error,
-            );
-          });
-
-        // Also invalidate OpenAPI sessions for affected namespaces
-        metaMcpServerPool
-          .invalidateOpenApiSessions(affectedNamespaceUuids)
-          .then(() => {
-            console.log(
-              `Invalidated OpenAPI sessions for ${affectedNamespaceUuids.length} namespaces after deleting server: ${deletedServer.name} (${deletedServer.uuid})`,
-            );
-          })
-          .catch((error) => {
-            console.error(
-              `Error invalidating OpenAPI sessions after deleting server ${deletedServer.uuid}:`,
-              error,
-            );
-          });
-      }
+// Docker containers are already removed, no additional cleanup needed
 
       return {
         success: true as const,
@@ -360,59 +331,24 @@ export const mcpServersImplementations = {
         };
       }
 
-      // Invalidate fixed session for the updated server to refresh with new parameters (async)
+      // Update Docker container for stdio servers (async)
       const serverParams = await convertDbServerToParams(updatedServer);
       if (serverParams) {
-        mcpServerPool
-          .invalidateFixedSession(updatedServer.uuid, serverParams)
-          .then(() => {
-            console.log(
-              `Invalidated and refreshed fixed session for updated server: ${updatedServer.name} (${updatedServer.uuid})`,
-            );
-          })
-          .catch((error) => {
-            console.error(
-              `Error invalidating fixed session for updated server ${updatedServer.name} (${updatedServer.uuid}):`,
-              error,
-            );
-          });
-      }
-
-      // Find affected namespaces and invalidate their idle MetaMCP servers (async)
-      const affectedNamespaceUuids =
-        await namespaceMappingsRepository.findNamespacesByServerUuid(
-          updatedServer.uuid,
-        );
-
-      if (affectedNamespaceUuids.length > 0) {
-        metaMcpServerPool
-          .invalidateIdleServers(affectedNamespaceUuids)
-          .then(() => {
-            console.log(
-              `Invalidated idle MetaMCP servers for ${affectedNamespaceUuids.length} namespaces after updating server: ${updatedServer.name} (${updatedServer.uuid})`,
-            );
-          })
-          .catch((error) => {
-            console.error(
-              `Error invalidating idle MetaMCP servers after updating server ${updatedServer.uuid}:`,
-              error,
-            );
-          });
-
-        // Also invalidate OpenAPI sessions for affected namespaces
-        metaMcpServerPool
-          .invalidateOpenApiSessions(affectedNamespaceUuids)
-          .then(() => {
-            console.log(
-              `Invalidated OpenAPI sessions for ${affectedNamespaceUuids.length} namespaces after updating server: ${updatedServer.name} (${updatedServer.uuid})`,
-            );
-          })
-          .catch((error) => {
-            console.error(
-              `Error invalidating OpenAPI sessions after updating server ${updatedServer.uuid}:`,
-              error,
-            );
-          });
+        if (!serverParams.type || serverParams.type === "STDIO") {
+          dockerManager
+            .updateServer(updatedServer.uuid, serverParams)
+            .then(() => {
+              console.log(
+                `Updated Docker container for server: ${updatedServer.name} (${updatedServer.uuid})`,
+              );
+            })
+            .catch((error) => {
+              console.error(
+                `Error updating Docker container for server ${updatedServer.name} (${updatedServer.uuid}):`,
+                error,
+              );
+            });
+        }
       }
 
       return {

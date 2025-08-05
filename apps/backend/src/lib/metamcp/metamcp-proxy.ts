@@ -23,7 +23,7 @@ import { z } from "zod";
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { ConnectedClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
-import { mcpServerPool } from "./mcp-server-pool";
+import { connectMetaMcpClient } from "./client";
 import {
   createFilterCallToolMiddleware,
   createFilterListToolsMiddleware,
@@ -79,11 +79,7 @@ export const createServer = async (
 
     await Promise.allSettled(
       Object.entries(serverParams).map(async ([mcpServerUuid, params]) => {
-        const session = await mcpServerPool.getSession(
-          context.sessionId,
-          mcpServerUuid,
-          params,
-        );
+        const session = await connectMetaMcpClient(mcpServerUuid, params);
         if (!session) return;
 
         const capabilities = session.client.getServerCapabilities();
@@ -113,7 +109,7 @@ export const createServer = async (
               );
             } catch (dbError) {
               console.error(
-                `Error saving tools to database for server ${serverName}:`,
+                `Error saving tools to database for server ${serverName}:",
                 dbError,
               );
             }
@@ -198,9 +194,6 @@ export const createServer = async (
   // Compose middleware with handlers - this is the Express-like functional approach
   const listToolsWithMiddleware = compose(
     createFilterListToolsMiddleware({ cacheEnabled: true }),
-    // Add more middleware here as needed
-    // createLoggingMiddleware(),
-    // createRateLimitingMiddleware(),
   )(originalListToolsHandler);
 
   const callToolWithMiddleware = compose(
@@ -209,9 +202,6 @@ export const createServer = async (
       customErrorMessage: (toolName, reason) =>
         `Access denied to tool "${toolName}": ${reason}`,
     }),
-    // Add more middleware here as needed
-    // createAuditingMiddleware(),
-    // createAuthorizationMiddleware(),
   )(originalCallToolHandler);
 
   // Set up the handlers with middleware
@@ -234,8 +224,6 @@ export const createServer = async (
 
     try {
       // Extract the original prompt name by removing the server prefix
-      // For nested MetaMCP, names may be like "MetaMCPTest__Everything__promptName"
-      // We need to extract "Everything__promptName" (everything after the first "__")
       const firstDoubleUnderscoreIndex = name.indexOf("__");
       if (firstDoubleUnderscoreIndex === -1) {
         throw new Error(`Invalid prompt name format: ${name}`);
@@ -276,7 +264,7 @@ export const createServer = async (
 
     await Promise.allSettled(
       Object.entries(serverParams).map(async ([uuid, params]) => {
-        const session = await mcpServerPool.getSession(sessionId, uuid, params);
+        const session = await connectMetaMcpClient(uuid, params);
         if (!session) return;
 
         const capabilities = session.client.getServerCapabilities();
@@ -332,7 +320,7 @@ export const createServer = async (
 
     await Promise.allSettled(
       Object.entries(serverParams).map(async ([uuid, params]) => {
-        const session = await mcpServerPool.getSession(sessionId, uuid, params);
+        const session = await connectMetaMcpClient(uuid, params);
         if (!session) return;
 
         const capabilities = session.client.getServerCapabilities();
@@ -418,11 +406,7 @@ export const createServer = async (
 
       await Promise.allSettled(
         Object.entries(serverParams).map(async ([uuid, params]) => {
-          const session = await mcpServerPool.getSession(
-            sessionId,
-            uuid,
-            params,
-          );
+          const session = await connectMetaMcpClient(uuid, params);
           if (!session) return;
 
           const capabilities = session.client.getServerCapabilities();
@@ -470,8 +454,9 @@ export const createServer = async (
   );
 
   const cleanup = async () => {
-    // Cleanup is now handled by the pool
-    await mcpServerPool.cleanupSession(sessionId);
+    // No need for session cleanup with Docker approach
+    // Each connection is independent
+    console.log("MetaMCP server cleanup - Docker connections are stateless");
   };
 
   return { server, cleanup };
