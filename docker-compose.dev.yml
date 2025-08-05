@@ -1,11 +1,13 @@
 services:
   app:
     container_name: metamcp-dev
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     env_file:
       - .env
     ports:
-      - "12008:12008"
+      - "12008:12008"  # Frontend
     environment:
       # Postgres connection details
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
@@ -26,6 +28,30 @@ services:
       
       # Docker networking fix
       TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL:-true}
+      
+      # Docker socket access
+      DOCKER_HOST: unix:///var/run/docker.sock
+      
+      # Development environment
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: 1
+      
+      # Turborepo environment variables
+      TURBO_TEAM: ""
+      TURBO_TOKEN: ""
+    volumes:
+      # Mount Docker socket to allow container management
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount source code for hot reload
+      - .:/app
+      # Exclude node_modules from volume mount to use container's
+      - /app/node_modules
+      - /app/apps/frontend/node_modules
+      - /app/apps/backend/node_modules
+      - /app/packages/*/node_modules
+      # Exclude build artifacts
+      - /app/apps/frontend/.next
+      - /app/apps/backend/dist
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -34,6 +60,15 @@ services:
     restart: "no"
     networks:
       - metamcp-network
+    # Add privileged mode for Docker operations
+    privileged: true
+    # Add security options for Docker socket access
+    security_opt:
+      - seccomp:unconfined
+    # Add capabilities for Docker operations
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
 
   postgres:
     image: postgres:16-alpine

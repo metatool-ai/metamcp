@@ -4,6 +4,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "dotenv -e .env.local turbo run dev",
+    "dev:docker": "./scripts/dev-docker.sh",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
