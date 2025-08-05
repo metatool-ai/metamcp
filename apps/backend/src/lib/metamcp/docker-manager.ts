@@ -114,7 +114,7 @@ export class DockerManager {
         RestartPolicy: {
           Name: "unless-stopped",
         },
-        NetworkMode: "host", // Use host networking for simplicity
+        // Remove NetworkMode: "host" to allow proper port binding
       },
       Labels: {
         "metamcp.server.uuid": serverUuid,
@@ -127,6 +127,50 @@ export class DockerManager {
       const container = await this.docker.createContainer(containerConfig);
       await container.start();
 
+      // Connect the container to the metamcp network
+      const network = this.docker.getNetwork("metamcp_metamcp-network");
+      await network.connect({
+        Container: container.id,
+      });
+
+      // Wait a moment for the container to fully start
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Check if container is running and healthy
+      const containerInfo = await container.inspect();
+      console.log(
+        `Container ${container.id} status:`,
+        containerInfo.State.Status,
+      );
+
+      // Test if the port is accessible
+      const testUrl = `http://localhost:${port}`;
+      try {
+        const response = await fetch(testUrl, {
+          method: "GET",
+          signal: AbortSignal.timeout(5000), // 5 second timeout
+        });
+        console.log(`Port ${port} is accessible, status: ${response.status}`);
+      } catch (error) {
+        console.warn(`Port ${port} is not yet accessible:`, error);
+        // Wait a bit more and try again
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        try {
+          const response = await fetch(testUrl, {
+            method: "GET",
+            signal: AbortSignal.timeout(5000),
+          });
+          console.log(
+            `Port ${port} is now accessible, status: ${response.status}`,
+          );
+        } catch (retryError) {
+          console.error(
+            `Port ${port} is still not accessible after retry:`,
+            retryError,
+          );
+        }
+      }
+
       const dockerServer: DockerMcpServer = {
         containerId: container.id,
         serverUuid,
@@ -134,6 +178,13 @@ export class DockerManager {
         url: `http://localhost:${port}`,
         containerName,
       };
+
+      console.log(`Created Docker container for server ${serverUuid}:`, {
+        containerId: container.id,
+        port,
+        url: dockerServer.url,
+        containerName,
+      });
 
       this.runningServers.set(serverUuid, dockerServer);
       return dockerServer;

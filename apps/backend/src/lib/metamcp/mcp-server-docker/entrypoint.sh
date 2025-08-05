@@ -44,7 +44,10 @@ if [[ -n "$MCP_SERVER_COMMAND" ]]; then
     # --host 0.0.0.0: Listen on all interfaces
     # --debug: Enable debug logging for troubleshooting
     # --pass-environment: Pass through all environment variables
-    exec mcp-proxy --port 3000 --host 0.0.0.0 --debug --pass-environment "$FULL_COMMAND"
+    
+    IFS=' ' read -r -a FULL_COMMAND_ARRAY <<< "$FULL_COMMAND"
+    echo "Launching: mcp-proxy --port 3000 --host 0.0.0.0 --debug --pass-environment ${FULL_COMMAND_ARRAY[@]}"
+    exec mcp-proxy --port 3000 --host 0.0.0.0 --debug --pass-environment "${FULL_COMMAND_ARRAY[@]}"
 else
     echo "No MCP_SERVER_COMMAND provided"
     exit 1
