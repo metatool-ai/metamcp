@@ -43,12 +43,12 @@ export async function initializeIdleServers() {
       `Successfully converted ${Object.keys(allServerParams).length} MCP servers to ServerParameters format`,
     );
 
-    // Initialize idle sessions for the underlying MCP server pool with ALL servers
+    // Initialize fixed sessions for the underlying MCP server pool with ALL servers
     if (Object.keys(allServerParams).length > 0) {
       const { mcpServerPool } = await import("./metamcp");
-      await mcpServerPool.ensureIdleSessions(allServerParams);
+      await mcpServerPool.ensureFixedSessions(allServerParams);
       console.log(
-        "✅ Successfully initialized idle MCP server pool sessions for ALL servers",
+        "✅ Successfully initialized fixed MCP server pool sessions for ALL servers",
       );
     }
 

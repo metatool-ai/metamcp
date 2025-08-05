@@ -42,19 +42,19 @@ export const mcpServersImplementations = {
         };
       }
 
-      // Ensure idle session for the newly created server (async)
+      // Ensure fixed session for the newly created server (async)
       const serverParams = await convertDbServerToParams(createdServer);
       if (serverParams) {
         mcpServerPool
-          .ensureIdleSessionForNewServer(createdServer.uuid, serverParams)
+          .ensureFixedSessionForNewServer(createdServer.uuid, serverParams)
           .then(() => {
             console.log(
-              `Ensured idle session for newly created server: ${createdServer.name} (${createdServer.uuid})`,
+              `Ensured fixed session for newly created server: ${createdServer.name} (${createdServer.uuid})`,
             );
           })
           .catch((error) => {
             console.error(
-              `Error ensuring idle session for newly created server ${createdServer.name} (${createdServer.uuid}):`,
+              `Error ensuring fixed session for newly created server ${createdServer.name} (${createdServer.uuid}):`,
               error,
             );
           });
@@ -144,29 +144,29 @@ export const mcpServersImplementations = {
           await mcpServersRepository.bulkCreate(serversToInsert);
         imported = serversToInsert.length;
 
-        // Ensure idle sessions for all imported servers (async)
+        // Ensure fixed sessions for all imported servers (async)
         if (createdServers && createdServers.length > 0) {
           createdServers.forEach(async (server) => {
             try {
               const params = await convertDbServerToParams(server);
               if (params) {
                 mcpServerPool
-                  .ensureIdleSessionForNewServer(server.uuid, params)
+                  .ensureFixedSessionForNewServer(server.uuid, params)
                   .then(() => {
                     console.log(
-                      `Ensured idle session for bulk imported server: ${server.name} (${server.uuid})`,
+                      `Ensured fixed session for bulk imported server: ${server.name} (${server.uuid})`,
                     );
                   })
                   .catch((error) => {
                     console.error(
-                      `Error ensuring idle session for bulk imported server ${server.name} (${server.uuid}):`,
+                      `Error ensuring fixed session for bulk imported server ${server.name} (${server.uuid}):`,
                       error,
                     );
                   });
               }
             } catch (error) {
               console.error(
-                `Error processing idle session for bulk imported server ${server.name} (${server.uuid}):`,
+                `Error processing fixed session for bulk imported server ${server.name} (${server.uuid}):`,
                 error,
               );
             }
@@ -263,8 +263,8 @@ export const mcpServersImplementations = {
           input.uuid,
         );
 
-      // Clean up any idle sessions for this server
-      await mcpServerPool.cleanupIdleSession(input.uuid);
+      // Clean up any fixed sessions for this server
+      await mcpServerPool.cleanupFixedSession(input.uuid);
 
       const deletedServer = await mcpServersRepository.deleteByUuid(input.uuid);
 
@@ -360,19 +360,19 @@ export const mcpServersImplementations = {
         };
       }
 
-      // Invalidate idle session for the updated server to refresh with new parameters (async)
+      // Invalidate fixed session for the updated server to refresh with new parameters (async)
       const serverParams = await convertDbServerToParams(updatedServer);
       if (serverParams) {
         mcpServerPool
-          .invalidateIdleSession(updatedServer.uuid, serverParams)
+          .invalidateFixedSession(updatedServer.uuid, serverParams)
           .then(() => {
             console.log(
-              `Invalidated and refreshed idle session for updated server: ${updatedServer.name} (${updatedServer.uuid})`,
+              `Invalidated and refreshed fixed session for updated server: ${updatedServer.name} (${updatedServer.uuid})`,
             );
           })
           .catch((error) => {
             console.error(
-              `Error invalidating idle session for updated server ${updatedServer.name} (${updatedServer.uuid}):`,
+              `Error invalidating fixed session for updated server ${updatedServer.name} (${updatedServer.uuid}):`,
               error,
             );
           });
