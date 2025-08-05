@@ -1,7 +1,10 @@
 FROM nikolaik/python-nodejs:python3.13-nodejs24
 
+# Install system dependencies including jq
+RUN apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
+
 # Install mcp-proxy via pip
-RUN uv pip install mcp-proxy
+RUN uv pip install --system mcp-proxy
 
 # Create app directory
 WORKDIR /app

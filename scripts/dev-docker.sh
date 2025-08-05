@@ -19,6 +19,10 @@ if [ ! -f .env.local ]; then
     fi
 fi
 
+# Build MCP server image first
+echo "🔨 Building MCP server image..."
+docker build -t mcp/server:latest -f apps/backend/src/lib/metamcp/mcp-server-docker/Dockerfile apps/backend/src/lib/metamcp/mcp-server-docker/
+
 # Build and start the development environment
 echo "🔨 Building development container..."
 docker compose -f docker-compose.dev.yml build

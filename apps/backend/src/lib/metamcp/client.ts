@@ -33,26 +33,41 @@ export const transformDockerUrl = (url: string): string => {
 /**
  * Creates a client for an MCP server based on its type
  */
-export const createMetaMcpClient = (
+export const createMetaMcpClient = async (
   serverUuid: string,
   serverParams: ServerParameters,
-): { client: Client | undefined; transport: Transport | undefined } => {
+): Promise<{
+  client: Client | undefined;
+  transport: Transport | undefined;
+}> => {
   let transport: Transport | undefined;
 
   // For STDIO servers, use Docker container URL
   if (!serverParams.type || serverParams.type === "STDIO") {
-    const dockerUrl = dockerManager.getServerUrl(serverUuid);
+    let dockerUrl = dockerManager.getServerUrl(serverUuid);
+
+    // If container doesn't exist, create it
     if (!dockerUrl) {
-      metamcpLogStore.addLog(
-        serverParams.name,
-        "error",
-        `No Docker container found for stdio server: ${serverUuid}`,
-      );
-      return { client: undefined, transport: undefined };
+      try {
+        const dockerServer = await dockerManager.createContainer(
+          serverUuid,
+          serverParams,
+        );
+        dockerUrl = dockerServer.url;
+      } catch (error) {
+        metamcpLogStore.addLog(
+          serverParams.name,
+          "error",
+          `Failed to create Docker container for stdio server: ${serverUuid}`,
+          error,
+        );
+        return { client: undefined, transport: undefined };
+      }
     }
 
     // Use Streamable HTTP for Docker containers
     transport = new StreamableHTTPClientTransport(new URL(dockerUrl));
+    console.log(`Using Docker container URL: ${dockerUrl}`);
   } else if (serverParams.type === "SSE" && serverParams.url) {
     // Transform the URL if TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL is set to "true"
     const transformedUrl = transformDockerUrl(serverParams.url);
@@ -144,7 +159,7 @@ export const connectMetaMcpClient = async (
   while (retry) {
     try {
       // Create fresh client and transport for each attempt
-      const { client, transport } = createMetaMcpClient(
+      const { client, transport } = await createMetaMcpClient(
         serverUuid,
         serverParams,
       );

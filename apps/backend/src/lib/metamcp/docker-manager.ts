@@ -20,7 +20,25 @@ export class DockerManager {
   private constructor() {
     // Use DOCKER_HOST environment variable to communicate with host Docker
     const dockerHost = process.env.DOCKER_HOST || "unix:///var/run/docker.sock";
-    this.docker = new Docker({ host: dockerHost });
+
+    if (dockerHost.startsWith("unix://")) {
+      // For Unix socket connections, use socketPath
+      this.docker = new Docker({
+        socketPath: dockerHost.replace("unix://", ""),
+      });
+    } else if (dockerHost.startsWith("tcp://")) {
+      // For TCP connections, parse the URL
+      const url = new URL(dockerHost);
+      const protocol = url.protocol.replace(":", "") as "http" | "https";
+      this.docker = new Docker({
+        host: url.hostname,
+        port: parseInt(url.port) || 2376,
+        protocol,
+      });
+    } else {
+      // Fallback for other formats (assume it's a socket path)
+      this.docker = new Docker({ socketPath: dockerHost });
+    }
   }
 
   /**
