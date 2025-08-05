@@ -1,12 +1,12 @@
 import { ServerParameters } from "@repo/zod-types";
 
 import { mcpServersRepository, namespacesRepository } from "../db/repositories";
-import { metaMcpServerPool } from "./metamcp";
 import { convertDbServerToParams } from "./metamcp/utils";
 import { dockerManager } from "./metamcp/docker-manager";
 
 /**
- * Startup function to initialize idle servers for all namespaces and all MCP servers
+ * Startup function to initialize Docker containers for all MCP servers
+ * (Previously managed idle servers, now focuses on Docker container initialization)
  */
 export async function initializeIdleServers() {
   try {
@@ -44,16 +44,9 @@ export async function initializeIdleServers() {
       `Successfully converted ${Object.keys(allServerParams).length} MCP servers to ServerParameters format`,
     );
 
-    // Ensure idle servers for all namespaces (MetaMCP server pool)
-    if (namespaceUuids.length > 0) {
-      await metaMcpServerPool.ensureIdleServers(namespaceUuids, true);
-      console.log(
-        "✅ Successfully initialized idle servers for all namespaces",
-      );
-    }
 
     console.log(
-      "✅ Successfully initialized idle servers for all namespaces and all MCP servers",
+      "✅ Successfully completed startup initialization for all MCP servers",
     );
   } catch (error) {
     console.error("❌ Error initializing idle servers:", error);

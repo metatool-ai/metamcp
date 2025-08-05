@@ -7,7 +7,7 @@ import {
 
 import { ConnectedClient } from "../../../lib/metamcp";
 import { getMcpServers } from "../../../lib/metamcp/fetch-metamcp";
-import { mcpServerPool } from "../../../lib/metamcp/mcp-server-pool";
+import { connectMetaMcpClient } from "../../../lib/metamcp/client";
 import {
   createFilterCallToolMiddleware,
   createFilterListToolsMiddleware,
@@ -33,11 +33,7 @@ export const createOriginalListToolsHandler = (
 
     await Promise.allSettled(
       Object.entries(serverParams).map(async ([mcpServerUuid, params]) => {
-        const session = await mcpServerPool.getSession(
-          context.sessionId,
-          mcpServerUuid,
-          params,
-        );
+        const session = await connectMetaMcpClient(mcpServerUuid, params);
         if (!session) return;
 
         const capabilities = session.client.getServerCapabilities();
@@ -98,11 +94,7 @@ export const createOriginalCallToolHandler = (): CallToolHandler => {
     let targetSession = null;
 
     for (const [mcpServerUuid, params] of Object.entries(serverParams)) {
-      const session = await mcpServerPool.getSession(
-        context.sessionId,
-        mcpServerUuid,
-        params,
-      );
+      const session = await connectMetaMcpClient(mcpServerUuid, params);
       if (!session) continue;
 
       const capabilities = session.client.getServerCapabilities();

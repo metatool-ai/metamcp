@@ -9,7 +9,7 @@ import {
 } from "@/middleware/api-key-oauth.middleware";
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 
-import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
+import { createServer } from "../../lib/metamcp/metamcp-proxy";
 
 const streamableHttpRouter = express.Router();
 
@@ -26,8 +26,8 @@ const cleanupSession = async (sessionId: string) => {
     await transport.close();
   }
 
-  // Clean up MetaMCP server pool session
-  await metaMcpServerPool.cleanupSession(sessionId);
+  // No need to clean up server pool session - servers are created per session
+  console.log(`StreamableHTTP session ${sessionId} cleaned up`);
 };
 
 streamableHttpRouter.get(
@@ -81,17 +81,17 @@ streamableHttpRouter.post(
         // Generate session ID upfront
         const newSessionId = randomUUID();
 
-        // Get or create MetaMCP server instance from the pool
-        const mcpServerInstance = await metaMcpServerPool.getServer(
-          newSessionId,
+        // Create MetaMCP server instance directly using metamcp-proxy
+        const mcpServerInstance = await createServer(
           namespaceUuid,
+          newSessionId,
         );
         if (!mcpServerInstance) {
-          throw new Error("Failed to get MetaMCP server instance from pool");
+          throw new Error("Failed to create MetaMCP server instance");
         }
 
         console.log(
-          `Using MetaMCP server instance for public endpoint session ${newSessionId} (endpoint: ${endpointName})`,
+          `Created MetaMCP server instance for public endpoint session ${newSessionId} (endpoint: ${endpointName})`,
         );
 
         // Create transport with the predetermined session ID

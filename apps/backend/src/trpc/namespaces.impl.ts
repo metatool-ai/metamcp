@@ -24,7 +24,6 @@ import {
   toolsRepository,
 } from "../db/repositories";
 import { NamespacesSerializer } from "../db/serializers";
-import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
 
 export const namespacesImplementations = {
   create: async (
@@ -83,22 +82,6 @@ export const namespacesImplementations = {
         user_id: effectiveUserId,
       });
 
-      // Ensure idle MetaMCP server exists for the new namespace to improve performance
-      // Run this asynchronously to avoid blocking the response
-      metaMcpServerPool
-        .ensureIdleServerForNewNamespace(result.uuid)
-        .then(() => {
-          console.log(
-            `Ensured idle MetaMCP server exists for new namespace ${result.uuid}`,
-          );
-        })
-        .catch((error) => {
-          console.error(
-            `Error ensuring idle MetaMCP server for new namespace ${result.uuid}:`,
-            error,
-          );
-          // Don't fail the entire create operation if idle server creation fails
-        });
 
       return {
         success: true as const,
@@ -268,19 +251,6 @@ export const namespacesImplementations = {
         };
       }
 
-      // Clean up idle MetaMCP server for the deleted namespace
-      try {
-        await metaMcpServerPool.cleanupIdleServer(input.uuid);
-        console.log(
-          `Cleaned up idle MetaMCP server for deleted namespace ${input.uuid}`,
-        );
-      } catch (error) {
-        console.error(
-          `Error cleaning up idle MetaMCP server for deleted namespace ${input.uuid}:`,
-          error,
-        );
-        // Don't fail the entire delete operation if idle server cleanup fails
-      }
 
       return {
         success: true as const,
@@ -369,38 +339,6 @@ export const namespacesImplementations = {
         mcpServerUuids: input.mcpServerUuids,
       });
 
-      // Invalidate idle MetaMCP server for this namespace since the MCP servers list may have changed
-      // Run this asynchronously to avoid blocking the response
-      metaMcpServerPool
-        .invalidateIdleServer(input.uuid)
-        .then(() => {
-          console.log(
-            `Invalidated idle MetaMCP server for updated namespace ${input.uuid}`,
-          );
-        })
-        .catch((error) => {
-          console.error(
-            `Error invalidating idle MetaMCP server for namespace ${input.uuid}:`,
-            error,
-          );
-          // Don't fail the entire update operation if idle server invalidation fails
-        });
-
-      // Also invalidate OpenAPI sessions for this namespace
-      metaMcpServerPool
-        .invalidateOpenApiSessions([input.uuid])
-        .then(() => {
-          console.log(
-            `Invalidated OpenAPI session for updated namespace ${input.uuid}`,
-          );
-        })
-        .catch((error) => {
-          console.error(
-            `Error invalidating OpenAPI session for namespace ${input.uuid}:`,
-            error,
-          );
-          // Don't fail the entire update operation if OpenAPI session invalidation fails
-        });
 
       return {
         success: true as const,
@@ -457,38 +395,6 @@ export const namespacesImplementations = {
         };
       }
 
-      // Invalidate idle MetaMCP server for this namespace since server status changed
-      // Run this asynchronously to avoid blocking the response
-      metaMcpServerPool
-        .invalidateIdleServer(input.namespaceUuid)
-        .then(() => {
-          console.log(
-            `Invalidated idle MetaMCP server for namespace ${input.namespaceUuid} after server status update`,
-          );
-        })
-        .catch((error) => {
-          console.error(
-            `Error invalidating idle MetaMCP server for namespace ${input.namespaceUuid}:`,
-            error,
-          );
-          // Don't fail the entire operation if idle server invalidation fails
-        });
-
-      // Also invalidate OpenAPI sessions for this namespace
-      metaMcpServerPool
-        .invalidateOpenApiSessions([input.namespaceUuid])
-        .then(() => {
-          console.log(
-            `Invalidated OpenAPI session for namespace ${input.namespaceUuid} after server status update`,
-          );
-        })
-        .catch((error) => {
-          console.error(
-            `Error invalidating OpenAPI session for namespace ${input.namespaceUuid}:`,
-            error,
-          );
-          // Don't fail the entire operation if OpenAPI session invalidation fails
-        });
 
       return {
         success: true as const,
@@ -754,38 +660,6 @@ export const namespacesImplementations = {
         );
       }
 
-      // Invalidate idle MetaMCP server for this namespace since tools were refreshed
-      // Run this asynchronously to avoid blocking the response
-      metaMcpServerPool
-        .invalidateIdleServer(input.namespaceUuid)
-        .then(() => {
-          console.log(
-            `Invalidated idle MetaMCP server for namespace ${input.namespaceUuid} after tools refresh`,
-          );
-        })
-        .catch((error) => {
-          console.error(
-            `Error invalidating idle MetaMCP server for namespace ${input.namespaceUuid}:`,
-            error,
-          );
-          // Don't fail the entire operation if idle server invalidation fails
-        });
-
-      // Also invalidate OpenAPI sessions for this namespace
-      metaMcpServerPool
-        .invalidateOpenApiSessions([input.namespaceUuid])
-        .then(() => {
-          console.log(
-            `Invalidated OpenAPI session for namespace ${input.namespaceUuid} after tools refresh`,
-          );
-        })
-        .catch((error) => {
-          console.error(
-            `Error invalidating OpenAPI session for namespace ${input.namespaceUuid}:`,
-            error,
-          );
-          // Don't fail the entire operation if OpenAPI session invalidation fails
-        });
 
       return {
         success: true as const,

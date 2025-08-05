@@ -22,8 +22,8 @@ import { z } from "zod";
 
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { ConnectedClient } from "./client";
-import { getMcpServers } from "./fetch-metamcp";
 import { connectMetaMcpClient } from "./client";
+import { getMcpServers } from "./fetch-metamcp";
 import {
   createFilterCallToolMiddleware,
   createFilterListToolsMiddleware,
@@ -109,7 +109,7 @@ export const createServer = async (
               );
             } catch (dbError) {
               console.error(
-                `Error saving tools to database for server ${serverName}:",
+                `Error saving tools to database for server ${serverName}:`,
                 dbError,
               );
             }

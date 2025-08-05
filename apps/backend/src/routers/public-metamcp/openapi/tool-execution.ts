@@ -1,7 +1,7 @@
 import { CallToolRequest } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 
-import { metaMcpServerPool } from "../../../lib/metamcp/metamcp-server-pool";
+import { createServer } from "../../../lib/metamcp/metamcp-proxy";
 import { createMiddlewareEnabledHandlers } from "./handlers";
 import { ToolExecutionRequest } from "./types";
 
@@ -15,11 +15,13 @@ export const executeToolWithMiddleware = async (
   const toolName = req.params.tool_name;
 
   try {
-    // Get or create persistent OpenAPI session for this namespace
-    const mcpServerInstance =
-      await metaMcpServerPool.getOpenApiServer(namespaceUuid);
+    // Create MetaMCP server instance directly using metamcp-proxy for OpenAPI
+    const mcpServerInstance = await createServer(
+      namespaceUuid,
+      `openapi_${namespaceUuid}`,
+    );
     if (!mcpServerInstance) {
-      throw new Error("Failed to get MetaMCP server instance from pool");
+      throw new Error("Failed to create MetaMCP server instance");
     }
 
     // Use deterministic session ID for OpenAPI endpoints

@@ -42,7 +42,7 @@ services:
     volumes:
       # Mount Docker socket to allow container management
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Mount source code for hot reload
+      # Mount source code for hot reload, but exclude node_modules
       - .:/app
       # Exclude node_modules from volume mount to use container's
       - /app/node_modules
@@ -52,6 +52,8 @@ services:
       # Exclude build artifacts
       - /app/apps/frontend/.next
       - /app/apps/backend/dist
+      # Ensure pnpm store is preserved
+      - /app/.pnpm-store
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
