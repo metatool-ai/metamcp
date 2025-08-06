@@ -1,5 +1,4 @@
 import { ServerParameters } from "@repo/zod-types";
-import { randomUUID } from "crypto";
 import Docker from "dockerode";
 
 export interface DockerMcpServer {
@@ -93,7 +92,57 @@ export class DockerManager {
     }
 
     const port = await this.findAvailablePort();
-    const containerName = `metamcp-stdio-server-${serverUuid}-${randomUUID().slice(0, 8)}`;
+    const containerName = `metamcp-stdio-server-${serverUuid}`;
+
+    // Check if container already exists
+    try {
+      const existingContainer = this.docker.getContainer(containerName);
+      const containerInfo = await existingContainer.inspect();
+
+      if (containerInfo.State.Running) {
+        // Container exists and is running, reuse it
+        const hostPort = parseInt(
+          containerInfo.NetworkSettings.Ports["3000/tcp"]?.[0]?.HostPort || "0",
+        );
+
+        // Use host.docker.internal when running inside Docker container
+        const isDockerContainer =
+          process.env.TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL === "true";
+        const serverUrl = isDockerContainer
+          ? `http://host.docker.internal:${hostPort}`
+          : `http://localhost:${hostPort}`;
+
+        const existingServer: DockerMcpServer = {
+          containerId: containerInfo.Id,
+          serverUuid,
+          port: hostPort,
+          url: serverUrl,
+          containerName,
+        };
+
+        this.runningServers.set(serverUuid, existingServer);
+        console.log(
+          `Reusing existing container for server ${serverUuid}:`,
+          existingServer,
+        );
+        return existingServer;
+      } else {
+        // Container exists but not running, remove it
+        try {
+          await existingContainer.remove();
+        } catch (error) {
+          console.warn(
+            `Could not remove existing stopped container ${containerName}:`,
+            error,
+          );
+        }
+      }
+    } catch (error) {
+      // Container doesn't exist, will create new one
+      console.log(
+        `No existing container found for server ${serverUuid}, creating new one`,
+      );
+    }
 
     // Create container configuration
     const containerConfig = {
@@ -114,7 +163,8 @@ export class DockerManager {
         RestartPolicy: {
           Name: "unless-stopped",
         },
-        // Remove NetworkMode: "host" to allow proper port binding
+        // Ensure the container can be reached from the host
+        ExtraHosts: ["host.docker.internal:host-gateway"],
       },
       Labels: {
         "metamcp.server.uuid": serverUuid,
@@ -127,11 +177,9 @@ export class DockerManager {
       const container = await this.docker.createContainer(containerConfig);
       await container.start();
 
-      // Connect the container to the metamcp network
-      const network = this.docker.getNetwork("metamcp_metamcp-network");
-      await network.connect({
-        Container: container.id,
-      });
+      // Note: We're using port binding instead of network mode
+      // The container will be accessible via host.docker.internal:port
+      // No need to connect to a specific network
 
       // Wait a moment for the container to fully start
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -143,8 +191,15 @@ export class DockerManager {
         containerInfo.State.Status,
       );
 
+      // Use host.docker.internal when running inside Docker container
+      const isDockerContainer =
+        process.env.TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL === "true";
+
       // Test if the port is accessible
-      const testUrl = `http://localhost:${port}`;
+      const testUrl = isDockerContainer
+        ? `http://host.docker.internal:${port}`
+        : `http://localhost:${port}`;
+
       try {
         const response = await fetch(testUrl, {
           method: "GET",
@@ -171,11 +226,15 @@ export class DockerManager {
         }
       }
 
+      const serverUrl = isDockerContainer
+        ? `http://host.docker.internal:${port}`
+        : `http://localhost:${port}`;
+
       const dockerServer: DockerMcpServer = {
         containerId: container.id,
         serverUuid,
         port,
-        url: `http://localhost:${port}`,
+        url: serverUrl,
         containerName,
       };
 
