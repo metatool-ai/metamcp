@@ -65,8 +65,8 @@ export const createMetaMcpClient = async (
       }
     }
 
-    // Use Streamable HTTP for Docker containers
-    transport = new StreamableHTTPClientTransport(new URL(dockerUrl));
+    // Use SSE for Docker containers
+    transport = new SSEClientTransport(new URL(dockerUrl));
     console.log(`Using Docker container URL: ${dockerUrl}`);
     console.log(`Connecting to MCP server ${serverUuid} at ${dockerUrl}`);
   } else if (serverParams.type === "SSE" && serverParams.url) {

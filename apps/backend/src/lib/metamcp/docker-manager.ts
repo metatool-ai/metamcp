@@ -109,8 +109,8 @@ export class DockerManager {
         const isDockerContainer =
           process.env.TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL === "true";
         const serverUrl = isDockerContainer
-          ? `http://host.docker.internal:${hostPort}`
-          : `http://localhost:${hostPort}`;
+          ? `http://host.docker.internal:${hostPort}/sse`
+          : `http://localhost:${hostPort}/sse`;
 
         const existingServer: DockerMcpServer = {
           containerId: containerInfo.Id,
@@ -137,7 +137,7 @@ export class DockerManager {
           );
         }
       }
-    } catch (error) {
+    } catch {
       // Container doesn't exist, will create new one
       console.log(
         `No existing container found for server ${serverUuid}, creating new one`,
@@ -146,7 +146,7 @@ export class DockerManager {
 
     // Create container configuration
     const containerConfig = {
-      Image: process.env.MCP_SERVER_DOCKER_IMAGE || "mcp/server:latest",
+      Image: "mcp/server:latest",
       name: containerName,
       Env: [
         `MCP_SERVER_COMMAND=${serverParams.command || ""}`,
@@ -197,8 +197,8 @@ export class DockerManager {
 
       // Test if the port is accessible
       const testUrl = isDockerContainer
-        ? `http://host.docker.internal:${port}`
-        : `http://localhost:${port}`;
+        ? `http://host.docker.internal:${port}/sse`
+        : `http://localhost:${port}/sse`;
 
       try {
         const response = await fetch(testUrl, {
@@ -227,8 +227,8 @@ export class DockerManager {
       }
 
       const serverUrl = isDockerContainer
-        ? `http://host.docker.internal:${port}`
-        : `http://localhost:${port}`;
+        ? `http://host.docker.internal:${port}/sse`
+        : `http://localhost:${port}/sse`;
 
       const dockerServer: DockerMcpServer = {
         containerId: container.id,
