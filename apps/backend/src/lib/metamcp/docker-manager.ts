@@ -88,20 +88,61 @@ export class DockerManager {
     // Find and reserve an available port atomically
     let port: number = 18000;
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 5;
 
     while (attempts < maxAttempts) {
-      port = await this.findAvailablePort();
-      const reserved = await dockerSessionsRepo.reservePort(port, serverUuid);
-      if (reserved) {
-        break;
+      try {
+        port = await this.findAvailablePort();
+
+        // Double-check that the port is still available before reserving
+        const isAvailable = await dockerSessionsRepo.isPortAvailable(port);
+        if (!isAvailable) {
+          attempts++;
+          if (attempts >= maxAttempts) {
+            throw new Error(
+              "Could not find an available port after multiple attempts",
+            );
+          }
+          // Wait a bit before retrying with exponential backoff
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.pow(2, attempts) * 100),
+          );
+          continue;
+        }
+
+        const reserved = await dockerSessionsRepo.reservePort(port, serverUuid);
+        if (reserved) {
+          break;
+        }
+        attempts++;
+        if (attempts >= maxAttempts) {
+          throw new Error("Could not reserve a port after multiple attempts");
+        }
+        // Wait a bit before retrying with exponential backoff
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.pow(2, attempts) * 100),
+        );
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts) {
+          // Clean up any temporary session that might have been created
+          try {
+            await dockerSessionsRepo.releasePort(serverUuid);
+          } catch (cleanupError) {
+            console.warn(
+              `Failed to cleanup port reservation for server ${serverUuid}:`,
+              cleanupError,
+            );
+          }
+          throw new Error(
+            `Could not reserve a port after ${maxAttempts} attempts: ${error}`,
+          );
+        }
+        // Wait a bit before retrying with exponential backoff
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.pow(2, attempts) * 100),
+        );
       }
-      attempts++;
-      if (attempts >= maxAttempts) {
-        throw new Error("Could not reserve a port after multiple attempts");
-      }
-      // Wait a bit before retrying
-      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
     const containerName = `metamcp-stdio-server-${serverUuid}`;
@@ -242,14 +283,13 @@ export class DockerManager {
         ? `http://host.docker.internal:${port}/sse`
         : `http://localhost:${port}/sse`;
 
-      // Create database session for the container
-      await dockerSessionsRepo.createSession({
-        mcp_server_uuid: serverUuid,
-        container_id: container.id,
-        container_name: containerName,
-        port,
-        url: serverUrl,
-      });
+      // Update the temporary session with actual container details
+      await dockerSessionsRepo.updateSessionWithContainerDetails(
+        serverUuid,
+        container.id,
+        containerName,
+        serverUrl,
+      );
 
       const dockerServer: DockerMcpServer = {
         containerId: container.id,
@@ -273,6 +313,22 @@ export class DockerManager {
         `Error creating container for server ${serverUuid}:`,
         error,
       );
+
+      // Clean up the temporary session if container creation failed
+      try {
+        const session =
+          await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+        if (session && session.container_id.startsWith("temp-")) {
+          await dockerSessionsRepo.deleteSession(session.uuid);
+          console.log(`Cleaned up temporary session for server ${serverUuid}`);
+        }
+      } catch (cleanupError) {
+        console.warn(
+          `Failed to cleanup temporary session for server ${serverUuid}:`,
+          cleanupError,
+        );
+      }
+
       throw error;
     }
   }
@@ -335,9 +391,12 @@ export class DockerManager {
   }
 
   /**
-   * Get all running Dockerized MCP servers
+   * Get all running Dockerized MCP servers with verification
    */
   async getRunningServers(): Promise<DockerMcpServer[]> {
+    // First sync all container statuses
+    await this.syncAllContainerStatuses();
+
     const sessions = await dockerSessionsRepo.getRunningSessions();
     return sessions.map((session) => ({
       containerId: session.container_id,
@@ -349,11 +408,156 @@ export class DockerManager {
   }
 
   /**
+   * Start periodic container status synchronization
+   */
+  startPeriodicSync(intervalMs: number = 30000): NodeJS.Timeout {
+    console.log(
+      `Starting periodic container status sync every ${intervalMs}ms`,
+    );
+
+    return setInterval(async () => {
+      try {
+        const { syncedCount, totalCount } =
+          await this.syncAllContainerStatuses();
+        if (syncedCount > 0) {
+          console.log(
+            `Periodic sync: Updated ${syncedCount} out of ${totalCount} container statuses`,
+          );
+        }
+      } catch (error) {
+        console.error("Error during periodic container status sync:", error);
+      }
+    }, intervalMs);
+  }
+
+  /**
+   * Stop periodic container status synchronization
+   */
+  stopPeriodicSync(intervalId: NodeJS.Timeout): void {
+    clearInterval(intervalId);
+    console.log("Stopped periodic container status sync");
+  }
+
+  /**
    * Check if a server is running
    */
   async isServerRunning(serverUuid: string): Promise<boolean> {
     const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
-    return session?.status === "running";
+    if (!session) {
+      return false;
+    }
+
+    // Verify actual container status
+    try {
+      const container = this.docker.getContainer(session.container_id);
+      const containerInfo = await container.inspect();
+      const isActuallyRunning = containerInfo.State.Running;
+
+      // Sync database if there's a discrepancy
+      if (session.status === "running" && !isActuallyRunning) {
+        console.log(
+          `Container ${session.container_id} is stopped but DB shows running, updating status`,
+        );
+        await dockerSessionsRepo.stopSession(session.uuid);
+        return false;
+      } else if (session.status === "stopped" && isActuallyRunning) {
+        console.log(
+          `Container ${session.container_id} is running but DB shows stopped, updating status`,
+        );
+        await dockerSessionsRepo.updateSessionStatus(session.uuid, "running");
+        return true;
+      }
+
+      return isActuallyRunning;
+    } catch (error) {
+      // Container doesn't exist or can't be inspected
+      console.warn(
+        `Could not inspect container ${session.container_id}:`,
+        error,
+      );
+      if (session.status === "running") {
+        console.log(
+          `Container ${session.container_id} not found but DB shows running, updating status`,
+        );
+        await dockerSessionsRepo.stopSession(session.uuid);
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Verify and sync container status with database
+   */
+  async verifyAndSyncContainerStatus(serverUuid: string): Promise<{
+    isRunning: boolean;
+    wasSynced: boolean;
+  }> {
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    if (!session) {
+      return { isRunning: false, wasSynced: false };
+    }
+
+    try {
+      const container = this.docker.getContainer(session.container_id);
+      const containerInfo = await container.inspect();
+      const isActuallyRunning = containerInfo.State.Running;
+
+      let wasSynced = false;
+
+      if (session.status === "running" && !isActuallyRunning) {
+        console.log(
+          `Syncing: Container ${session.container_id} is stopped but DB shows running`,
+        );
+        await dockerSessionsRepo.stopSession(session.uuid);
+        wasSynced = true;
+      } else if (session.status === "stopped" && isActuallyRunning) {
+        console.log(
+          `Syncing: Container ${session.container_id} is running but DB shows stopped`,
+        );
+        await dockerSessionsRepo.updateSessionStatus(session.uuid, "running");
+        wasSynced = true;
+      }
+
+      return { isRunning: isActuallyRunning, wasSynced };
+    } catch (error) {
+      console.warn(
+        `Could not inspect container ${session.container_id}:`,
+        error,
+      );
+      if (session.status === "running") {
+        console.log(
+          `Syncing: Container ${session.container_id} not found but DB shows running`,
+        );
+        await dockerSessionsRepo.stopSession(session.uuid);
+        return { isRunning: false, wasSynced: true };
+      }
+      return { isRunning: false, wasSynced: false };
+    }
+  }
+
+  /**
+   * Sync all container statuses with database
+   */
+  async syncAllContainerStatuses(): Promise<{
+    syncedCount: number;
+    totalCount: number;
+  }> {
+    const sessions = await dockerSessionsRepo.getAllSessions();
+    let syncedCount = 0;
+
+    for (const session of sessions) {
+      const { wasSynced } = await this.verifyAndSyncContainerStatus(
+        session.mcp_server_uuid,
+      );
+      if (wasSynced) {
+        syncedCount++;
+      }
+    }
+
+    console.log(
+      `Synced ${syncedCount} out of ${sessions.length} container statuses`,
+    );
+    return { syncedCount, totalCount: sessions.length };
   }
 
   /**
@@ -393,6 +597,66 @@ export class DockerManager {
     );
 
     await Promise.allSettled(initPromises);
+  }
+
+  /**
+   * Get server status with verification
+   */
+  async getServerStatus(serverUuid: string): Promise<{
+    isRunning: boolean;
+    wasSynced: boolean;
+    containerId?: string;
+    port?: number;
+    url?: string;
+  }> {
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    if (!session) {
+      return { isRunning: false, wasSynced: false };
+    }
+
+    const { isRunning, wasSynced } =
+      await this.verifyAndSyncContainerStatus(serverUuid);
+
+    return {
+      isRunning,
+      wasSynced,
+      containerId: session.container_id,
+      port: session.port,
+      url: session.url,
+    };
+  }
+
+  /**
+   * Get all server statuses with verification
+   */
+  async getAllServerStatuses(): Promise<
+    Array<{
+      serverUuid: string;
+      isRunning: boolean;
+      wasSynced: boolean;
+      containerId?: string;
+      port?: number;
+      url?: string;
+    }>
+  > {
+    const sessions = await dockerSessionsRepo.getAllSessions();
+    const statuses = [];
+
+    for (const session of sessions) {
+      const { isRunning, wasSynced } = await this.verifyAndSyncContainerStatus(
+        session.mcp_server_uuid,
+      );
+      statuses.push({
+        serverUuid: session.mcp_server_uuid,
+        isRunning,
+        wasSynced,
+        containerId: session.container_id,
+        port: session.port,
+        url: session.url,
+      });
+    }
+
+    return statuses;
   }
 }
 
