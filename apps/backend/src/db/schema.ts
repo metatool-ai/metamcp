@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -449,5 +450,38 @@ export const oauthAccessTokensTable = pgTable(
     index("oauth_access_tokens_client_id_idx").on(table.client_id),
     index("oauth_access_tokens_user_id_idx").on(table.user_id),
     index("oauth_access_tokens_expires_at_idx").on(table.expires_at),
+  ],
+);
+
+// Docker Sessions table for tracking container instances
+export const dockerSessionsTable = pgTable(
+  "docker_sessions",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    mcp_server_uuid: uuid("mcp_server_uuid")
+      .notNull()
+      .references(() => mcpServersTable.uuid, { onDelete: "cascade" }),
+    container_id: text("container_id").notNull().unique(),
+    container_name: text("container_name").notNull(),
+    port: integer("port").notNull(),
+    url: text("url").notNull(),
+    status: text("status").notNull().default("running"), // running, stopped, error
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    started_at: timestamp("started_at", { withTimezone: true }),
+    stopped_at: timestamp("stopped_at", { withTimezone: true }),
+    error_message: text("error_message"),
+  },
+  (table) => [
+    index("docker_sessions_mcp_server_uuid_idx").on(table.mcp_server_uuid),
+    index("docker_sessions_container_id_idx").on(table.container_id),
+    index("docker_sessions_port_idx").on(table.port),
+    index("docker_sessions_status_idx").on(table.status),
+    unique("docker_sessions_port_unique_idx").on(table.port),
+    unique("docker_sessions_mcp_server_active_idx").on(table.mcp_server_uuid),
   ],
 );

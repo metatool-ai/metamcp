@@ -44,7 +44,7 @@ export const createMetaMcpClient = async (
 
   // For STDIO servers, use Docker container URL
   if (!serverParams.type || serverParams.type === "STDIO") {
-    let dockerUrl = dockerManager.getServerUrl(serverUuid);
+    let dockerUrl = await dockerManager.getServerUrl(serverUuid);
 
     // If container doesn't exist, create it
     if (!dockerUrl) {
@@ -66,7 +66,9 @@ export const createMetaMcpClient = async (
     }
 
     // Use SSE for Docker containers
-    transport = new SSEClientTransport(new URL(dockerUrl));
+    // Transform localhost to host.docker.internal for Docker container access
+    const transformedDockerUrl = transformDockerUrl(dockerUrl);
+    transport = new SSEClientTransport(new URL(transformedDockerUrl));
     console.log(`Using Docker container URL: ${dockerUrl}`);
     console.log(`Connecting to MCP server ${serverUuid} at ${dockerUrl}`);
   } else if (serverParams.type === "SSE" && serverParams.url) {

@@ -1,6 +1,8 @@
 import { ServerParameters } from "@repo/zod-types";
 import Docker from "dockerode";
 
+import { dockerSessionsRepo } from "../../db/repositories/docker-sessions.repo.js";
+
 export interface DockerMcpServer {
   containerId: string;
   serverUuid: string;
@@ -54,28 +56,10 @@ export class DockerManager {
    * Find an available port for a new MCP server
    */
   private async findAvailablePort(): Promise<number> {
-    const containers = await this.docker.listContainers({ all: true });
-    const usedPorts = new Set<number>();
-
-    containers.forEach((container) => {
-      container.Ports?.forEach((port) => {
-        if (port.PublicPort) {
-          usedPorts.add(port.PublicPort);
-        }
-      });
-    });
-
-    for (
-      let port = this.BASE_PORT;
-      port < this.BASE_PORT + this.MAX_PORTS;
-      port++
-    ) {
-      if (!usedPorts.has(port)) {
-        return port;
-      }
-    }
-
-    throw new Error("No available ports for MCP server containers");
+    return await dockerSessionsRepo.findAvailablePort(
+      this.BASE_PORT,
+      this.MAX_PORTS,
+    );
   }
 
   /**
@@ -85,13 +69,41 @@ export class DockerManager {
     serverUuid: string,
     serverParams: ServerParameters,
   ): Promise<DockerMcpServer> {
-    // Check if already running
-    const existing = this.runningServers.get(serverUuid);
-    if (existing) {
-      return existing;
+    // Check if already running in database
+    const existingSession =
+      await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    if (existingSession && existingSession.status === "running") {
+      // Return existing session from database
+      const existingServer: DockerMcpServer = {
+        containerId: existingSession.container_id,
+        serverUuid,
+        port: existingSession.port,
+        url: existingSession.url,
+        containerName: existingSession.container_name,
+      };
+      this.runningServers.set(serverUuid, existingServer);
+      return existingServer;
     }
 
-    const port = await this.findAvailablePort();
+    // Find and reserve an available port atomically
+    let port: number = 18000;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+      port = await this.findAvailablePort();
+      const reserved = await dockerSessionsRepo.reservePort(port, serverUuid);
+      if (reserved) {
+        break;
+      }
+      attempts++;
+      if (attempts >= maxAttempts) {
+        throw new Error("Could not reserve a port after multiple attempts");
+      }
+      // Wait a bit before retrying
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     const containerName = `metamcp-stdio-server-${serverUuid}`;
 
     // Check if container already exists
@@ -230,6 +242,15 @@ export class DockerManager {
         ? `http://host.docker.internal:${port}/sse`
         : `http://localhost:${port}/sse`;
 
+      // Create database session for the container
+      await dockerSessionsRepo.createSession({
+        mcp_server_uuid: serverUuid,
+        container_id: container.id,
+        container_name: containerName,
+        port,
+        url: serverUrl,
+      });
+
       const dockerServer: DockerMcpServer = {
         containerId: container.id,
         serverUuid,
@@ -260,19 +281,25 @@ export class DockerManager {
    * Remove a Docker container for an MCP server
    */
   async removeContainer(serverUuid: string): Promise<void> {
-    const server = this.runningServers.get(serverUuid);
-    if (!server) {
+    // Check database first
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    if (!session) {
       return;
     }
 
+    const server = this.runningServers.get(serverUuid);
+
     try {
-      const container = this.docker.getContainer(server.containerId);
+      const container = this.docker.getContainer(session.container_id);
 
       try {
         await container.stop();
       } catch (error) {
         // Container might already be stopped
-        console.warn(`Could not stop container ${server.containerId}:`, error);
+        console.warn(
+          `Could not stop container ${session.container_id}:`,
+          error,
+        );
       }
 
       try {
@@ -280,10 +307,13 @@ export class DockerManager {
       } catch (error) {
         // Container might already be removed
         console.warn(
-          `Could not remove container ${server.containerId}:`,
+          `Could not remove container ${session.container_id}:`,
           error,
         );
       }
+
+      // Update database session status
+      await dockerSessionsRepo.stopSession(session.uuid);
 
       this.runningServers.delete(serverUuid);
       console.log(`Removed container for server ${serverUuid}`);
@@ -299,23 +329,31 @@ export class DockerManager {
   /**
    * Get the URL for a Dockerized MCP server
    */
-  getServerUrl(serverUuid: string): string | undefined {
-    const server = this.runningServers.get(serverUuid);
-    return server?.url;
+  async getServerUrl(serverUuid: string): Promise<string | undefined> {
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    return session?.url;
   }
 
   /**
    * Get all running Dockerized MCP servers
    */
-  getRunningServers(): DockerMcpServer[] {
-    return Array.from(this.runningServers.values());
+  async getRunningServers(): Promise<DockerMcpServer[]> {
+    const sessions = await dockerSessionsRepo.getRunningSessions();
+    return sessions.map((session) => ({
+      containerId: session.container_id,
+      serverUuid: session.mcp_server_uuid,
+      port: session.port,
+      url: session.url,
+      containerName: session.container_name,
+    }));
   }
 
   /**
    * Check if a server is running
    */
-  isServerRunning(serverUuid: string): boolean {
-    return this.runningServers.has(serverUuid);
+  async isServerRunning(serverUuid: string): Promise<boolean> {
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    return session?.status === "running";
   }
 
   /**
