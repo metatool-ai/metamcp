@@ -73,16 +73,42 @@ export class DockerManager {
     const existingSession =
       await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
     if (existingSession && existingSession.status === "running") {
-      // Return existing session from database
-      const existingServer: DockerMcpServer = {
-        containerId: existingSession.container_id,
-        serverUuid,
-        port: existingSession.port,
-        url: existingSession.url,
-        containerName: existingSession.container_name,
-      };
-      this.runningServers.set(serverUuid, existingServer);
-      return existingServer;
+      // Verify that the container actually exists and is running
+      try {
+        const existingContainer = this.docker.getContainer(
+          existingSession.container_id,
+        );
+        const containerInfo = await existingContainer.inspect();
+
+        if (containerInfo.State.Running) {
+          // Container exists and is running, reuse it
+          const existingServer: DockerMcpServer = {
+            containerId: existingSession.container_id,
+            serverUuid,
+            port: existingSession.port,
+            url: existingSession.url,
+            containerName: existingSession.container_name,
+          };
+          this.runningServers.set(serverUuid, existingServer);
+          console.log(
+            `Reusing existing running container for server ${serverUuid}:`,
+            existingServer,
+          );
+          return existingServer;
+        } else {
+          // Container exists but not running, mark session as stopped
+          console.log(
+            `Container for server ${serverUuid} exists but is not running, marking session as stopped`,
+          );
+          await dockerSessionsRepo.stopSession(existingSession.uuid);
+        }
+      } catch (error) {
+        // Container doesn't exist, mark session as stopped
+        console.log(
+          `Container for server ${serverUuid} not found, marking session as stopped`,
+        );
+        await dockerSessionsRepo.stopSession(existingSession.uuid);
+      }
     }
 
     // Find and reserve an available port atomically
@@ -592,11 +618,55 @@ export class DockerManager {
       ([_, params]) => !params.type || params.type === "STDIO",
     );
 
-    const initPromises = stdioServers.map(([uuid, params]) =>
-      this.createContainer(uuid, params),
-    );
+    console.log(`Found ${stdioServers.length} stdio servers to initialize`);
 
-    await Promise.allSettled(initPromises);
+    const initPromises = stdioServers.map(async ([uuid, params]) => {
+      try {
+        console.log(
+          `Initializing container for server ${uuid} (${params.name})`,
+        );
+        const result = await this.createContainer(uuid, params);
+        console.log(
+          `✅ Successfully initialized container for server ${uuid}:`,
+          result,
+        );
+        return { success: true, uuid, result };
+      } catch (error) {
+        console.error(
+          `❌ Failed to initialize container for server ${uuid}:`,
+          error,
+        );
+        return { success: false, uuid, error };
+      }
+    });
+
+    const results = await Promise.allSettled(initPromises);
+
+    // Log results
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        const { success, uuid, error } = result.value;
+        if (success) {
+          successCount++;
+        } else {
+          failureCount++;
+          console.error(`Container initialization failed for ${uuid}:`, error);
+        }
+      } else {
+        failureCount++;
+        console.error(
+          "Container initialization failed with unhandled error:",
+          result.reason,
+        );
+      }
+    }
+
+    console.log(
+      `Container initialization complete: ${successCount} successful, ${failureCount} failed`,
+    );
   }
 
   /**
