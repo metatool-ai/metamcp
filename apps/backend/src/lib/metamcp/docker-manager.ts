@@ -17,6 +17,8 @@ export class DockerManager {
   private runningServers: Map<string, DockerMcpServer> = new Map();
   private readonly BASE_PORT = 18000;
   private readonly MAX_PORTS = 1000;
+  private containerRestartCounts: Map<string, number> = new Map();
+  private healthCheckIntervals: Map<string, NodeJS.Timeout> = new Map();
 
   private constructor() {
     // Use DOCKER_HOST environment variable to communicate with host Docker
@@ -63,7 +65,7 @@ export class DockerManager {
   }
 
   /**
-   * Create a Docker container for an MCP server
+   * Create a Docker container for an MCP server with retry logic
    */
   async createContainer(
     serverUuid: string,
@@ -72,42 +74,55 @@ export class DockerManager {
     // Check if already running in database
     const existingSession =
       await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
-    if (existingSession && existingSession.status === "running") {
-      // Verify that the container actually exists and is running
-      try {
-        const existingContainer = this.docker.getContainer(
-          existingSession.container_id,
-        );
-        const containerInfo = await existingContainer.inspect();
 
-        if (containerInfo.State.Running) {
-          // Container exists and is running, reuse it
-          const existingServer: DockerMcpServer = {
-            containerId: existingSession.container_id,
-            serverUuid,
-            port: existingSession.port,
-            url: existingSession.url,
-            containerName: existingSession.container_name,
-          };
-          this.runningServers.set(serverUuid, existingServer);
-          console.log(
-            `Reusing existing running container for server ${serverUuid}:`,
-            existingServer,
+    if (existingSession) {
+      // Check if session is in error state and has exceeded max retries
+      if (
+        existingSession.status === "error" &&
+        existingSession.retry_count >= existingSession.max_retries
+      ) {
+        throw new Error(
+          `Server ${serverUuid} has exceeded maximum retry attempts (${existingSession.retry_count}/${existingSession.max_retries}). Last error: ${existingSession.error_message}`,
+        );
+      }
+
+      if (existingSession.status === "running") {
+        // Verify that the container actually exists and is running
+        try {
+          const existingContainer = this.docker.getContainer(
+            existingSession.container_id,
           );
-          return existingServer;
-        } else {
-          // Container exists but not running, mark session as stopped
+          const containerInfo = await existingContainer.inspect();
+
+          if (containerInfo.State.Running) {
+            // Container exists and is running, reuse it
+            const existingServer: DockerMcpServer = {
+              containerId: existingSession.container_id,
+              serverUuid,
+              port: existingSession.port,
+              url: existingSession.url,
+              containerName: existingSession.container_name,
+            };
+            this.runningServers.set(serverUuid, existingServer);
+            console.log(
+              `Reusing existing running container for server ${serverUuid}:`,
+              existingServer,
+            );
+            return existingServer;
+          } else {
+            // Container exists but not running, mark session as stopped
+            console.log(
+              `Container for server ${serverUuid} exists but is not running, marking session as stopped`,
+            );
+            await dockerSessionsRepo.stopSession(existingSession.uuid);
+          }
+        } catch {
+          // Container doesn't exist, mark session as stopped
           console.log(
-            `Container for server ${serverUuid} exists but is not running, marking session as stopped`,
+            `Container for server ${serverUuid} not found, marking session as stopped`,
           );
           await dockerSessionsRepo.stopSession(existingSession.uuid);
         }
-      } catch (error) {
-        // Container doesn't exist, mark session as stopped
-        console.log(
-          `Container for server ${serverUuid} not found, marking session as stopped`,
-        );
-        await dockerSessionsRepo.stopSession(existingSession.uuid);
       }
     }
 
@@ -317,6 +332,19 @@ export class DockerManager {
         serverUrl,
       );
 
+      // Reset retry count on successful creation
+      const session =
+        await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+      if (session && session.retry_count > 0) {
+        await dockerSessionsRepo.resetRetryCount(session.uuid);
+        console.log(
+          `Reset retry count for server ${serverUuid} after successful creation`,
+        );
+      }
+
+      // Start health monitoring for this container
+      this.startHealthMonitoring(serverUuid, container.id);
+
       const dockerServer: DockerMcpServer = {
         containerId: container.id,
         serverUuid,
@@ -340,22 +368,74 @@ export class DockerManager {
         error,
       );
 
-      // Clean up the temporary session if container creation failed
-      try {
-        const session =
-          await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
-        if (session && session.container_id.startsWith("temp-")) {
-          await dockerSessionsRepo.deleteSession(session.uuid);
-          console.log(`Cleaned up temporary session for server ${serverUuid}`);
-        }
-      } catch (cleanupError) {
-        console.warn(
-          `Failed to cleanup temporary session for server ${serverUuid}:`,
-          cleanupError,
+      // Handle retry logic
+      const session =
+        await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+      if (session) {
+        const updatedSession = await dockerSessionsRepo.incrementRetryCount(
+          session.uuid,
+          error instanceof Error ? error.message : String(error),
         );
-      }
 
-      throw error;
+        if (
+          updatedSession &&
+          updatedSession.retry_count >= updatedSession.max_retries
+        ) {
+          // Mark as error after max retries
+          await dockerSessionsRepo.markAsError(
+            session.uuid,
+            `Container creation failed after ${updatedSession.max_retries} attempts. Last error: ${error instanceof Error ? error.message : String(error)}`,
+          );
+
+          console.error(
+            `Server ${serverUuid} has exceeded maximum retry attempts (${updatedSession.retry_count}/${updatedSession.max_retries}). Marking as error.`,
+          );
+
+          throw new Error(
+            `Server ${serverUuid} has exceeded maximum retry attempts (${updatedSession.retry_count}/${updatedSession.max_retries}). Last error: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        } else {
+          console.warn(
+            `Container creation failed for server ${serverUuid}, attempt ${updatedSession?.retry_count || 1}/${updatedSession?.max_retries || 3}. Will retry automatically.`,
+          );
+
+          // Clean up the temporary session if container creation failed
+          try {
+            if (session && session.container_id.startsWith("temp-")) {
+              await dockerSessionsRepo.deleteSession(session.uuid);
+              console.log(
+                `Cleaned up temporary session for server ${serverUuid}`,
+              );
+            }
+          } catch (cleanupError) {
+            console.warn(
+              `Failed to cleanup temporary session for server ${serverUuid}:`,
+              cleanupError,
+            );
+          }
+
+          throw error;
+        }
+      } else {
+        // No session found, clean up and throw error
+        try {
+          const tempSession =
+            await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+          if (tempSession && tempSession.container_id.startsWith("temp-")) {
+            await dockerSessionsRepo.deleteSession(tempSession.uuid);
+            console.log(
+              `Cleaned up temporary session for server ${serverUuid}`,
+            );
+          }
+        } catch (cleanupError) {
+          console.warn(
+            `Failed to cleanup temporary session for server ${serverUuid}:`,
+            cleanupError,
+          );
+        }
+
+        throw error;
+      }
     }
   }
 
@@ -368,8 +448,6 @@ export class DockerManager {
     if (!session) {
       return;
     }
-
-    const server = this.runningServers.get(serverUuid);
 
     try {
       const container = this.docker.getContainer(session.container_id);
@@ -396,6 +474,9 @@ export class DockerManager {
 
       // Update database session status
       await dockerSessionsRepo.stopSession(session.uuid);
+
+      // Stop health monitoring for this container
+      this.stopHealthMonitoring(serverUuid);
 
       this.runningServers.delete(serverUuid);
       console.log(`Removed container for server ${serverUuid}`);
@@ -449,6 +530,23 @@ export class DockerManager {
           console.log(
             `Periodic sync: Updated ${syncedCount} out of ${totalCount} container statuses`,
           );
+        }
+
+        // Log retry statistics periodically
+        await this.logRetryStatistics();
+
+        // Check for containers with high restart counts
+        const highRestartContainers =
+          await this.getContainersWithHighRestartCounts();
+        if (highRestartContainers.length > 0) {
+          console.warn(
+            `Found ${highRestartContainers.length} containers with high restart counts:`,
+          );
+          highRestartContainers.forEach((container) => {
+            console.warn(
+              `  - ${container.serverUuid}: ${container.restartCount} restarts`,
+            );
+          });
         }
       } catch (error) {
         console.error("Error during periodic container status sync:", error);
@@ -670,6 +768,42 @@ export class DockerManager {
   }
 
   /**
+   * Start health monitoring for all existing running containers
+   */
+  async startHealthMonitoringForExistingContainers(): Promise<void> {
+    const sessions = await dockerSessionsRepo.getRunningSessions();
+    console.log(
+      `Starting health monitoring for ${sessions.length} existing containers`,
+    );
+
+    for (const session of sessions) {
+      try {
+        const container = this.docker.getContainer(session.container_id);
+        const containerInfo = await container.inspect();
+
+        if (containerInfo.State.Running) {
+          this.startHealthMonitoring(
+            session.mcp_server_uuid,
+            session.container_id,
+          );
+          console.log(
+            `Started health monitoring for container ${session.container_id}`,
+          );
+        } else {
+          console.warn(
+            `Container ${session.container_id} is not running, skipping health monitoring`,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `Could not start health monitoring for container ${session.container_id}:`,
+          error,
+        );
+      }
+    }
+  }
+
+  /**
    * Get server status with verification
    */
   async getServerStatus(serverUuid: string): Promise<{
@@ -693,6 +827,64 @@ export class DockerManager {
       containerId: session.container_id,
       port: session.port,
       url: session.url,
+    };
+  }
+
+  /**
+   * Get detailed server status including retry information
+   */
+  async getDetailedServerStatus(serverUuid: string): Promise<{
+    isRunning: boolean;
+    wasSynced: boolean;
+    containerId?: string;
+    port?: number;
+    url?: string;
+    retryCount: number;
+    maxRetries: number;
+    lastRetryAt?: Date;
+    errorMessage?: string;
+    status: string;
+    restartCount?: number;
+  }> {
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    if (!session) {
+      return {
+        isRunning: false,
+        wasSynced: false,
+        retryCount: 0,
+        maxRetries: 3,
+        status: "not_found",
+      };
+    }
+
+    const { isRunning, wasSynced } =
+      await this.verifyAndSyncContainerStatus(serverUuid);
+
+    // Get restart count from Docker
+    let restartCount: number | undefined;
+    try {
+      const container = this.docker.getContainer(session.container_id);
+      const containerInfo = await container.inspect();
+      restartCount = containerInfo.RestartCount || 0;
+    } catch (error) {
+      console.warn(
+        `Could not get restart count for server ${serverUuid}:`,
+        error,
+      );
+    }
+
+    return {
+      isRunning,
+      wasSynced,
+      containerId: session.container_id,
+      port: session.port,
+      url: session.url,
+      retryCount: session.retry_count,
+      maxRetries: session.max_retries,
+      lastRetryAt: session.last_retry_at || undefined,
+      errorMessage: session.error_message || undefined,
+      status: session.status,
+      restartCount,
     };
   }
 
@@ -727,6 +919,280 @@ export class DockerManager {
     }
 
     return statuses;
+  }
+
+  /**
+   * Get servers with retry information for monitoring
+   */
+  async getServersWithRetryInfo(): Promise<
+    Array<{
+      serverUuid: string;
+      retryCount: number;
+      maxRetries: number;
+      lastRetryAt?: Date;
+      errorMessage?: string;
+      status: string;
+    }>
+  > {
+    const sessions = await dockerSessionsRepo.getSessionsWithRetryInfo();
+    return sessions.map((session) => ({
+      serverUuid: session.mcp_server_uuid,
+      retryCount: session.retry_count,
+      maxRetries: session.max_retries,
+      lastRetryAt: session.last_retry_at || undefined,
+      errorMessage: session.error_message || undefined,
+      status: session.status,
+    }));
+  }
+
+  /**
+   * Get servers in error state (exceeded max retries)
+   */
+  async getServersInErrorState(): Promise<
+    Array<{
+      serverUuid: string;
+      retryCount: number;
+      maxRetries: number;
+      lastRetryAt?: Date;
+      errorMessage?: string;
+    }>
+  > {
+    const sessions = await dockerSessionsRepo.getAllSessions();
+    return sessions
+      .filter((session) => session.status === "error")
+      .map((session) => ({
+        serverUuid: session.mcp_server_uuid,
+        retryCount: session.retry_count,
+        maxRetries: session.max_retries,
+        lastRetryAt: session.last_retry_at || undefined,
+        errorMessage: session.error_message || undefined,
+      }));
+  }
+
+  /**
+   * Reset retry count for a server (useful for manual recovery)
+   */
+  async resetRetryCount(serverUuid: string): Promise<void> {
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    if (session) {
+      await dockerSessionsRepo.resetRetryCount(session.uuid);
+      console.log(`Reset retry count for server ${serverUuid}`);
+    }
+  }
+
+  /**
+   * Retry a failed container (useful for manual recovery)
+   */
+  async retryContainer(
+    serverUuid: string,
+    serverParams: ServerParameters,
+  ): Promise<DockerMcpServer> {
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    if (!session) {
+      throw new Error(`No session found for server ${serverUuid}`);
+    }
+
+    if (session.status === "error") {
+      // Reset retry count and status for retry
+      await dockerSessionsRepo.resetRetryCount(session.uuid);
+      await dockerSessionsRepo.updateSessionStatus(session.uuid, "running");
+      console.log(
+        `Reset retry count and status for server ${serverUuid}, attempting retry`,
+      );
+    }
+
+    // Remove existing container if it exists
+    try {
+      await this.removeContainer(serverUuid);
+    } catch (error) {
+      console.warn(
+        `Could not remove existing container for ${serverUuid}:`,
+        error,
+      );
+    }
+
+    // Create new container
+    return await this.createContainer(serverUuid, serverParams);
+  }
+
+  /**
+   * Monitor and log retry statistics
+   */
+  async logRetryStatistics(): Promise<void> {
+    const sessionsWithRetries = await this.getServersWithRetryInfo();
+    const errorSessions = await this.getServersInErrorState();
+
+    if (sessionsWithRetries.length > 0) {
+      console.log(`Servers with retry attempts: ${sessionsWithRetries.length}`);
+      sessionsWithRetries.forEach((session) => {
+        console.log(
+          `  - ${session.serverUuid}: ${session.retryCount}/${session.maxRetries} attempts`,
+        );
+      });
+    }
+
+    if (errorSessions.length > 0) {
+      console.error(`Servers in error state: ${errorSessions.length}`);
+      errorSessions.forEach((session) => {
+        console.error(
+          `  - ${session.serverUuid}: ${session.retryCount}/${session.maxRetries} attempts failed`,
+        );
+        if (session.errorMessage) {
+          console.error(`    Last error: ${session.errorMessage}`);
+        }
+      });
+    }
+  }
+
+  /**
+   * Start health monitoring for a container
+   */
+  private startHealthMonitoring(serverUuid: string, containerId: string): void {
+    // Clear any existing health check interval
+    this.stopHealthMonitoring(serverUuid);
+
+    const interval = setInterval(async () => {
+      try {
+        const container = this.docker.getContainer(containerId);
+        const containerInfo = await container.inspect();
+
+        // Check if container has restarted
+        const restartCount = containerInfo.RestartCount || 0;
+        const previousRestartCount =
+          this.containerRestartCounts.get(serverUuid) || 0;
+
+        if (restartCount > previousRestartCount) {
+          console.warn(
+            `Container ${containerId} for server ${serverUuid} has restarted ${restartCount} times (previous: ${previousRestartCount})`,
+          );
+
+          // Update restart count
+          this.containerRestartCounts.set(serverUuid, restartCount);
+
+          // Check if we should mark as error based on restart count
+          if (restartCount >= 3) {
+            console.error(
+              `Container ${containerId} for server ${serverUuid} has restarted ${restartCount} times, marking as error`,
+            );
+
+            // Mark session as error
+            const session =
+              await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+            if (session) {
+              await dockerSessionsRepo.markAsError(
+                session.uuid,
+                `Container has restarted ${restartCount} times due to crashes`,
+              );
+            }
+
+            // Stop the container to prevent infinite restarts
+            try {
+              console.log(
+                `Stopping container ${containerId} to prevent infinite restarts`,
+              );
+              await container.stop();
+              console.log(
+                `Successfully stopped container ${containerId} for server ${serverUuid}`,
+              );
+            } catch (stopError) {
+              console.error(
+                `Failed to stop container ${containerId} for server ${serverUuid}:`,
+                stopError,
+              );
+            }
+
+            // Stop health monitoring for this container
+            this.stopHealthMonitoring(serverUuid);
+          }
+        }
+
+        // Check if container is running
+        if (!containerInfo.State.Running) {
+          console.warn(
+            `Container ${containerId} for server ${serverUuid} is not running`,
+          );
+        }
+      } catch (error) {
+        console.error(
+          `Error monitoring container ${containerId} for server ${serverUuid}:`,
+          error,
+        );
+      }
+    }, 10000); // Check every 10 seconds
+
+    this.healthCheckIntervals.set(serverUuid, interval);
+  }
+
+  /**
+   * Stop health monitoring for a container
+   */
+  private stopHealthMonitoring(serverUuid: string): void {
+    const interval = this.healthCheckIntervals.get(serverUuid);
+    if (interval) {
+      clearInterval(interval);
+      this.healthCheckIntervals.delete(serverUuid);
+    }
+  }
+
+  /**
+   * Get container restart count for a server
+   */
+  async getContainerRestartCount(serverUuid: string): Promise<number> {
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    if (!session) {
+      return 0;
+    }
+
+    try {
+      const container = this.docker.getContainer(session.container_id);
+      const containerInfo = await container.inspect();
+      return containerInfo.RestartCount || 0;
+    } catch (error) {
+      console.warn(
+        `Could not get restart count for server ${serverUuid}:`,
+        error,
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * Get all containers with high restart counts
+   */
+  async getContainersWithHighRestartCounts(): Promise<
+    Array<{
+      serverUuid: string;
+      containerId: string;
+      restartCount: number;
+      status: string;
+    }>
+  > {
+    const sessions = await dockerSessionsRepo.getAllSessions();
+    const highRestartContainers = [];
+
+    for (const session of sessions) {
+      try {
+        const container = this.docker.getContainer(session.container_id);
+        const containerInfo = await container.inspect();
+        const restartCount = containerInfo.RestartCount || 0;
+
+        if (restartCount >= 2) {
+          highRestartContainers.push({
+            serverUuid: session.mcp_server_uuid,
+            containerId: session.container_id,
+            restartCount,
+            status: session.status,
+          });
+        }
+      } catch (error) {
+        console.warn(
+          `Could not inspect container for server ${session.mcp_server_uuid}:`,
+          error,
+        );
+      }
+    }
+
+    return highRestartContainers;
   }
 }
 

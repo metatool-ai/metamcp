@@ -475,6 +475,9 @@ export const dockerSessionsTable = pgTable(
     started_at: timestamp("started_at", { withTimezone: true }),
     stopped_at: timestamp("stopped_at", { withTimezone: true }),
     error_message: text("error_message"),
+    retry_count: integer("retry_count").notNull().default(0),
+    last_retry_at: timestamp("last_retry_at", { withTimezone: true }),
+    max_retries: integer("max_retries").notNull().default(3),
   },
   (table) => [
     index("docker_sessions_mcp_server_uuid_idx").on(table.mcp_server_uuid),

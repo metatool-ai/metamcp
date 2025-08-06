@@ -17,6 +17,9 @@ export interface DockerSession {
   started_at?: Date | null;
   stopped_at?: Date | null;
   error_message?: string | null;
+  retry_count: number;
+  last_retry_at?: Date | null;
+  max_retries: number;
 }
 
 export class DockerSessionsRepository {
@@ -204,6 +207,63 @@ export class DockerSessionsRepository {
 
   async getAllSessions(): Promise<DockerSession[]> {
     return await db.select().from(dockerSessionsTable);
+  }
+
+  async incrementRetryCount(uuid: string, errorMessage?: string): Promise<DockerSession | null> {
+    const [session] = await db
+      .update(dockerSessionsTable)
+      .set({
+        retry_count: sql`${dockerSessionsTable.retry_count} + 1`,
+        last_retry_at: new Date(),
+        updated_at: new Date(),
+        ...(errorMessage && { error_message: errorMessage }),
+      })
+      .where(eq(dockerSessionsTable.uuid, uuid))
+      .returning();
+
+    return session || null;
+  }
+
+  async markAsError(uuid: string, errorMessage: string): Promise<DockerSession | null> {
+    const [session] = await db
+      .update(dockerSessionsTable)
+      .set({
+        status: "error",
+        error_message: errorMessage,
+        stopped_at: new Date(),
+        updated_at: new Date(),
+      })
+      .where(eq(dockerSessionsTable.uuid, uuid))
+      .returning();
+
+    return session || null;
+  }
+
+  async resetRetryCount(uuid: string): Promise<DockerSession | null> {
+    const [session] = await db
+      .update(dockerSessionsTable)
+      .set({
+        retry_count: 0,
+        last_retry_at: null,
+        error_message: null,
+        updated_at: new Date(),
+      })
+      .where(eq(dockerSessionsTable.uuid, uuid))
+      .returning();
+
+    return session || null;
+  }
+
+  async getSessionsWithRetryInfo(): Promise<DockerSession[]> {
+    return await db
+      .select()
+      .from(dockerSessionsTable)
+      .where(
+        and(
+          eq(dockerSessionsTable.status, "running"),
+          sql`${dockerSessionsTable.retry_count} > 0`
+        )
+      );
   }
 }
 
