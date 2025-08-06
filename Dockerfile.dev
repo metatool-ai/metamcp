@@ -49,5 +49,10 @@ EXPOSE 12008 12009
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:12008/health || exit 1
 
-# Use turborepo's dev command
-CMD ["pnpm", "dev"] 
+# Copy entrypoint script
+COPY docker-entrypoint-dev.sh ./
+RUN chmod +x docker-entrypoint-dev.sh && \
+    ls -la docker-entrypoint-dev.sh
+
+# Use the development entrypoint script
+CMD ["./docker-entrypoint-dev.sh"] 

@@ -72,6 +72,8 @@ services:
     cap_add:
       - SYS_ADMIN
       - NET_ADMIN
+    # Use init system for proper signal handling
+    init: true
 
   postgres:
     image: postgres:16-alpine
