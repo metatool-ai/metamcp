@@ -31,6 +31,19 @@ export const transformDockerUrl = (url: string): string => {
 };
 
 /**
+ * Handles Docker container URLs for internal networking
+ */
+export const handleDockerContainerUrl = (url: string): string => {
+  // If the URL is already an internal container URL (contains container name), use it as-is
+  if (url.includes("metamcp-stdio-server-")) {
+    return url;
+  }
+  
+  // Otherwise, apply the standard transformation for external URLs
+  return transformDockerUrl(url);
+};
+
+/**
  * Creates a client for an MCP server based on its type
  */
 export const createMetaMcpClient = async (
@@ -67,13 +80,13 @@ export const createMetaMcpClient = async (
 
     // Use SSE for Docker containers
     // Transform localhost to host.docker.internal for Docker container access
-    const transformedDockerUrl = transformDockerUrl(dockerUrl);
+    const transformedDockerUrl = handleDockerContainerUrl(dockerUrl);
     transport = new SSEClientTransport(new URL(transformedDockerUrl));
     console.log(`Using Docker container URL: ${dockerUrl}`);
     console.log(`Connecting to MCP server ${serverUuid} at ${dockerUrl}`);
   } else if (serverParams.type === "SSE" && serverParams.url) {
     // Transform the URL if TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL is set to "true"
-    const transformedUrl = transformDockerUrl(serverParams.url);
+    const transformedUrl = handleDockerContainerUrl(serverParams.url);
 
     // Check for authentication - prioritize OAuth tokens, fallback to bearerToken
     const hasAuth =
@@ -100,7 +113,7 @@ export const createMetaMcpClient = async (
     }
   } else if (serverParams.type === "STREAMABLE_HTTP" && serverParams.url) {
     // Transform the URL if TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL is set to "true"
-    const transformedUrl = transformDockerUrl(serverParams.url);
+    const transformedUrl = handleDockerContainerUrl(serverParams.url);
 
     // Check for authentication - prioritize OAuth tokens, fallback to bearerToken
     const hasAuth =

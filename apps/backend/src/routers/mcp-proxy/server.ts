@@ -18,7 +18,7 @@ import { parse as shellParseArgs } from "shell-quote";
 import { findActualExecutable } from "spawn-rx";
 
 import mcpProxy from "../../lib/mcp-proxy";
-import { transformDockerUrl } from "../../lib/metamcp/client";
+import { transformDockerUrl, handleDockerContainerUrl } from "../../lib/metamcp/client";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
 
 const SSE_HEADERS_PASSTHROUGH = ["authorization"];
@@ -201,7 +201,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       throw error;
     }
   } else if (transportType === McpServerTypeEnum.Enum.SSE) {
-    const url = transformDockerUrl(query.url as string);
+    const url = handleDockerContainerUrl(query.url as string);
 
     const headers = getHttpHeaders(req, transportType);
 
@@ -223,7 +223,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     const headers = getHttpHeaders(req, transportType);
 
     const transport = new StreamableHTTPClientTransport(
-      new URL(transformDockerUrl(query.url as string)),
+      new URL(handleDockerContainerUrl(query.url as string)),
       {
         requestInit: {
           headers,

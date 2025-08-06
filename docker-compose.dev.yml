@@ -62,6 +62,7 @@ services:
     restart: "no"
     networks:
       - metamcp-network
+      - metamcp-internal
     # Add privileged mode for Docker operations
     privileged: true
     # Add security options for Docker socket access
@@ -101,4 +102,6 @@ volumes:
 
 networks:
   metamcp-network:
+    driver: bridge
+  metamcp-internal:
     driver: bridge 

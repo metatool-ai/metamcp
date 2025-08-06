@@ -6,17 +6,15 @@ import { dockerSessionsRepo } from "../../db/repositories/docker-sessions.repo.j
 export interface DockerMcpServer {
   containerId: string;
   serverUuid: string;
-  port: number;
-  url: string;
   containerName: string;
+  url: string;
 }
 
 export class DockerManager {
   private static instance: DockerManager | null = null;
   private docker: Docker;
   private runningServers: Map<string, DockerMcpServer> = new Map();
-  private readonly BASE_PORT = 18000;
-  private readonly MAX_PORTS = 1000;
+  private readonly NETWORK_NAME = "metamcp_metamcp-internal";
   private containerRestartCounts: Map<string, number> = new Map();
   private healthCheckIntervals: Map<string, NodeJS.Timeout> = new Map();
 
@@ -55,13 +53,45 @@ export class DockerManager {
   }
 
   /**
-   * Find an available port for a new MCP server
+   * Ensure the internal network exists
    */
-  private async findAvailablePort(): Promise<number> {
-    return await dockerSessionsRepo.findAvailablePort(
-      this.BASE_PORT,
-      this.MAX_PORTS,
-    );
+  private async ensureNetworkExists(): Promise<void> {
+    try {
+      // Try to get the network
+      const network = this.docker.getNetwork(this.NETWORK_NAME);
+      await network.inspect();
+      console.log(`Network ${this.NETWORK_NAME} already exists`);
+    } catch (error) {
+      // Network doesn't exist, create it
+      console.log(`Creating network ${this.NETWORK_NAME}`);
+      try {
+        await this.docker.createNetwork({
+          Name: this.NETWORK_NAME,
+          Driver: "bridge",
+          Internal: true, // Make it internal so it's not accessible from outside
+          Labels: {
+            "metamcp.managed": "true",
+          },
+        });
+        console.log(`Created network ${this.NETWORK_NAME}`);
+      } catch (createError) {
+        // If creation fails, the network might have been created by docker-compose
+        // Try to inspect it again
+        try {
+          const network = this.docker.getNetwork(this.NETWORK_NAME);
+          await network.inspect();
+          console.log(
+            `Network ${this.NETWORK_NAME} exists (created by docker-compose)`,
+          );
+        } catch (inspectError) {
+          console.error(
+            `Failed to create or find network ${this.NETWORK_NAME}:`,
+            createError,
+          );
+          throw createError;
+        }
+      }
+    }
   }
 
   /**
@@ -71,6 +101,9 @@ export class DockerManager {
     serverUuid: string,
     serverParams: ServerParameters,
   ): Promise<DockerMcpServer> {
+    // Ensure the internal network exists
+    await this.ensureNetworkExists();
+
     // Check if already running in database
     const existingSession =
       await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
@@ -99,9 +132,8 @@ export class DockerManager {
             const existingServer: DockerMcpServer = {
               containerId: existingSession.container_id,
               serverUuid,
-              port: existingSession.port,
-              url: existingSession.url,
               containerName: existingSession.container_name,
+              url: existingSession.url,
             };
             this.runningServers.set(serverUuid, existingServer);
             console.log(
@@ -126,66 +158,6 @@ export class DockerManager {
       }
     }
 
-    // Find and reserve an available port atomically
-    let port: number = 18000;
-    let attempts = 0;
-    const maxAttempts = 5;
-
-    while (attempts < maxAttempts) {
-      try {
-        port = await this.findAvailablePort();
-
-        // Double-check that the port is still available before reserving
-        const isAvailable = await dockerSessionsRepo.isPortAvailable(port);
-        if (!isAvailable) {
-          attempts++;
-          if (attempts >= maxAttempts) {
-            throw new Error(
-              "Could not find an available port after multiple attempts",
-            );
-          }
-          // Wait a bit before retrying with exponential backoff
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.pow(2, attempts) * 100),
-          );
-          continue;
-        }
-
-        const reserved = await dockerSessionsRepo.reservePort(port, serverUuid);
-        if (reserved) {
-          break;
-        }
-        attempts++;
-        if (attempts >= maxAttempts) {
-          throw new Error("Could not reserve a port after multiple attempts");
-        }
-        // Wait a bit before retrying with exponential backoff
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.pow(2, attempts) * 100),
-        );
-      } catch (error) {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          // Clean up any temporary session that might have been created
-          try {
-            await dockerSessionsRepo.releasePort(serverUuid);
-          } catch (cleanupError) {
-            console.warn(
-              `Failed to cleanup port reservation for server ${serverUuid}:`,
-              cleanupError,
-            );
-          }
-          throw new Error(
-            `Could not reserve a port after ${maxAttempts} attempts: ${error}`,
-          );
-        }
-        // Wait a bit before retrying with exponential backoff
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.pow(2, attempts) * 100),
-        );
-      }
-    }
-
     const containerName = `metamcp-stdio-server-${serverUuid}`;
 
     // Check if container already exists
@@ -195,23 +167,13 @@ export class DockerManager {
 
       if (containerInfo.State.Running) {
         // Container exists and is running, reuse it
-        const hostPort = parseInt(
-          containerInfo.NetworkSettings.Ports["3000/tcp"]?.[0]?.HostPort || "0",
-        );
-
-        // Use host.docker.internal when running inside Docker container
-        const isDockerContainer =
-          process.env.TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL === "true";
-        const serverUrl = isDockerContainer
-          ? `http://host.docker.internal:${hostPort}/sse`
-          : `http://localhost:${hostPort}/sse`;
+        const internalUrl = `http://${containerName}:3000/sse`;
 
         const existingServer: DockerMcpServer = {
           containerId: containerInfo.Id,
           serverUuid,
-          port: hostPort,
-          url: serverUrl,
           containerName,
+          url: internalUrl,
         };
 
         this.runningServers.set(serverUuid, existingServer);
@@ -251,14 +213,10 @@ export class DockerManager {
         "3000/tcp": {},
       },
       HostConfig: {
-        PortBindings: {
-          "3000/tcp": [{ HostPort: port.toString() }],
-        },
+        NetworkMode: this.NETWORK_NAME,
         RestartPolicy: {
           Name: "unless-stopped",
         },
-        // Ensure the container can be reached from the host
-        ExtraHosts: ["host.docker.internal:host-gateway"],
       },
       Labels: {
         "metamcp.server.uuid": serverUuid,
@@ -271,10 +229,6 @@ export class DockerManager {
       const container = await this.docker.createContainer(containerConfig);
       await container.start();
 
-      // Note: We're using port binding instead of network mode
-      // The container will be accessible via host.docker.internal:port
-      // No need to connect to a specific network
-
       // Wait a moment for the container to fully start
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
@@ -285,51 +239,15 @@ export class DockerManager {
         containerInfo.State.Status,
       );
 
-      // Use host.docker.internal when running inside Docker container
-      const isDockerContainer =
-        process.env.TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL === "true";
+      // Use internal container name for URL
+      const internalUrl = `http://${containerName}:3000/sse`;
 
-      // Test if the port is accessible
-      const testUrl = isDockerContainer
-        ? `http://host.docker.internal:${port}/sse`
-        : `http://localhost:${port}/sse`;
-
-      try {
-        const response = await fetch(testUrl, {
-          method: "GET",
-          signal: AbortSignal.timeout(5000), // 5 second timeout
-        });
-        console.log(`Port ${port} is accessible, status: ${response.status}`);
-      } catch (error) {
-        console.warn(`Port ${port} is not yet accessible:`, error);
-        // Wait a bit more and try again
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-        try {
-          const response = await fetch(testUrl, {
-            method: "GET",
-            signal: AbortSignal.timeout(5000),
-          });
-          console.log(
-            `Port ${port} is now accessible, status: ${response.status}`,
-          );
-        } catch (retryError) {
-          console.error(
-            `Port ${port} is still not accessible after retry:`,
-            retryError,
-          );
-        }
-      }
-
-      const serverUrl = isDockerContainer
-        ? `http://host.docker.internal:${port}/sse`
-        : `http://localhost:${port}/sse`;
-
-      // Update the temporary session with actual container details
+      // Update the session with actual container details
       await dockerSessionsRepo.updateSessionWithContainerDetails(
         serverUuid,
         container.id,
         containerName,
-        serverUrl,
+        internalUrl,
       );
 
       // Reset retry count on successful creation
@@ -348,16 +266,14 @@ export class DockerManager {
       const dockerServer: DockerMcpServer = {
         containerId: container.id,
         serverUuid,
-        port,
-        url: serverUrl,
         containerName,
+        url: internalUrl,
       };
 
       console.log(`Created Docker container for server ${serverUuid}:`, {
         containerId: container.id,
-        port,
-        url: dockerServer.url,
         containerName,
+        url: dockerServer.url,
       });
 
       this.runningServers.set(serverUuid, dockerServer);
@@ -508,9 +424,8 @@ export class DockerManager {
     return sessions.map((session) => ({
       containerId: session.container_id,
       serverUuid: session.mcp_server_uuid,
-      port: session.port,
-      url: session.url,
       containerName: session.container_name,
+      url: session.url,
     }));
   }
 
@@ -810,7 +725,6 @@ export class DockerManager {
     isRunning: boolean;
     wasSynced: boolean;
     containerId?: string;
-    port?: number;
     url?: string;
   }> {
     const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
@@ -825,7 +739,6 @@ export class DockerManager {
       isRunning,
       wasSynced,
       containerId: session.container_id,
-      port: session.port,
       url: session.url,
     };
   }
@@ -837,7 +750,6 @@ export class DockerManager {
     isRunning: boolean;
     wasSynced: boolean;
     containerId?: string;
-    port?: number;
     url?: string;
     retryCount: number;
     maxRetries: number;
@@ -877,7 +789,6 @@ export class DockerManager {
       isRunning,
       wasSynced,
       containerId: session.container_id,
-      port: session.port,
       url: session.url,
       retryCount: session.retry_count,
       maxRetries: session.max_retries,
@@ -897,7 +808,6 @@ export class DockerManager {
       isRunning: boolean;
       wasSynced: boolean;
       containerId?: string;
-      port?: number;
       url?: string;
     }>
   > {
@@ -913,7 +823,6 @@ export class DockerManager {
         isRunning,
         wasSynced,
         containerId: session.container_id,
-        port: session.port,
         url: session.url,
       });
     }
