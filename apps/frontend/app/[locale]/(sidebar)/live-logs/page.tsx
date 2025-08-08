@@ -50,14 +50,9 @@ export default function LiveLogsPage() {
     error: serversError,
   } = trpc.frontend.logs.listDockerServers.useQuery();
 
-  const dockerServers = (
-    dockerServersData?.success ? (dockerServersData.servers ?? []) : []
-  ) as Array<{
-    serverUuid: string;
-    containerId: string;
-    containerName: string;
-    serverName: string;
-  }>;
+  const dockerServers = dockerServersData?.success
+    ? (dockerServersData.servers ?? [])
+    : [];
 
   // Auto-select first server when servers are loaded
   useEffect(() => {
