@@ -1,7 +1,10 @@
 import {
   ClearLogsResponseSchema,
+  GetDockerLogsRequestSchema,
+  GetDockerLogsResponseSchema,
   GetLogsRequestSchema,
   GetLogsResponseSchema,
+  ListDockerServersResponseSchema,
 } from "@repo/zod-types";
 import { z } from "zod";
 
@@ -16,6 +19,12 @@ export const createLogsRouter = (
       input: z.infer<typeof GetLogsRequestSchema>,
     ) => Promise<z.infer<typeof GetLogsResponseSchema>>;
     clearLogs: () => Promise<z.infer<typeof ClearLogsResponseSchema>>;
+    listDockerServers: () => Promise<
+      z.infer<typeof ListDockerServersResponseSchema>
+    >;
+    getDockerLogs: (
+      input: z.infer<typeof GetDockerLogsRequestSchema>,
+    ) => Promise<z.infer<typeof GetDockerLogsResponseSchema>>;
   },
 ) =>
   router({
@@ -32,5 +41,20 @@ export const createLogsRouter = (
       .output(ClearLogsResponseSchema)
       .mutation(async () => {
         return await implementations.clearLogs();
+      }),
+
+    // Protected: List docker-managed MCP server containers
+    listDockerServers: protectedProcedure
+      .output(ListDockerServersResponseSchema)
+      .query(async () => {
+        return await implementations.listDockerServers();
+      }),
+
+    // Protected: Get logs tail for a docker-managed MCP server
+    dockerLogs: protectedProcedure
+      .input(GetDockerLogsRequestSchema)
+      .output(GetDockerLogsResponseSchema)
+      .query(async ({ input }) => {
+        return await implementations.getDockerLogs(input);
       }),
   });

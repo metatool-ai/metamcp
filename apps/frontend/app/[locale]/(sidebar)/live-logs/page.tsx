@@ -1,7 +1,7 @@
 "use client";
 
 import { FileTerminal, RefreshCw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,12 +15,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useTranslations } from "@/hooks/useTranslations";
 import { useLogsStore } from "@/lib/stores/logs-store";
+import { trpc } from "@/lib/trpc";
 
 export default function LiveLogsPage() {
   const { t } = useTranslations();
   const [showClearDialog, setShowClearDialog] = useState(false);
+  const [selectedServerUuid, setSelectedServerUuid] = useState<string | null>(
+    null,
+  );
   const {
     logs,
     isLoading,
@@ -31,6 +42,50 @@ export default function LiveLogsPage() {
     clearLogs,
     setAutoRefresh,
   } = useLogsStore();
+
+  // Use React Query for docker servers
+  const {
+    data: dockerServersData,
+    isLoading: isLoadingServers,
+    error: serversError,
+  } = trpc.frontend.logs.listDockerServers.useQuery();
+
+  const dockerServers = (
+    dockerServersData?.success ? (dockerServersData.servers ?? []) : []
+  ) as Array<{
+    serverUuid: string;
+    containerId: string;
+    containerName: string;
+    serverName: string;
+  }>;
+
+  // Auto-select first server when servers are loaded
+  useEffect(() => {
+    if (
+      dockerServersData?.success &&
+      !selectedServerUuid &&
+      (dockerServersData.servers?.length ?? 0) > 0
+    ) {
+      const firstServer = dockerServersData.servers?.[0];
+      if (firstServer?.serverUuid) {
+        setSelectedServerUuid(firstServer.serverUuid);
+      }
+    }
+  }, [dockerServersData, selectedServerUuid]);
+
+  // Use React Query for docker logs
+  const {
+    data: dockerLogsData,
+    isLoading: isDockerLoading,
+    refetch: refetchDockerLogs,
+  } = trpc.frontend.logs.dockerLogs.useQuery(
+    { serverUuid: selectedServerUuid!, tail: 500 },
+    {
+      enabled: !!selectedServerUuid,
+    },
+  );
+
+  const dockerLogLines = dockerLogsData?.success ? dockerLogsData.lines : [];
 
   const handleClearLogs = async () => {
     try {
@@ -44,7 +99,11 @@ export default function LiveLogsPage() {
 
   const handleRefresh = async () => {
     try {
-      await fetchLogs();
+      if (selectedServerUuid) {
+        await refetchDockerLogs();
+      } else {
+        await fetchLogs();
+      }
       toast.success(t("logs:refreshSuccess"));
     } catch (_error) {
       toast.error(t("logs:refreshError"));
@@ -59,19 +118,6 @@ export default function LiveLogsPage() {
       toast.info(t("logs:autoRefreshDisabled"));
     }
   };
-
-  // const getLevelColor = (level: string) => {
-  //   switch (level) {
-  //     case "error":
-  //       return "outline"; // Changed from "destructive" to "outline"
-  //     case "warn":
-  //       return "secondary";
-  //     case "info":
-  //       return "default";
-  //     default:
-  //       return "outline";
-  //   }
-  // };
 
   const formatTimestamp = (timestamp: Date) => {
     return new Date(timestamp).toLocaleString();
@@ -99,9 +145,45 @@ export default function LiveLogsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline">
-            {t("logs:totalLogs", { count: totalCount })}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Select
+              value={selectedServerUuid ?? undefined}
+              onValueChange={(v) => setSelectedServerUuid(v)}
+              disabled={isLoadingServers}
+            >
+              <SelectTrigger className="w-[320px]">
+                <SelectValue
+                  placeholder={
+                    isLoadingServers
+                      ? t("logs:loadingLogs")
+                      : serversError
+                        ? t("logs:error")
+                        : dockerServers.length === 0
+                          ? t("logs:noLogs")
+                          : t("logs:selectContainer")
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {dockerServers.map((s) => (
+                  <SelectItem key={s.serverUuid} value={s.serverUuid}>
+                    {s.serverName} ({s.containerName})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!selectedServerUuid && (
+              <Badge variant="outline">
+                {isLoadingServers
+                  ? t("logs:loadingLogs")
+                  : serversError
+                    ? t("logs:error")
+                    : dockerServers.length === 0
+                      ? t("logs:noLogs")
+                      : t("logs:totalLogs", { count: totalCount })}
+              </Badge>
+            )}
+          </div>
           <Button variant="outline" size="sm" onClick={handleToggleAutoRefresh}>
             {isAutoRefreshing
               ? t("logs:stopAutoRefresh")
@@ -143,7 +225,23 @@ export default function LiveLogsPage() {
         </CardHeader>
         <CardContent>
           <div className="bg-black rounded-lg p-4 font-mono text-sm max-h-[600px] overflow-y-auto">
-            {logs.length === 0 ? (
+            {selectedServerUuid ? (
+              dockerLogLines.length === 0 ? (
+                <div className="text-gray-400 text-center py-8">
+                  {isDockerLoading
+                    ? t("logs:loadingLogs")
+                    : t("logs:noLogsDisplay")}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {dockerLogLines.map((line, idx) => (
+                    <div key={idx} className="text-gray-300">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : logs.length === 0 ? (
               <div className="text-gray-400 text-center py-8">
                 {isLoading ? t("logs:loadingLogs") : t("logs:noLogsDisplay")}
               </div>
@@ -160,13 +258,7 @@ export default function LiveLogsPage() {
                     <span className="text-blue-400 font-medium">
                       [{log.serverName}]
                     </span>
-                    <span className="flex-1">
-                      {log.message}
-                      {/* Removed red error text display */}
-                      {/* {log.error && (
-                        <span className="text-red-400 ml-2">{log.error}</span>
-                      )} */}
-                    </span>
+                    <span className="flex-1">{log.message}</span>
                   </div>
                 ))}
               </div>
@@ -175,7 +267,7 @@ export default function LiveLogsPage() {
         </CardContent>
       </Card>
 
-      {logs.length > 0 && (
+      {!selectedServerUuid && logs.length > 0 && (
         <div className="text-sm text-muted-foreground text-center">
           {t("logs:showingLogs", { count: logs.length, total: totalCount })}
         </div>

@@ -56,5 +56,6 @@
   "connecting": "Connecting...",
   "reconnecting": "Reconnecting...",
   "logsCount": "{{count}} logs",
-  "filteredLogsCount": "{{count}} of {{total}} logs shown"
+  "filteredLogsCount": "{{count}} of {{total}} logs shown",
+  "selectContainer": "Select container"
 } 

@@ -8,6 +8,7 @@ export interface DockerMcpServer {
   serverUuid: string;
   containerName: string;
   url: string;
+  serverName: string;
 }
 
 export class DockerManager {
@@ -61,7 +62,7 @@ export class DockerManager {
       const network = this.docker.getNetwork(this.NETWORK_NAME);
       await network.inspect();
       console.log(`Network ${this.NETWORK_NAME} already exists`);
-    } catch (error) {
+    } catch {
       // Network doesn't exist, create it
       console.log(`Creating network ${this.NETWORK_NAME}`);
       try {
@@ -83,7 +84,7 @@ export class DockerManager {
           console.log(
             `Network ${this.NETWORK_NAME} exists (created by docker-compose)`,
           );
-        } catch (inspectError) {
+        } catch {
           console.error(
             `Failed to create or find network ${this.NETWORK_NAME}:`,
             createError,
@@ -105,7 +106,7 @@ export class DockerManager {
     await this.ensureNetworkExists();
 
     // Check if already running in database
-    const existingSession =
+    let existingSession =
       await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
 
     if (existingSession) {
@@ -134,6 +135,7 @@ export class DockerManager {
               serverUuid,
               containerName: existingSession.container_name,
               url: existingSession.url,
+              serverName: serverParams.name || `Server ${serverUuid.slice(0, 8)}`,
             };
             this.runningServers.set(serverUuid, existingServer);
             console.log(
@@ -156,6 +158,15 @@ export class DockerManager {
           await dockerSessionsRepo.stopSession(existingSession.uuid);
         }
       }
+    } else {
+      // Create a temporary session if none exists
+      console.log(`Creating temporary session for server ${serverUuid}`);
+      existingSession = await dockerSessionsRepo.createSession({
+        mcp_server_uuid: serverUuid,
+        container_id: `temp-${serverUuid}-${Date.now()}`,
+        container_name: `temp-${serverUuid}`,
+        url: `temp://${serverUuid}`,
+      });
     }
 
     const containerName = `metamcp-stdio-server-${serverUuid}`;
@@ -174,6 +185,7 @@ export class DockerManager {
           serverUuid,
           containerName,
           url: internalUrl,
+          serverName: `temp-${serverUuid}`, // Placeholder, will be updated by DB
         };
 
         this.runningServers.set(serverUuid, existingServer);
@@ -268,6 +280,7 @@ export class DockerManager {
         serverUuid,
         containerName,
         url: internalUrl,
+        serverName: `temp-${serverUuid}`, // Placeholder, will be updated by DB
       };
 
       console.log(`Created Docker container for server ${serverUuid}:`, {
@@ -420,12 +433,13 @@ export class DockerManager {
     // First sync all container statuses
     await this.syncAllContainerStatuses();
 
-    const sessions = await dockerSessionsRepo.getRunningSessions();
+    const sessions = await dockerSessionsRepo.getRunningSessionsWithServerNames();
     return sessions.map((session) => ({
       containerId: session.container_id,
       serverUuid: session.mcp_server_uuid,
       containerName: session.container_name,
       url: session.url,
+      serverName: session.serverName,
     }));
   }
 
@@ -1102,6 +1116,47 @@ export class DockerManager {
     }
 
     return highRestartContainers;
+  }
+
+  /**
+   * Get the last N log lines from a server's Docker container (stdout and stderr)
+   */
+  async getServerLogsTail(
+    serverUuid: string,
+    tail: number = 500,
+  ): Promise<string[]> {
+    const session = await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+    if (!session) {
+      return [];
+    }
+
+    try {
+      const container = this.docker.getContainer(session.container_id);
+      // Include timestamps to help ordering/visibility
+      const logs = await container.logs({
+        stdout: true,
+        stderr: true,
+        tail,
+        timestamps: true,
+        follow: false,
+      });
+
+      const buffer = Buffer.isBuffer(logs) ? logs : Buffer.from(String(logs));
+      const content = buffer.toString("utf8");
+      // Normalize line endings and split
+      const lines = content.replace(/\r\n/g, "\n").split("\n");
+      // Trim any trailing empty line
+      if (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+        lines.pop();
+      }
+      return lines;
+    } catch (error) {
+      console.error(
+        `Failed to read logs for server ${serverUuid} (container ${session.container_id}):`,
+        error,
+      );
+      return [];
+    }
   }
 }
 

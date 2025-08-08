@@ -56,5 +56,6 @@
   "connecting": "连接中...",
   "reconnecting": "重新连接中...",
   "logsCount": "{{count}} 条日志",
-  "filteredLogsCount": "显示 {{count}} / {{total}} 条日志"
+  "filteredLogsCount": "显示 {{count}} / {{total}} 条日志",
+  "selectContainer": "选择容器"
 } 
