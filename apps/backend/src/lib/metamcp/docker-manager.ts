@@ -44,6 +44,40 @@ export class DockerManager {
   }
 
   /**
+   * Determine whether a Dockerode/modem error represents a missing container (HTTP 404).
+   */
+  private isDockerContainerNotFoundError(error: unknown): boolean {
+    const err = error as any;
+    if (!err || typeof err !== "object") return false;
+    const statusCode = err.statusCode;
+    const reason = err.reason as string | undefined;
+    const jsonMessage = err.json?.message as string | undefined;
+    return (
+      statusCode === 404 ||
+      (typeof reason === "string" &&
+        reason.toLowerCase().includes("no such container")) ||
+      (typeof jsonMessage === "string" &&
+        jsonMessage.toLowerCase().includes("no such container"))
+    );
+  }
+
+  /**
+   * Produce a concise summary string for Docker errors to avoid noisy stack traces in logs.
+   */
+  private dockerErrorSummary(error: unknown): string {
+    const err = error as any;
+    if (!err || typeof err !== "object") {
+      return String(error);
+    }
+    const parts: string[] = [];
+    if (err.statusCode) parts.push(`HTTP ${err.statusCode}`);
+    if (err.reason) parts.push(String(err.reason));
+    if (err.json?.message) parts.push(String(err.json.message));
+    if (parts.length === 0 && err.message) parts.push(String(err.message));
+    return parts.join(" - ") || "Unknown Docker error";
+  }
+
+  /**
    * Get the singleton instance
    */
   static getInstance(): DockerManager {
@@ -198,10 +232,15 @@ export class DockerManager {
         try {
           await existingContainer.remove();
         } catch (error) {
-          console.warn(
-            `Could not remove existing stopped container ${containerName}:`,
-            error,
-          );
+          if (this.isDockerContainerNotFoundError(error)) {
+            console.info(
+              `Container ${containerName} already removed when attempting cleanup`,
+            );
+          } else {
+            console.warn(
+              `Could not remove existing stopped container ${containerName}: ${this.dockerErrorSummary(error)}`,
+            );
+          }
         }
       }
     } catch {
@@ -383,21 +422,29 @@ export class DockerManager {
       try {
         await container.stop();
       } catch (error) {
-        // Container might already be stopped
-        console.warn(
-          `Could not stop container ${session.container_id}:`,
-          error,
-        );
+        // Container might already be stopped or missing
+        if (this.isDockerContainerNotFoundError(error)) {
+          console.info(
+            `Container ${session.container_id} not found when stopping (already stopped/removed)`,
+          );
+        } else {
+          console.warn(
+            `Could not stop container ${session.container_id}: ${this.dockerErrorSummary(error)}`,
+          );
+        }
       }
 
       try {
         await container.remove();
       } catch (error) {
         // Container might already be removed
-        console.warn(
-          `Could not remove container ${session.container_id}:`,
-          error,
-        );
+        if (this.isDockerContainerNotFoundError(error)) {
+          console.info(`Container ${session.container_id} already removed`);
+        } else {
+          console.warn(
+            `Could not remove container ${session.container_id}: ${this.dockerErrorSummary(error)}`,
+          );
+        }
       }
 
       // Update database session status
@@ -410,8 +457,7 @@ export class DockerManager {
       console.log(`Removed container for server ${serverUuid}`);
     } catch (error) {
       console.error(
-        `Error removing container for server ${serverUuid}:`,
-        error,
+        `Error removing container for server ${serverUuid}: ${this.dockerErrorSummary(error)}`,
       );
       throw error;
     }
@@ -579,10 +625,15 @@ export class DockerManager {
       return isActuallyRunning;
     } catch (error) {
       // Container doesn't exist or can't be inspected
-      console.warn(
-        `Could not inspect container ${session.container_id}:`,
-        error,
-      );
+      if (this.isDockerContainerNotFoundError(error)) {
+        console.info(
+          `Container ${session.container_id} for server ${serverUuid} not found (likely removed). Treating as stopped.`,
+        );
+      } else {
+        console.warn(
+          `Could not inspect container ${session.container_id}: ${this.dockerErrorSummary(error)}`,
+        );
+      }
       if (session.status === "running") {
         console.log(
           `Container ${session.container_id} not found but DB shows running, updating status`,
@@ -628,10 +679,15 @@ export class DockerManager {
 
       return { isRunning: isActuallyRunning, wasSynced };
     } catch (error) {
-      console.warn(
-        `Could not inspect container ${session.container_id}:`,
-        error,
-      );
+      if (this.isDockerContainerNotFoundError(error)) {
+        console.info(
+          `Container ${session.container_id} for server ${serverUuid} not found (likely removed). Syncing status to stopped if needed.`,
+        );
+      } else {
+        console.warn(
+          `Could not inspect container ${session.container_id}: ${this.dockerErrorSummary(error)}`,
+        );
+      }
       if (session.status === "running") {
         console.log(
           `Syncing: Container ${session.container_id} not found but DB shows running`,
@@ -779,10 +835,15 @@ export class DockerManager {
           );
         }
       } catch (error) {
-        console.warn(
-          `Could not start health monitoring for container ${session.container_id}:`,
-          error,
-        );
+        if (this.isDockerContainerNotFoundError(error)) {
+          console.info(
+            `Container ${session.container_id} not found, skipping health monitoring`,
+          );
+        } else {
+          console.warn(
+            `Could not start health monitoring for container ${session.container_id}: ${this.dockerErrorSummary(error)}`,
+          );
+        }
       }
     }
   }
@@ -1091,10 +1152,16 @@ export class DockerManager {
           );
         }
       } catch (error) {
-        console.error(
-          `Error monitoring container ${containerId} for server ${serverUuid}:`,
-          error,
-        );
+        if (this.isDockerContainerNotFoundError(error)) {
+          console.info(
+            `Container ${containerId} for server ${serverUuid} no longer exists; stopping health monitoring`,
+          );
+          this.stopHealthMonitoring(serverUuid);
+        } else {
+          console.error(
+            `Error monitoring container ${containerId} for server ${serverUuid}: ${this.dockerErrorSummary(error)}`,
+          );
+        }
       }
     }, 10000); // Check every 10 seconds
 
@@ -1126,10 +1193,15 @@ export class DockerManager {
       const containerInfo = await container.inspect();
       return containerInfo.RestartCount || 0;
     } catch (error) {
-      console.warn(
-        `Could not get restart count for server ${serverUuid}:`,
-        error,
-      );
+      if (this.isDockerContainerNotFoundError(error)) {
+        console.info(
+          `Container ${session.container_id} for server ${serverUuid} not found when reading restart count`,
+        );
+      } else {
+        console.warn(
+          `Could not get restart count for server ${serverUuid}: ${this.dockerErrorSummary(error)}`,
+        );
+      }
       return 0;
     }
   }
@@ -1163,10 +1235,17 @@ export class DockerManager {
           });
         }
       } catch (error) {
-        console.warn(
-          `Could not inspect container for server ${session.mcp_server_uuid}:`,
-          error,
-        );
+        if (this.isDockerContainerNotFoundError(error)) {
+          // Expected in some flows (e.g., container already cleaned up)
+          // Reduce noise by logging a concise info message
+          console.info(
+            `Container ${session.container_id} for server ${session.mcp_server_uuid} not found while checking restart counts`,
+          );
+        } else {
+          console.warn(
+            `Could not inspect container for server ${session.mcp_server_uuid}: ${this.dockerErrorSummary(error)}`,
+          );
+        }
       }
     }
 
@@ -1206,10 +1285,15 @@ export class DockerManager {
       }
       return lines;
     } catch (error) {
-      console.error(
-        `Failed to read logs for server ${serverUuid} (container ${session.container_id}):`,
-        error,
-      );
+      if (this.isDockerContainerNotFoundError(error)) {
+        console.info(
+          `Container ${session.container_id} for server ${serverUuid} not found when reading logs`,
+        );
+      } else {
+        console.error(
+          `Failed to read logs for server ${serverUuid} (container ${session.container_id}): ${this.dockerErrorSummary(error)}`,
+        );
+      }
       return [];
     }
   }
