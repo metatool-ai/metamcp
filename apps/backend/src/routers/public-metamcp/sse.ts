@@ -9,6 +9,7 @@ import {
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 
 import { createServer } from "../../lib/metamcp/metamcp-proxy";
+import { cleanupSession as cleanupMcpSession } from "../../lib/metamcp/sessions";
 
 const sseRouter = express.Router();
 
@@ -25,7 +26,13 @@ const cleanupSession = async (sessionId: string) => {
     await transport.close();
   }
 
-  // No need to clean up server pool session - servers are created per session
+  // Clean up MCP client sessions associated with this sessionId
+  try {
+    await cleanupMcpSession(sessionId);
+  } catch (err) {
+    console.warn(`Error cleaning up MCP session ${sessionId}:`, err);
+  }
+
   console.log(`SSE session ${sessionId} cleaned up`);
 };
 
@@ -51,10 +58,7 @@ sseRouter.get(
       const sessionId = webAppTransport.sessionId;
 
       // Create MetaMCP server instance directly using metamcp-proxy
-      const mcpServerInstance = await createServer(
-        namespaceUuid,
-        sessionId,
-      );
+      const mcpServerInstance = await createServer(namespaceUuid, sessionId);
       if (!mcpServerInstance) {
         throw new Error("Failed to create MetaMCP server instance");
       }

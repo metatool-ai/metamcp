@@ -10,6 +10,7 @@ import {
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 
 import { createServer } from "../../lib/metamcp/metamcp-proxy";
+import { cleanupSession as cleanupMcpSession } from "../../lib/metamcp/sessions";
 
 const streamableHttpRouter = express.Router();
 
@@ -26,7 +27,13 @@ const cleanupSession = async (sessionId: string) => {
     await transport.close();
   }
 
-  // No need to clean up server pool session - servers are created per session
+  // Clean up MCP client sessions associated with this sessionId
+  try {
+    await cleanupMcpSession(sessionId);
+  } catch (err) {
+    console.warn(`Error cleaning up MCP session ${sessionId}:`, err);
+  }
+
   console.log(`StreamableHTTP session ${sessionId} cleaned up`);
 };
 

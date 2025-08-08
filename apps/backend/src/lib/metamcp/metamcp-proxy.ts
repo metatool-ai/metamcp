@@ -22,7 +22,6 @@ import { z } from "zod";
 
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { ConnectedClient } from "./client";
-import { connectMetaMcpClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
 import {
   createFilterCallToolMiddleware,
@@ -34,6 +33,7 @@ import {
   ListToolsHandler,
   MetaMCPHandlerContext,
 } from "./metamcp-middleware/functional-middleware";
+import { getOrConnectSessionClient } from "./sessions";
 import { sanitizeName } from "./utils";
 
 export const createServer = async (
@@ -79,7 +79,11 @@ export const createServer = async (
 
     await Promise.allSettled(
       Object.entries(serverParams).map(async ([mcpServerUuid, params]) => {
-        const session = await connectMetaMcpClient(mcpServerUuid, params);
+        const session = await getOrConnectSessionClient(
+          context.sessionId,
+          mcpServerUuid,
+          params,
+        );
         if (!session) return;
 
         const capabilities = session.client.getServerCapabilities();
@@ -264,7 +268,11 @@ export const createServer = async (
 
     await Promise.allSettled(
       Object.entries(serverParams).map(async ([uuid, params]) => {
-        const session = await connectMetaMcpClient(uuid, params);
+        const session = await getOrConnectSessionClient(
+          sessionId,
+          uuid,
+          params,
+        );
         if (!session) return;
 
         const capabilities = session.client.getServerCapabilities();
@@ -320,7 +328,11 @@ export const createServer = async (
 
     await Promise.allSettled(
       Object.entries(serverParams).map(async ([uuid, params]) => {
-        const session = await connectMetaMcpClient(uuid, params);
+        const session = await getOrConnectSessionClient(
+          sessionId,
+          uuid,
+          params,
+        );
         if (!session) return;
 
         const capabilities = session.client.getServerCapabilities();
@@ -406,7 +418,11 @@ export const createServer = async (
 
       await Promise.allSettled(
         Object.entries(serverParams).map(async ([uuid, params]) => {
-          const session = await connectMetaMcpClient(uuid, params);
+          const session = await getOrConnectSessionClient(
+            sessionId,
+            uuid,
+            params,
+          );
           if (!session) return;
 
           const capabilities = session.client.getServerCapabilities();
