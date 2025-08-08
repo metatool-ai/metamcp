@@ -38,7 +38,7 @@ export const handleDockerContainerUrl = (url: string): string => {
   if (url.includes("metamcp-stdio-server-")) {
     return url;
   }
-  
+
   // Otherwise, apply the standard transformation for external URLs
   return transformDockerUrl(url);
 };
@@ -167,8 +167,8 @@ export const connectMetaMcpClient = async (
   serverUuid: string,
   serverParams: ServerParameters,
 ): Promise<ConnectedClient | undefined> => {
-  const waitFor = 5000;
-  const retries = 3;
+  const waitFor = 1000;
+  const retries = 1;
   let count = 0;
   let retry = true;
 
