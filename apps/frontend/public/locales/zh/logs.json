@@ -1,6 +1,6 @@
 {
   "title": "实时日志",
-  "subtitle": "MetaMCP 服务器日志和错误消息",
+  "subtitle": "Stdio MCP 服务器日志和错误消息",
   "lastUpdated": "最后更新：{{timestamp}}",
   "totalLogs": "共 {{count}} 条日志",
   "autoRefresh": "自动刷新",

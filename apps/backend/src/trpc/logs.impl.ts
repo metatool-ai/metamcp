@@ -8,6 +8,7 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import { mcpServersRepository } from "../db/repositories";
 import { dockerManager } from "../lib/metamcp/docker-manager";
 import { metamcpLogStore } from "../lib/metamcp/log-store";
 
@@ -44,14 +45,28 @@ export const logsImplementations = {
     }
   },
 
-  listDockerServers: async (): Promise<
-    z.infer<typeof ListDockerServersResponseSchema>
-  > => {
+  listDockerServers: async (
+    userId: string,
+  ): Promise<z.infer<typeof ListDockerServersResponseSchema>> => {
     try {
+      // Get all running Docker servers
       const running = await dockerManager.getRunningServers();
+
+      // Get accessible MCP servers for the user (public + user's own)
+      const accessibleServers =
+        await mcpServersRepository.findAllAccessibleToUser(userId);
+      const accessibleServerUuids = new Set(
+        accessibleServers.map((s) => s.uuid),
+      );
+
+      // Filter running servers to only include accessible ones
+      const filteredRunning = running.filter((s) =>
+        accessibleServerUuids.has(s.serverUuid),
+      );
+
       return {
         success: true as const,
-        servers: running.map((s) => ({
+        servers: filteredRunning.map((s) => ({
           serverUuid: s.serverUuid,
           containerId: s.containerId,
           containerName: s.containerName,

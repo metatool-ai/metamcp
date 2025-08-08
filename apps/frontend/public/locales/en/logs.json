@@ -1,6 +1,6 @@
 {
   "title": "Live Logs",
-  "subtitle": "MetaMCP server logs and error messages",
+  "subtitle": "Stdio MCP server logs and error messages",
   "lastUpdated": "Last updated: {{timestamp}}",
   "totalLogs": "{{count}} total logs",
   "autoRefresh": "Auto-refresh",

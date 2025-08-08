@@ -135,7 +135,8 @@ export class DockerManager {
               serverUuid,
               containerName: existingSession.container_name,
               url: existingSession.url,
-              serverName: serverParams.name || `Server ${serverUuid.slice(0, 8)}`,
+              serverName:
+                serverParams.name || `Server ${serverUuid.slice(0, 8)}`,
             };
             this.runningServers.set(serverUuid, existingServer);
             console.log(
@@ -433,7 +434,8 @@ export class DockerManager {
     // First sync all container statuses
     await this.syncAllContainerStatuses();
 
-    const sessions = await dockerSessionsRepo.getRunningSessionsWithServerNames();
+    const sessions =
+      await dockerSessionsRepo.getRunningSessionsWithServerNames();
     return sessions.map((session) => ({
       containerId: session.container_id,
       serverUuid: session.mcp_server_uuid,

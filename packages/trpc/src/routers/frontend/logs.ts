@@ -19,9 +19,9 @@ export const createLogsRouter = (
       input: z.infer<typeof GetLogsRequestSchema>,
     ) => Promise<z.infer<typeof GetLogsResponseSchema>>;
     clearLogs: () => Promise<z.infer<typeof ClearLogsResponseSchema>>;
-    listDockerServers: () => Promise<
-      z.infer<typeof ListDockerServersResponseSchema>
-    >;
+    listDockerServers: (
+      userId: string,
+    ) => Promise<z.infer<typeof ListDockerServersResponseSchema>>;
     getDockerLogs: (
       input: z.infer<typeof GetDockerLogsRequestSchema>,
     ) => Promise<z.infer<typeof GetDockerLogsResponseSchema>>;
@@ -46,8 +46,8 @@ export const createLogsRouter = (
     // Protected: List docker-managed MCP server containers
     listDockerServers: protectedProcedure
       .output(ListDockerServersResponseSchema)
-      .query(async () => {
-        return await implementations.listDockerServers();
+      .query(async ({ ctx }) => {
+        return await implementations.listDockerServers(ctx.user.id);
       }),
 
     // Protected: Get logs tail for a docker-managed MCP server
