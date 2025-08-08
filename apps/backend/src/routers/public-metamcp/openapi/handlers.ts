@@ -155,14 +155,12 @@ export const createOriginalCallToolHandler = (): CallToolHandler => {
 };
 
 // Helper function to create middleware-enabled handlers
-export const createMiddlewareEnabledHandlers = (
-  sessionId: string,
-  namespaceUuid: string,
-) => {
+export const createMiddlewareEnabledHandlers = (namespaceUuid: string) => {
   // Create the handler context
   const handlerContext: MetaMCPHandlerContext = {
     namespaceUuid,
-    sessionId,
+    // Deterministic, reusable session per namespace for OpenAPI
+    sessionId: `openapi_${namespaceUuid}`,
   };
 
   // Create original handlers

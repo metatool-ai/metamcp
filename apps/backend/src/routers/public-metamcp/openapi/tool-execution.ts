@@ -24,12 +24,9 @@ export const executeToolWithMiddleware = async (
       throw new Error("Failed to create MetaMCP server instance");
     }
 
-    // Use deterministic session ID for OpenAPI endpoints
-    const sessionId = `openapi_${namespaceUuid}`;
-
     // Create middleware-enabled handlers
     const { handlerContext, callToolWithMiddleware } =
-      createMiddlewareEnabledHandlers(sessionId, namespaceUuid);
+      createMiddlewareEnabledHandlers(namespaceUuid);
 
     // Use middleware-enabled call tool handler
     const callToolRequest: CallToolRequest = {
