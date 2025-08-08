@@ -110,13 +110,11 @@ export class DockerManager {
       await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
 
     if (existingSession) {
-      // Check if session is in error state and has exceeded max retries
-      if (
-        existingSession.status === "error" &&
-        existingSession.retry_count >= existingSession.max_retries
-      ) {
+      // If the session is marked as error (e.g., due to high restart count), do not recreate automatically
+      // Require explicit manual recovery via retryContainer
+      if (existingSession.status === "error") {
         throw new Error(
-          `Server ${serverUuid} has exceeded maximum retry attempts (${existingSession.retry_count}/${existingSession.max_retries}). Last error: ${existingSession.error_message}`,
+          `Server ${serverUuid} is in error state and will not be automatically recreated. Last error: ${existingSession.error_message ?? "unknown"}. Use retryContainer to attempt recovery.`,
         );
       }
 
@@ -478,6 +476,61 @@ export class DockerManager {
               `  - ${container.serverUuid}: ${container.restartCount} restarts`,
             );
           });
+
+          // Actively handle containers with very high restart counts to prevent flapping
+          for (const info of highRestartContainers) {
+            try {
+              // Only take action when restart count is at or above the same threshold as health monitor
+              if (info.restartCount >= 3) {
+                const session = await dockerSessionsRepo.getSessionByMcpServer(
+                  info.serverUuid,
+                );
+                if (session) {
+                  if (session.status !== "error") {
+                    await dockerSessionsRepo.markAsError(
+                      session.uuid,
+                      `Container has restarted ${info.restartCount} times due to crashes`,
+                    );
+                  }
+
+                  // Attempt to stop the container to prevent further restarts
+                  try {
+                    const container = this.docker.getContainer(
+                      info.containerId,
+                    );
+                    console.log(
+                      `Stopping container ${info.containerId} for server ${info.serverUuid} due to high restart count (${info.restartCount})`,
+                    );
+                    await container.stop();
+                    try {
+                      await container.remove();
+                      console.log(
+                        `Removed container ${info.containerId} for server ${info.serverUuid} after stopping due to high restart count`,
+                      );
+                    } catch (removeError) {
+                      console.error(
+                        `Failed to remove container ${info.containerId} for server ${info.serverUuid}:`,
+                        removeError,
+                      );
+                    }
+                  } catch (stopError) {
+                    console.error(
+                      `Failed to stop container ${info.containerId} for server ${info.serverUuid}:`,
+                      stopError,
+                    );
+                  }
+
+                  // Stop any health monitoring loop for this server
+                  this.stopHealthMonitoring(info.serverUuid);
+                }
+              }
+            } catch (handleError) {
+              console.error(
+                `Failed to handle high-restart container for server ${info.serverUuid}:`,
+                handleError,
+              );
+            }
+          }
         }
       } catch (error) {
         console.error("Error during periodic container status sync:", error);
