@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ServerParameters } from "@repo/zod-types";
 
-import { dockerManager } from "./docker-manager";
+import { dockerManager } from "./docker-manager/index.js";
 import { metamcpLogStore } from "./log-store";
 
 const sleep = (time: number) =>

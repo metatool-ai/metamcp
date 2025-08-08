@@ -1,7 +1,7 @@
 import { ServerParameters } from "@repo/zod-types";
 
 import { dockerSessionsRepo, mcpServersRepository } from "../db/repositories";
-import { dockerManager } from "./metamcp/docker-manager";
+import { dockerManager } from "./metamcp/docker-manager/index.js";
 import { convertDbServerToParams } from "./metamcp/utils";
 
 // Store the interval ID for potential cleanup

@@ -9,7 +9,7 @@ import {
 import { z } from "zod";
 
 import { mcpServersRepository } from "../db/repositories";
-import { dockerManager } from "../lib/metamcp/docker-manager";
+import { dockerManager } from "../lib/metamcp/docker-manager/index.js";
 import { metamcpLogStore } from "../lib/metamcp/log-store";
 
 export const logsImplementations = {

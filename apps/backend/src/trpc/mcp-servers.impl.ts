@@ -16,7 +16,7 @@ import {
   namespaceMappingsRepository,
 } from "../db/repositories";
 import { McpServersSerializer } from "../db/serializers";
-import { dockerManager } from "../lib/metamcp/docker-manager";
+import { dockerManager } from "../lib/metamcp/docker-manager/index.js";
 import { convertDbServerToParams } from "../lib/metamcp/utils";
 
 export const mcpServersImplementations = {

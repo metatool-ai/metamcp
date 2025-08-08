@@ -5,4 +5,4 @@ export * from "./log-store";
 export * from "./metamcp-proxy";
 export * from "./sessions";
 export * from "./utils";
-export * from "./docker-manager";
+export * from "./docker-manager/index.js";

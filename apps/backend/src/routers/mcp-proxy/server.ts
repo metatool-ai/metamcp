@@ -14,7 +14,7 @@ import express from "express";
 import { mcpServersRepository } from "../../db/repositories/index";
 import mcpProxy from "../../lib/mcp-proxy";
 import { handleDockerContainerUrl } from "../../lib/metamcp/client";
-import { dockerManager } from "../../lib/metamcp/docker-manager";
+import { dockerManager } from "../../lib/metamcp/docker-manager/index.js";
 import { convertDbServerToParams } from "../../lib/metamcp/utils";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
 
