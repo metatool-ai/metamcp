@@ -11,10 +11,7 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
-import {
-  mcpServersRepository,
-  namespaceMappingsRepository,
-} from "../db/repositories";
+import { mcpServersRepository } from "../db/repositories";
 import { McpServersSerializer } from "../db/serializers";
 import { dockerManager } from "../lib/metamcp/docker-manager/index.js";
 import { convertDbServerToParams } from "../lib/metamcp/utils";
@@ -258,12 +255,6 @@ export const mcpServersImplementations = {
         };
       }
 
-      // Find affected namespaces before deleting the server
-      const affectedNamespaceUuids =
-        await namespaceMappingsRepository.findNamespacesByServerUuid(
-          input.uuid,
-        );
-
       // Clean up Docker container for this server if it's stdio
       await dockerManager.removeContainer(input.uuid);
 
@@ -276,7 +267,7 @@ export const mcpServersImplementations = {
         };
       }
 
-// Docker containers are already removed, no additional cleanup needed
+      // Docker containers are already removed, no additional cleanup needed
 
       return {
         success: true as const,
