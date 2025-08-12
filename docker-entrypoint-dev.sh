@@ -8,33 +8,16 @@ echo "Starting MetaMCP development services..."
 cleanup_managed_containers() {
     echo "🧹 CLEANUP: Starting MetaMCP managed Docker resources cleanup..."
     
-    # Only run if we have access to Docker socket
-    if [ -S /var/run/docker.sock ]; then
-        echo "🧹 CLEANUP: Docker socket found, proceeding with cleanup..."
+    # Check if Docker is available by probing docker info
+    if docker info >/dev/null 2>&1; then
+        echo "🧹 CLEANUP: Docker is available, proceeding with cleanup..."
         
-        # Stop and remove containers - with better error handling
-        CONTAINERS=$(docker ps -a --filter "label=metamcp.managed=true" --format "{{.ID}}" 2>/dev/null || true)
-        if [ -n "$CONTAINERS" ]; then
-            echo "🧹 CLEANUP: Found managed containers to remove: $CONTAINERS"
-            
-            # Stop containers
-            echo "🧹 CLEANUP: Stopping managed containers..."
-            for container in $CONTAINERS; do
-                echo "🧹 CLEANUP: Stopping container $container"
-                docker stop "$container" 2>/dev/null || echo "🧹 CLEANUP: Failed to stop container $container"
-            done
-            
-            # Remove containers
-            echo "🧹 CLEANUP: Removing managed containers..."
-            for container in $CONTAINERS; do
-                echo "🧹 CLEANUP: Removing container $container"
-                docker rm "$container" 2>/dev/null || echo "🧹 CLEANUP: Failed to remove container $container"
-            done
-            
-            echo "✅ CLEANUP: Cleaned up managed containers"
-        else
-            echo "🧹 CLEANUP: No managed containers found"
-        fi
+        # Simple clean docker command - stop and remove containers
+        echo "🧹 CLEANUP: Stopping and removing managed containers..."
+        docker ps -a --filter "label=metamcp.managed=true" --format '{{.ID}}' \
+            | xargs -r docker rm -f 2>/dev/null || echo "🧹 CLEANUP: Failed to remove some containers"
+        
+        echo "✅ CLEANUP: Cleaned up managed containers"
         
         # Remove networks
         NETWORKS=$(docker network ls --filter "label=metamcp.managed=true" --format "{{.ID}}" 2>/dev/null || true)
@@ -49,7 +32,8 @@ cleanup_managed_containers() {
             echo "🧹 CLEANUP: No managed networks found"
         fi
     else
-        echo "⚠️  CLEANUP: Docker socket not available, skipping container cleanup"
+        echo "⚠️  CLEANUP: Docker is not available (docker info failed), skipping container cleanup"
+        echo "⚠️  CLEANUP: This may be due to rootless Docker, DOCKER_HOST not set, or Docker daemon not running"
     fi
     
     echo "🧹 CLEANUP: Cleanup process completed"
