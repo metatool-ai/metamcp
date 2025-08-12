@@ -2,7 +2,7 @@
 
 set -e
 
-echo "Starting MetaMCP services..."
+echo "Starting MetaMCP production services..."
 
 # Function to wait for postgres
 wait_for_postgres() {
@@ -35,6 +35,101 @@ run_migrations() {
     
     cd /app
 }
+
+# Function to cleanup Docker containers and networks
+cleanup_managed_containers() {
+    echo "🧹 CLEANUP: Starting MetaMCP managed Docker resources cleanup..."
+    
+    # Only run if we have access to Docker socket
+    if [ -S /var/run/docker.sock ]; then
+        echo "🧹 CLEANUP: Docker socket found, proceeding with cleanup..."
+        
+        # Stop and remove containers - with better error handling
+        CONTAINERS=$(docker ps -a --filter "label=metamcp.managed=true" --format "{{.ID}}" 2>/dev/null || true)
+        if [ -n "$CONTAINERS" ]; then
+            echo "🧹 CLEANUP: Found managed containers to remove: $CONTAINERS"
+            
+            # Stop containers
+            echo "🧹 CLEANUP: Stopping managed containers..."
+            for container in $CONTAINERS; do
+                echo "🧹 CLEANUP: Stopping container $container"
+                docker stop "$container" 2>/dev/null || echo "🧹 CLEANUP: Failed to stop container $container"
+            done
+            
+            # Remove containers
+            echo "🧹 CLEANUP: Removing managed containers..."
+            for container in $CONTAINERS; do
+                echo "🧹 CLEANUP: Removing container $container"
+                docker rm "$container" 2>/dev/null || echo "🧹 CLEANUP: Failed to remove container $container"
+            done
+            
+            echo "✅ CLEANUP: Cleaned up managed containers"
+        else
+            echo "🧹 CLEANUP: No managed containers found"
+        fi
+        
+        # Remove networks
+        NETWORKS=$(docker network ls --filter "label=metamcp.managed=true" --format "{{.ID}}" 2>/dev/null || true)
+        if [ -n "$NETWORKS" ]; then
+            echo "🧹 CLEANUP: Found managed networks to remove: $NETWORKS"
+            for network in $NETWORKS; do
+                echo "🧹 CLEANUP: Removing network $network"
+                docker network rm "$network" 2>/dev/null || echo "🧹 CLEANUP: Failed to remove network $network"
+            done
+            echo "✅ CLEANUP: Cleaned up managed networks"
+        else
+            echo "🧹 CLEANUP: No managed networks found"
+        fi
+    else
+        echo "⚠️  CLEANUP: Docker socket not available, skipping container cleanup"
+    fi
+    
+    echo "🧹 CLEANUP: Cleanup process completed"
+}
+
+# Function to cleanup on exit
+cleanup_on_exit() {
+    echo "🛑 SHUTDOWN: Received shutdown signal, cleaning up..."
+    echo "🛑 SHUTDOWN: Signal received at $(date)"
+    
+    # Kill the backend process
+    if [ -n "$BACKEND_PID" ]; then
+        echo "🛑 SHUTDOWN: Killing backend process (PID: $BACKEND_PID)"
+        kill -TERM "$BACKEND_PID" 2>/dev/null || true
+    fi
+    
+    # Kill the frontend process
+    if [ -n "$FRONTEND_PID" ]; then
+        echo "🛑 SHUTDOWN: Killing frontend process (PID: $FRONTEND_PID)"
+        kill -TERM "$FRONTEND_PID" 2>/dev/null || true
+    fi
+    
+    # Kill any other background processes
+    jobs -p | xargs -r kill 2>/dev/null || true
+    echo "🛑 SHUTDOWN: Killed background processes"
+    
+    # Wait for processes to terminate gracefully
+    if [ -n "$BACKEND_PID" ]; then
+        wait "$BACKEND_PID" 2>/dev/null || true
+    fi
+    if [ -n "$FRONTEND_PID" ]; then
+        wait "$FRONTEND_PID" 2>/dev/null || true
+    fi
+    
+    # Clean up managed containers
+    echo "🛑 SHUTDOWN: Starting container cleanup..."
+    cleanup_managed_containers
+    
+    echo "🛑 SHUTDOWN: Production services stopped"
+    exit 0
+}
+
+# Setup cleanup trap for multiple signals
+trap cleanup_on_exit TERM INT EXIT
+
+# Initialize - clean up any existing managed containers
+echo "🚀 INIT: Cleaning up any existing managed containers..."
+cleanup_managed_containers
 
 # Set default values for postgres connection if not provided
 POSTGRES_HOST=${POSTGRES_HOST:-postgres}
@@ -80,20 +175,7 @@ if ! kill -0 $FRONTEND_PID 2>/dev/null; then
 fi
 echo "✅ Frontend server started successfully (PID: $FRONTEND_PID)"
 
-# Function to cleanup on exit
-cleanup() {
-    echo "Shutting down services..."
-    kill $BACKEND_PID 2>/dev/null || true
-    kill $FRONTEND_PID 2>/dev/null || true
-    wait $BACKEND_PID 2>/dev/null || true
-    wait $FRONTEND_PID 2>/dev/null || true
-    echo "Services stopped"
-}
-
-# Trap signals for graceful shutdown
-trap cleanup TERM INT
-
-echo "Services started successfully!"
+echo "🚀 Production services started successfully!"
 echo "Backend running on port 12009"
 echo "Frontend running on port 12008"
 

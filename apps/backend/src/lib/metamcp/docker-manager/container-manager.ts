@@ -153,7 +153,7 @@ export class ContainerManager {
 
     // Create container configuration
     const containerConfig: ContainerConfig = {
-      Image: "mcp/server:latest",
+      Image: "ghcr.io/metatool-ai/mcp-proxy:latest",
       name: containerName,
       Env: [
         `MCP_SERVER_COMMAND=${serverParams.command || ""}`,
