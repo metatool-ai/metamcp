@@ -35,10 +35,6 @@ services:
       # Development environment
       NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: 1
-      
-      # Turborepo environment variables
-      TURBO_TEAM: ""
-      TURBO_TOKEN: ""
     volumes:
       # Mount Docker socket to allow container management
       - /var/run/docker.sock:/var/run/docker.sock:ro
