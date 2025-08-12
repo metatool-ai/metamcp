@@ -8,6 +8,16 @@ export const createConfigRouter = (implementations: {
   setSignupDisabled: (input: {
     disabled: boolean;
   }) => Promise<{ success: boolean }>;
+  getMcpResetTimeoutOnProgress: () => Promise<boolean>;
+  setMcpResetTimeoutOnProgress: (input: {
+    enabled: boolean;
+  }) => Promise<{ success: boolean }>;
+  getMcpTimeout: () => Promise<number>;
+  setMcpTimeout: (input: { timeout: number }) => Promise<{ success: boolean }>;
+  getMcpMaxTotalTimeout: () => Promise<number>;
+  setMcpMaxTotalTimeout: (input: {
+    timeout: number;
+  }) => Promise<{ success: boolean }>;
   getAllConfigs: () => Promise<
     Array<{ id: string; value: string; description?: string | null }>
   >;
@@ -25,6 +35,36 @@ export const createConfigRouter = (implementations: {
       .input(z.object({ disabled: z.boolean() }))
       .mutation(async ({ input }) => {
         return await implementations.setSignupDisabled(input);
+      }),
+
+    getMcpResetTimeoutOnProgress: publicProcedure.query(async () => {
+      return await implementations.getMcpResetTimeoutOnProgress();
+    }),
+
+    setMcpResetTimeoutOnProgress: protectedProcedure
+      .input(z.object({ enabled: z.boolean() }))
+      .mutation(async ({ input }) => {
+        return await implementations.setMcpResetTimeoutOnProgress(input);
+      }),
+
+    getMcpTimeout: publicProcedure.query(async () => {
+      return await implementations.getMcpTimeout();
+    }),
+
+    setMcpTimeout: protectedProcedure
+      .input(z.object({ timeout: z.number().min(1000).max(3000000) }))
+      .mutation(async ({ input }) => {
+        return await implementations.setMcpTimeout(input);
+      }),
+
+    getMcpMaxTotalTimeout: publicProcedure.query(async () => {
+      return await implementations.getMcpMaxTotalTimeout();
+    }),
+
+    setMcpMaxTotalTimeout: protectedProcedure
+      .input(z.object({ timeout: z.number().min(1000).max(3000000) }))
+      .mutation(async ({ input }) => {
+        return await implementations.setMcpMaxTotalTimeout(input);
       }),
 
     getAllConfigs: protectedProcedure.query(async () => {

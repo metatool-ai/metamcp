@@ -14,6 +14,39 @@ export const configImplementations = {
     return { success: true };
   },
 
+  getMcpResetTimeoutOnProgress: async (): Promise<boolean> => {
+    return await configService.getMcpResetTimeoutOnProgress();
+  },
+
+  setMcpResetTimeoutOnProgress: async (input: {
+    enabled: boolean;
+  }): Promise<{ success: boolean }> => {
+    await configService.setMcpResetTimeoutOnProgress(input.enabled);
+    return { success: true };
+  },
+
+  getMcpTimeout: async (): Promise<number> => {
+    return await configService.getMcpTimeout();
+  },
+
+  setMcpTimeout: async (input: {
+    timeout: number;
+  }): Promise<{ success: boolean }> => {
+    await configService.setMcpTimeout(input.timeout);
+    return { success: true };
+  },
+
+  getMcpMaxTotalTimeout: async (): Promise<number> => {
+    return await configService.getMcpMaxTotalTimeout();
+  },
+
+  setMcpMaxTotalTimeout: async (input: {
+    timeout: number;
+  }): Promise<{ success: boolean }> => {
+    await configService.setMcpMaxTotalTimeout(input.timeout);
+    return { success: true };
+  },
+
   getAllConfigs: async (): Promise<
     Array<{ id: string; value: string; description?: string | null }>
   > => {

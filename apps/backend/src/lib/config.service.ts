@@ -18,6 +18,49 @@ export const configService = {
     );
   },
 
+  async getMcpResetTimeoutOnProgress(): Promise<boolean> {
+    const config = await configRepo.getConfig(
+      ConfigKeyEnum.Enum.MCP_RESET_TIMEOUT_ON_PROGRESS,
+    );
+    return config?.value === "true" || true;
+  },
+
+  async setMcpResetTimeoutOnProgress(enabled: boolean): Promise<void> {
+    await configRepo.setConfig(
+      ConfigKeyEnum.Enum.MCP_RESET_TIMEOUT_ON_PROGRESS,
+      enabled.toString(),
+      "Whether to reset timeout on progress for MCP requests",
+    );
+  },
+
+  async getMcpTimeout(): Promise<number> {
+    const config = await configRepo.getConfig(ConfigKeyEnum.Enum.MCP_TIMEOUT);
+    return config?.value ? parseInt(config.value, 10) : 60000;
+  },
+
+  async setMcpTimeout(timeout: number): Promise<void> {
+    await configRepo.setConfig(
+      ConfigKeyEnum.Enum.MCP_TIMEOUT,
+      timeout.toString(),
+      "MCP request timeout in milliseconds",
+    );
+  },
+
+  async getMcpMaxTotalTimeout(): Promise<number> {
+    const config = await configRepo.getConfig(
+      ConfigKeyEnum.Enum.MCP_MAX_TOTAL_TIMEOUT,
+    );
+    return config?.value ? parseInt(config.value, 10) : 60000;
+  },
+
+  async setMcpMaxTotalTimeout(timeout: number): Promise<void> {
+    await configRepo.setConfig(
+      ConfigKeyEnum.Enum.MCP_MAX_TOTAL_TIMEOUT,
+      timeout.toString(),
+      "MCP maximum total timeout in milliseconds",
+    );
+  },
+
   async getConfig(key: ConfigKey): Promise<string | undefined> {
     const config = await configRepo.getConfig(key);
     return config?.value;

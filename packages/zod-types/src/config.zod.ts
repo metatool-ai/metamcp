@@ -1,7 +1,12 @@
 import { z } from "zod";
 
 // Define config key enum
-export const ConfigKeyEnum = z.enum(["DISABLE_SIGNUP"]);
+export const ConfigKeyEnum = z.enum([
+  "DISABLE_SIGNUP",
+  "MCP_RESET_TIMEOUT_ON_PROGRESS",
+  "MCP_TIMEOUT",
+  "MCP_MAX_TOTAL_TIMEOUT",
+]);
 
 // Config schema
 export const ConfigSchema = z.object({
@@ -67,6 +72,14 @@ export const ConfigUpdateInputSchema = z.object({
 
 export type ConfigCreateInput = z.infer<typeof ConfigCreateInputSchema>;
 export type ConfigUpdateInput = z.infer<typeof ConfigUpdateInputSchema>;
+
+// Settings form schema for frontend
+export const SettingsFormSchema = z.object({
+  mcpTimeout: z.number().int(),
+  mcpMaxTotalTimeout: z.number().int(),
+});
+
+export type SettingsFormData = z.infer<typeof SettingsFormSchema>;
 
 // Database-specific schemas (with Date objects)
 export const DatabaseConfigSchema = z.object({

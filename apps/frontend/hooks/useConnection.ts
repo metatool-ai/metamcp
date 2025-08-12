@@ -47,6 +47,7 @@ import {
   StdErrNotificationSchema,
 } from "../lib/notificationTypes";
 import { createAuthProvider } from "../lib/oauth-provider";
+import { trpc } from "../lib/trpc";
 
 interface UseConnectionOptions {
   mcpServerUuid: string;
@@ -93,6 +94,20 @@ export function useConnection({
   >([]);
   const [completionsSupported, setCompletionsSupported] = useState(true);
 
+  // Fetch timeout configurations from the database
+  const { data: mcpTimeout } = trpc.frontend.config.getMcpTimeout.useQuery(
+    undefined,
+    { enabled: enabled },
+  );
+  const { data: mcpMaxTotalTimeout } =
+    trpc.frontend.config.getMcpMaxTotalTimeout.useQuery(undefined, {
+      enabled: enabled,
+    });
+  const { data: mcpResetTimeoutOnProgress } =
+    trpc.frontend.config.getMcpResetTimeoutOnProgress.useQuery(undefined, {
+      enabled: enabled,
+    });
+
   const pushHistory = useMemoizedFn((request: object, response?: object) => {
     setRequestHistory((prev) => [
       ...prev,
@@ -115,13 +130,16 @@ export function useConnection({
       try {
         const abortController = new AbortController();
 
-        // prepare MCP Client request options
-        // TODO: add configurable options e.g., max time out
+        // Get configurable timeout values from database, similar to backend metamcp-proxy.ts
         const mcpRequestOptions: RequestOptions = {
           signal: options?.signal ?? abortController.signal,
-          resetTimeoutOnProgress: options?.resetTimeoutOnProgress ?? true,
-          timeout: options?.timeout ?? 60000,
-          maxTotalTimeout: options?.maxTotalTimeout ?? 60000,
+          resetTimeoutOnProgress:
+            options?.resetTimeoutOnProgress ??
+            mcpResetTimeoutOnProgress ??
+            true,
+          timeout: options?.timeout ?? mcpTimeout ?? 60000,
+          maxTotalTimeout:
+            options?.maxTotalTimeout ?? mcpMaxTotalTimeout ?? 60000,
         };
 
         // If progress notifications are enabled, add an onprogress hook to the MCP Client request options
@@ -411,9 +429,9 @@ export function useConnection({
                   headers,
                   credentials: "include",
                 },
-                // TODO these should be configurable...
+                // Use maxTotalTimeout from database for reconnection delay, with fallback to 30s
                 reconnectionOptions: {
-                  maxReconnectionDelay: 30000,
+                  maxReconnectionDelay: mcpMaxTotalTimeout ?? 30000,
                   initialReconnectionDelay: 1000,
                   reconnectionDelayGrowFactor: 1.5,
                   maxRetries: 2,
@@ -440,9 +458,9 @@ export function useConnection({
                   headers,
                   credentials: "include",
                 },
-                // TODO these should be configurable...
+                // Use maxTotalTimeout from database for reconnection delay, with fallback to 30s
                 reconnectionOptions: {
-                  maxReconnectionDelay: 30000,
+                  maxReconnectionDelay: mcpMaxTotalTimeout ?? 30000,
                   initialReconnectionDelay: 1000,
                   reconnectionDelayGrowFactor: 1.5,
                   maxRetries: 2,
@@ -470,9 +488,9 @@ export function useConnection({
                   headers,
                   credentials: "include",
                 },
-                // TODO these should be configurable...
+                // Use maxTotalTimeout from database for reconnection delay, with fallback to 30s
                 reconnectionOptions: {
-                  maxReconnectionDelay: 30000,
+                  maxReconnectionDelay: mcpMaxTotalTimeout ?? 30000,
                   initialReconnectionDelay: 1000,
                   reconnectionDelayGrowFactor: 1.5,
                   maxRetries: 2,

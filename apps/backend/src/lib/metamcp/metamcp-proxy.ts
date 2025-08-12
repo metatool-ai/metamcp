@@ -1,4 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol";
 import {
   CallToolRequestSchema,
   CallToolResult,
@@ -21,6 +22,7 @@ import {
 import { z } from "zod";
 
 import { toolsImplementations } from "../../trpc/tools.impl";
+import { configService } from "../config.service";
 import { ConnectedClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
 import {
@@ -167,6 +169,20 @@ export const createServer = async (
     }
 
     try {
+      const abortController = new AbortController();
+
+      // Get configurable timeout values
+      const resetTimeoutOnProgress =
+        await configService.getMcpResetTimeoutOnProgress();
+      const timeout = await configService.getMcpTimeout();
+      const maxTotalTimeout = await configService.getMcpMaxTotalTimeout();
+
+      const mcpRequestOptions: RequestOptions = {
+        signal: abortController.signal,
+        resetTimeoutOnProgress,
+        timeout,
+        maxTotalTimeout,
+      };
       // Use the correct schema for tool calls
       const result = await clientForTool.client.request(
         {
@@ -174,12 +190,11 @@ export const createServer = async (
           params: {
             name: originalToolName,
             arguments: args || {},
-            _meta: {
-              progressToken: request.params._meta?.progressToken,
-            },
+            _meta: request.params._meta,
           },
         },
         CompatibilityCallToolResultSchema,
+        mcpRequestOptions,
       );
 
       // Cast the result to CallToolResult type

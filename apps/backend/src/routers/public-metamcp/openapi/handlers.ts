@@ -1,3 +1,4 @@
+import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol";
 import {
   CallToolResult,
   CompatibilityCallToolResultSchema,
@@ -5,6 +6,7 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import { configService } from "../../../lib/config.service";
 import { ConnectedClient } from "../../../lib/metamcp";
 import { getMcpServers } from "../../../lib/metamcp/fetch-metamcp";
 import {
@@ -47,12 +49,25 @@ export const createOriginalListToolsHandler = (
         const serverName =
           params.name || session.client.getServerVersion()?.name || "";
         try {
+          // Get configurable timeout values to bypass MCP SDK default enforcement
+          const resetTimeoutOnProgress =
+            await configService.getMcpResetTimeoutOnProgress();
+          const timeout = await configService.getMcpTimeout();
+          const maxTotalTimeout = await configService.getMcpMaxTotalTimeout();
+
+          const mcpRequestOptions: RequestOptions = {
+            resetTimeoutOnProgress,
+            timeout,
+            maxTotalTimeout,
+          };
+
           const result = await session.client.request(
             {
               method: "tools/list",
               params: { _meta: request.params?._meta },
             },
             ListToolsResultSchema,
+            mcpRequestOptions,
           );
 
           const toolsWithSource =
@@ -125,7 +140,19 @@ export const createOriginalCallToolHandler = (): CallToolHandler => {
     }
 
     try {
-      // Use the correct schema for tool calls
+      // Get configurable timeout values to bypass MCP SDK default enforcement
+      const resetTimeoutOnProgress =
+        await configService.getMcpResetTimeoutOnProgress();
+      const timeout = await configService.getMcpTimeout();
+      const maxTotalTimeout = await configService.getMcpMaxTotalTimeout();
+
+      const mcpRequestOptions: RequestOptions = {
+        resetTimeoutOnProgress,
+        timeout,
+        maxTotalTimeout,
+      };
+
+      // Use the correct schema for tool calls with timeout options
       const result = await targetSession.client.request(
         {
           method: "tools/call",
@@ -138,6 +165,7 @@ export const createOriginalCallToolHandler = (): CallToolHandler => {
           },
         },
         CompatibilityCallToolResultSchema,
+        mcpRequestOptions,
       );
 
       // Cast the result to CallToolResult type
