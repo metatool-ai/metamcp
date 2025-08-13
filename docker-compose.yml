@@ -53,6 +53,7 @@ services:
       - NET_ADMIN
     # Use init system for proper signal handling
     init: true
+    # Note: Container runs as root for Docker socket access (DinD requirement)
 
   postgres:
     image: postgres:16-alpine

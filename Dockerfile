@@ -66,6 +66,12 @@ LABEL org.opencontainers.image.vendor="metatool-ai"
 # Install curl for health checks
 RUN apt-get update && apt-get install -y curl postgresql-client && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install Docker CLI for container management (required for DinD functionality)
+RUN apt-get update && apt-get install -y \
+    docker.io \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user with proper home directory
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 --home /home/nextjs nextjs && \
@@ -96,7 +102,8 @@ RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
-USER nextjs
+# Note: Container runs as root for Docker socket access (DinD requirement)
+# USER nextjs
 
 # Expose frontend port (Next.js)
 EXPOSE 12008
