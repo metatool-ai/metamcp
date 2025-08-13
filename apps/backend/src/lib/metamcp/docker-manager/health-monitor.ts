@@ -2,6 +2,7 @@ import Docker from "dockerode";
 
 import { dockerSessionsRepo } from "../../../db/repositories/docker-sessions.repo.js";
 import { DockerErrorUtils } from "./error-utils.js";
+import { HighRestartContainer } from "./types.js";
 
 /**
  * Handles container health monitoring and restart tracking
@@ -182,14 +183,7 @@ export class HealthMonitor {
   /**
    * Get all containers with high restart counts
    */
-  async getContainersWithHighRestartCounts(): Promise<
-    Array<{
-      serverUuid: string;
-      containerId: string;
-      restartCount: number;
-      status: string;
-    }>
-  > {
+  async getContainersWithHighRestartCounts(): Promise<HighRestartContainer[]> {
     const sessions = await dockerSessionsRepo.getAllSessions();
     const highRestartContainers = [];
 

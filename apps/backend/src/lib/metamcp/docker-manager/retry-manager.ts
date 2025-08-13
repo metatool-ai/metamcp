@@ -1,3 +1,5 @@
+import { DockerSessionStatusEnum } from "@repo/zod-types";
+
 import { dockerSessionsRepo } from "../../../db/repositories/docker-sessions.repo.js";
 import type { RetryInfo } from "./types.js";
 
@@ -23,24 +25,19 @@ export class RetryManager {
   /**
    * Get servers in error state (exceeded max retries)
    */
-  async getServersInErrorState(): Promise<
-    Array<{
-      serverUuid: string;
-      retryCount: number;
-      maxRetries: number;
-      lastRetryAt?: Date;
-      errorMessage?: string;
-    }>
-  > {
+  async getServersInErrorState(): Promise<RetryInfo[]> {
     const sessions = await dockerSessionsRepo.getAllSessions();
     return sessions
-      .filter((session) => session.status === "error")
+      .filter(
+        (session) => session.status === DockerSessionStatusEnum.Enum.ERROR,
+      )
       .map((session) => ({
         serverUuid: session.mcp_server_uuid,
         retryCount: session.retry_count,
         maxRetries: session.max_retries,
         lastRetryAt: session.last_retry_at || undefined,
         errorMessage: session.error_message || undefined,
+        status: session.status,
       }));
   }
 
@@ -166,10 +163,13 @@ export class RetryManager {
       throw new Error(`No session found for server ${serverUuid}`);
     }
 
-    if (session.status === "error") {
+    if (session.status === DockerSessionStatusEnum.Enum.ERROR) {
       // Reset retry count and status for retry
       await dockerSessionsRepo.resetRetryCount(session.uuid);
-      await dockerSessionsRepo.updateSessionStatus(session.uuid, "running");
+      await dockerSessionsRepo.updateSessionStatus(
+        session.uuid,
+        DockerSessionStatusEnum.Enum.RUNNING,
+      );
       console.log(
         `Reset retry count and status for server ${serverUuid}, attempting retry`,
       );

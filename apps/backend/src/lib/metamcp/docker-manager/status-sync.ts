@@ -1,3 +1,4 @@
+import { DockerSessionStatusEnum } from "@repo/zod-types";
 import Docker from "dockerode";
 
 import { dockerSessionsRepo } from "../../../db/repositories/docker-sessions.repo.js";
@@ -30,17 +31,26 @@ export class StatusSync {
       const isActuallyRunning = containerInfo.State.Running;
 
       // Sync database if there's a discrepancy
-      if (session.status === "running" && !isActuallyRunning) {
+      if (
+        session.status === DockerSessionStatusEnum.Enum.RUNNING &&
+        !isActuallyRunning
+      ) {
         console.log(
           `Container ${session.container_id} is stopped but DB shows running, updating status`,
         );
         await dockerSessionsRepo.stopSession(session.uuid);
         return false;
-      } else if (session.status === "stopped" && isActuallyRunning) {
+      } else if (
+        session.status === DockerSessionStatusEnum.Enum.STOPPED &&
+        isActuallyRunning
+      ) {
         console.log(
           `Container ${session.container_id} is running but DB shows stopped, updating status`,
         );
-        await dockerSessionsRepo.updateSessionStatus(session.uuid, "running");
+        await dockerSessionsRepo.updateSessionStatus(
+          session.uuid,
+          DockerSessionStatusEnum.Enum.RUNNING,
+        );
         return true;
       }
 
@@ -56,7 +66,7 @@ export class StatusSync {
           `Could not inspect container ${session.container_id}: ${DockerErrorUtils.dockerErrorSummary(error)}`,
         );
       }
-      if (session.status === "running") {
+      if (session.status === DockerSessionStatusEnum.Enum.RUNNING) {
         console.log(
           `Container ${session.container_id} not found but DB shows running, updating status`,
         );
@@ -85,17 +95,26 @@ export class StatusSync {
 
       let wasSynced = false;
 
-      if (session.status === "running" && !isActuallyRunning) {
+      if (
+        session.status === DockerSessionStatusEnum.Enum.RUNNING &&
+        !isActuallyRunning
+      ) {
         console.log(
           `Syncing: Container ${session.container_id} is stopped but DB shows running`,
         );
         await dockerSessionsRepo.stopSession(session.uuid);
         wasSynced = true;
-      } else if (session.status === "stopped" && isActuallyRunning) {
+      } else if (
+        session.status === DockerSessionStatusEnum.Enum.STOPPED &&
+        isActuallyRunning
+      ) {
         console.log(
           `Syncing: Container ${session.container_id} is running but DB shows stopped`,
         );
-        await dockerSessionsRepo.updateSessionStatus(session.uuid, "running");
+        await dockerSessionsRepo.updateSessionStatus(
+          session.uuid,
+          DockerSessionStatusEnum.Enum.RUNNING,
+        );
         wasSynced = true;
       }
 
@@ -110,7 +129,7 @@ export class StatusSync {
           `Could not inspect container ${session.container_id}: ${DockerErrorUtils.dockerErrorSummary(error)}`,
         );
       }
-      if (session.status === "running") {
+      if (session.status === DockerSessionStatusEnum.Enum.RUNNING) {
         console.log(
           `Syncing: Container ${session.container_id} not found but DB shows running`,
         );

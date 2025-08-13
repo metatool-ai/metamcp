@@ -1,25 +1,9 @@
+import { DockerSessionStatus, DockerSessionStatusEnum, DockerSession } from "@repo/zod-types";
 import { and, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 import { db } from "../index.js";
 import { dockerSessionsTable, mcpServersTable } from "../schema.js";
-
-export interface DockerSession {
-  uuid: string;
-  mcp_server_uuid: string;
-  container_id: string;
-  container_name: string;
-  url: string;
-  status: string;
-  created_at: Date;
-  updated_at: Date;
-  started_at?: Date | null;
-  stopped_at?: Date | null;
-  error_message?: string | null;
-  retry_count: number;
-  last_retry_at?: Date | null;
-  max_retries: number;
-}
 
 export interface DockerSessionWithServerName extends DockerSession {
   serverName: string;
@@ -39,7 +23,7 @@ export class DockerSessionsRepository {
         container_id: params.container_id,
         container_name: params.container_name,
         url: params.url,
-        status: "running",
+        status: DockerSessionStatusEnum.Enum.RUNNING,
       })
       .returning();
 
@@ -62,7 +46,7 @@ export class DockerSessionsRepository {
     const [session] = await db
       .update(dockerSessionsTable)
       .set({
-        status: "stopped",
+        status: DockerSessionStatusEnum.Enum.STOPPED,
         stopped_at: new Date(),
         updated_at: new Date(),
       })
@@ -82,20 +66,26 @@ export class DockerSessionsRepository {
     return await db
       .select()
       .from(dockerSessionsTable)
-      .where(eq(dockerSessionsTable.status, "running"));
+      .where(
+        eq(dockerSessionsTable.status, DockerSessionStatusEnum.Enum.RUNNING),
+      );
   }
 
   async updateSessionStatus(
     uuid: string,
-    status: string,
+    status: DockerSessionStatus,
   ): Promise<DockerSession | null> {
     const [session] = await db
       .update(dockerSessionsTable)
       .set({
         status,
         updated_at: new Date(),
-        ...(status === "running" && { started_at: new Date() }),
-        ...(status === "stopped" && { stopped_at: new Date() }),
+        ...(status === DockerSessionStatusEnum.Enum.RUNNING && {
+          started_at: new Date(),
+        }),
+        ...(status === DockerSessionStatusEnum.Enum.STOPPED && {
+          stopped_at: new Date(),
+        }),
       })
       .where(eq(dockerSessionsTable.uuid, uuid))
       .returning();
@@ -132,7 +122,7 @@ export class DockerSessionsRepository {
     const [session] = await db
       .update(dockerSessionsTable)
       .set({
-        status: "error",
+        status: DockerSessionStatusEnum.Enum.ERROR,
         error_message: errorMessage,
         stopped_at: new Date(),
         updated_at: new Date(),
@@ -164,7 +154,7 @@ export class DockerSessionsRepository {
       .from(dockerSessionsTable)
       .where(
         and(
-          eq(dockerSessionsTable.status, "running"),
+          eq(dockerSessionsTable.status, DockerSessionStatusEnum.Enum.RUNNING),
           sql`${dockerSessionsTable.retry_count} > 0`,
         ),
       );
@@ -182,7 +172,7 @@ export class DockerSessionsRepository {
         container_id,
         container_name,
         url,
-        status: "running",
+        status: DockerSessionStatusEnum.Enum.RUNNING,
         started_at: new Date(),
         updated_at: new Date(),
       })
@@ -197,7 +187,7 @@ export class DockerSessionsRepository {
       .delete(dockerSessionsTable)
       .where(
         and(
-          eq(dockerSessionsTable.status, "running"),
+          eq(dockerSessionsTable.status, DockerSessionStatusEnum.Enum.RUNNING),
           sql`${dockerSessionsTable.container_id} LIKE 'temp-%'`,
         ),
       );
@@ -205,7 +195,9 @@ export class DockerSessionsRepository {
     return result.rowCount || 0;
   }
 
-  async getRunningSessionsWithServerNames(): Promise<DockerSessionWithServerName[]> {
+  async getRunningSessionsWithServerNames(): Promise<
+    DockerSessionWithServerName[]
+  > {
     return await db
       .select({
         uuid: dockerSessionsTable.uuid,
@@ -229,7 +221,9 @@ export class DockerSessionsRepository {
         mcpServersTable,
         eq(dockerSessionsTable.mcp_server_uuid, mcpServersTable.uuid),
       )
-      .where(eq(dockerSessionsTable.status, "running"));
+      .where(
+        eq(dockerSessionsTable.status, DockerSessionStatusEnum.Enum.RUNNING),
+      );
   }
 }
 

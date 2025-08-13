@@ -1,3 +1,5 @@
+import { DockerSessionStatus } from "@repo/zod-types";
+
 export interface DockerMcpServer {
   containerId: string;
   serverUuid: string;
@@ -18,7 +20,7 @@ export interface DetailedServerStatus extends ServerStatus {
   maxRetries: number;
   lastRetryAt?: Date;
   errorMessage?: string;
-  status: string;
+  status: DockerSessionStatus;
   restartCount?: number;
 }
 
@@ -28,14 +30,14 @@ export interface RetryInfo {
   maxRetries: number;
   lastRetryAt?: Date;
   errorMessage?: string;
-  status: string;
+  status: DockerSessionStatus;
 }
 
 export interface HighRestartContainer {
   serverUuid: string;
   containerId: string;
   restartCount: number;
-  status: string;
+  status: DockerSessionStatus;
 }
 
 export interface SyncResult {

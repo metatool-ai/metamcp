@@ -1,4 +1,4 @@
-import { ServerParameters } from "@repo/zod-types";
+import { DockerSessionStatusEnum, ServerParameters } from "@repo/zod-types";
 import Docker from "dockerode";
 
 import { dockerSessionsRepo } from "../../../db/repositories/docker-sessions.repo.js";
@@ -175,7 +175,7 @@ export class DockerManager {
         wasSynced: false,
         retryCount: 0,
         maxRetries: 3,
-        status: "not_found",
+        status: DockerSessionStatusEnum.Enum.NOT_FOUND,
       };
     }
 
@@ -279,7 +279,7 @@ export class DockerManager {
                   info.serverUuid,
                 );
                 if (session) {
-                  if (session.status !== "error") {
+                  if (session.status !== DockerSessionStatusEnum.Enum.ERROR) {
                     await dockerSessionsRepo.markAsError(
                       session.uuid,
                       `Container has restarted ${info.restartCount} times due to crashes`,

@@ -2,6 +2,13 @@ import { z } from "zod";
 
 export const McpServerTypeEnum = z.enum(["STDIO", "SSE", "STREAMABLE_HTTP"]);
 export const McpServerStatusEnum = z.enum(["ACTIVE", "INACTIVE"]);
+export const DockerSessionStatusEnum = z.enum([
+  "RUNNING",
+  "STOPPED",
+  "ERROR",
+  "REMOVED",
+  "NOT_FOUND",
+]);
 
 // Define the form schema (includes UI-specific fields)
 export const createServerFormSchema = z
@@ -437,3 +444,24 @@ export const DatabaseMcpServerSchema = z.object({
 });
 
 export type DatabaseMcpServer = z.infer<typeof DatabaseMcpServerSchema>;
+export type DockerSessionStatus = z.infer<typeof DockerSessionStatusEnum>;
+
+// Docker Session schema
+export const DockerSessionSchema = z.object({
+  uuid: z.string(),
+  mcp_server_uuid: z.string(),
+  container_id: z.string(),
+  container_name: z.string(),
+  url: z.string(),
+  status: DockerSessionStatusEnum,
+  created_at: z.date(),
+  updated_at: z.date(),
+  started_at: z.date().nullable().optional(),
+  stopped_at: z.date().nullable().optional(),
+  error_message: z.string().nullable().optional(),
+  retry_count: z.number(),
+  last_retry_at: z.date().nullable().optional(),
+  max_retries: z.number(),
+});
+
+export type DockerSession = z.infer<typeof DockerSessionSchema>;

@@ -1,4 +1,4 @@
-import { ServerParameters } from "@repo/zod-types";
+import { DockerSessionStatusEnum, ServerParameters } from "@repo/zod-types";
 import Docker from "dockerode";
 
 import { dockerSessionsRepo } from "../../../db/repositories/docker-sessions.repo.js";
@@ -47,13 +47,13 @@ export class ContainerManager {
     if (existingSession) {
       // If the session is marked as error (e.g., due to high restart count), do not recreate automatically
       // Require explicit manual recovery via retryContainer
-      if (existingSession.status === "error") {
+      if (existingSession.status === DockerSessionStatusEnum.Enum.ERROR) {
         throw new Error(
           `Server ${serverUuid} is in error state and will not be automatically recreated. Last error: ${existingSession.error_message ?? "unknown"}. Use retryContainer to attempt recovery.`,
         );
       }
 
-      if (existingSession.status === "running") {
+      if (existingSession.status === DockerSessionStatusEnum.Enum.RUNNING) {
         // Verify that the container actually exists and is running
         try {
           const existingContainer = this.docker.getContainer(

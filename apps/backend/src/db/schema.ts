@@ -1,6 +1,10 @@
 import { OAuthClientInformation } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { McpServerStatusEnum, McpServerTypeEnum } from "@repo/zod-types";
+import {
+  DockerSessionStatusEnum,
+  McpServerStatusEnum,
+  McpServerTypeEnum,
+} from "@repo/zod-types";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -22,6 +26,11 @@ export const mcpServerTypeEnum = pgEnum(
 export const mcpServerStatusEnum = pgEnum(
   "mcp_server_status",
   McpServerStatusEnum.options,
+);
+
+export const dockerSessionStatusEnum = pgEnum(
+  "docker_session_status",
+  DockerSessionStatusEnum.options,
 );
 
 export const mcpServersTable = pgTable(
@@ -464,7 +473,9 @@ export const dockerSessionsTable = pgTable(
     container_id: text("container_id").notNull().unique(),
     container_name: text("container_name").notNull(),
     url: text("url").notNull(),
-    status: text("status").notNull().default("running"), // running, stopped, error
+    status: dockerSessionStatusEnum("status")
+      .notNull()
+      .default(DockerSessionStatusEnum.Enum.RUNNING),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
