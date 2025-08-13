@@ -113,7 +113,7 @@
     "deleteSuccess": "Endpoint deleted successfully",
     "deleteError": "Failed to delete endpoint",
     "sseUrlCopied": "SSE URL copied to clipboard",
-    "shttpUrlCopied": "SHTTP URL copied to clipboard",
+    "shttpUrlCopied": "Streamable HTTP URL copied to clipboard",
     "openApiUrlCopied": "OpenAPI URL copied to clipboard",
     "openApiSchemaUrlCopied": "OpenAPI Schema URL copied to clipboard",
     "sseUrlWithApiKeyCopied": "SSE URL with API key parameter copied to clipboard",

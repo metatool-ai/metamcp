@@ -145,16 +145,75 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
         return (
           <div className="space-y-1 px-3 py-2">
             <div className="font-medium">{endpoint.name}</div>
-            <div className="text-xs text-muted-foreground">
-              SSE: {getAppUrl()}/metamcp/{endpoint.name}/sse
-              <br />
-              Streamable HTTP: {getAppUrl()}/metamcp/
-              {endpoint.name}
-              /mcp
-              <br />
-              OpenAPI: {getAppUrl()}/metamcp/{endpoint.name}/api
-              <br />
-              Schema: {getAppUrl()}/metamcp/{endpoint.name}/api/openapi.json
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div className="flex items-center gap-2">
+                <span>
+                  SSE: {getAppUrl()}/metamcp/{endpoint.name}/sse
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-2 w-2 p-0 hover:bg-muted"
+                  onClick={() => {
+                    const url = `${getAppUrl()}/metamcp/${endpoint.name}/sse`;
+                    navigator.clipboard.writeText(url);
+                    toast.success(t("endpoints:list.sseUrlCopied"));
+                  }}
+                >
+                  <Copy className="h-2 w-2" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>
+                  Streamable HTTP: {getAppUrl()}/metamcp/{endpoint.name}/mcp
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-2 w-2 p-0 hover:bg-muted"
+                  onClick={() => {
+                    const url = `${getAppUrl()}/metamcp/${endpoint.name}/mcp`;
+                    navigator.clipboard.writeText(url);
+                    toast.success(t("endpoints:list.shttpUrlCopied"));
+                  }}
+                >
+                  <Copy className="h-2 w-2" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>
+                  OpenAPI: {getAppUrl()}/metamcp/{endpoint.name}/api
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-2 w-2 p-0 hover:bg-muted"
+                  onClick={() => {
+                    const url = `${getAppUrl()}/metamcp/${endpoint.name}/api`;
+                    navigator.clipboard.writeText(url);
+                    toast.success(t("endpoints:list.openApiUrlCopied"));
+                  }}
+                >
+                  <Copy className="h-2 w-2" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>
+                  Schema: {getAppUrl()}/metamcp/{endpoint.name}/api/openapi.json
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-2 w-2 p-0 hover:bg-muted"
+                  onClick={() => {
+                    const url = `${getAppUrl()}/metamcp/${endpoint.name}/api/openapi.json`;
+                    navigator.clipboard.writeText(url);
+                    toast.success(t("endpoints:list.openApiSchemaUrlCopied"));
+                  }}
+                >
+                  <Copy className="h-2 w-2" />
+                </Button>
+              </div>
             </div>
           </div>
         );

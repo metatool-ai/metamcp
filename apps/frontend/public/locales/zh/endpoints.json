@@ -113,7 +113,7 @@
     "deleteSuccess": "端点删除成功",
     "deleteError": "删除端点失败",
     "sseUrlCopied": "SSE URL 已复制到剪贴板",
-    "shttpUrlCopied": "SHTTP URL 已复制到剪贴板",
+    "shttpUrlCopied": "流式 HTTP URL 已复制到剪贴板",
     "openApiUrlCopied": "OpenAPI URL 已复制到剪贴板",
     "openApiSchemaUrlCopied": "OpenAPI 架构 URL 已复制到剪贴板",
     "sseUrlWithApiKeyCopied": "带 API 密钥参数的 SSE URL 已复制到剪贴板",
