@@ -19,6 +19,12 @@ export class ContainerManager {
   private healthMonitor: HealthMonitor;
   private runningServers: Map<string, DockerMcpServer> = new Map();
 
+  // Optimization: Track ongoing operations to prevent duplicates
+  private ongoingImagePulls: Map<string, Promise<void>> = new Map();
+  private imageVerificationCache: Set<string> = new Set();
+  private networkInitialized: boolean = false;
+  private networkInitPromise: Promise<void> | null = null;
+
   constructor(
     docker: Docker,
     networkManager: NetworkManager,
@@ -33,60 +39,128 @@ export class ContainerManager {
 
   /**
    * Ensure the required Docker image exists locally, pulling it if necessary
+   * Optimized to prevent multiple simultaneous pulls of the same image
    */
   private async ensureImageExists(imageName: string): Promise<void> {
+    // Check cache first
+    if (this.imageVerificationCache.has(imageName)) {
+      console.log(`Image ${imageName} verified from cache`);
+      return;
+    }
+
     try {
       // Check if image exists locally
       const image = this.docker.getImage(imageName);
       await image.inspect();
       console.log(`Image ${imageName} already exists locally`);
+      this.imageVerificationCache.add(imageName);
+      return;
     } catch {
-      // Image doesn't exist locally, pull it
-      console.log(`Image ${imageName} not found locally, pulling...`);
-      try {
-        console.log(`Starting Docker pull for image: ${imageName}`);
-        const stream = await this.docker.pull(imageName);
+      // Image doesn't exist locally, need to pull it
+      console.log(
+        `Image ${imageName} not found locally, checking if pull is already in progress...`,
+      );
+    }
 
-        // Wait for the pull to complete
-        await new Promise<void>((resolve, reject) => {
-          this.docker.modem.followProgress(stream, (err: any, output: any) => {
-            if (err) {
-              console.error(`Docker pull failed for ${imageName}:`, err);
-              reject(err);
-            } else {
-              if (output && output.length > 0) {
-                const lastOutput = output[output.length - 1];
-                if (lastOutput && lastOutput.status) {
-                  console.log(`Docker pull progress: ${lastOutput.status}`);
-                }
+    // If there's already a pull in progress, wait for it
+    if (this.ongoingImagePulls.has(imageName)) {
+      console.log(
+        `Image pull already in progress for ${imageName}, waiting for completion...`,
+      );
+      await this.ongoingImagePulls.get(imageName);
+
+      // After waiting, check if the image is now available
+      if (this.imageVerificationCache.has(imageName)) {
+        console.log(
+          `Image ${imageName} now available after waiting for existing pull`,
+        );
+        return;
+      }
+    }
+
+    // Start a new pull operation
+    console.log(`Starting Docker pull for image: ${imageName}`);
+    const pullPromise = this.performImagePull(imageName);
+    this.ongoingImagePulls.set(imageName, pullPromise);
+
+    try {
+      await pullPromise;
+    } finally {
+      // Clear the ongoing pull reference
+      this.ongoingImagePulls.delete(imageName);
+    }
+  }
+
+  /**
+   * Perform the actual Docker image pull operation
+   */
+  private async performImagePull(imageName: string): Promise<void> {
+    try {
+      const stream = await this.docker.pull(imageName);
+
+      // Wait for the pull to complete
+      await new Promise<void>((resolve, reject) => {
+        this.docker.modem.followProgress(stream, (err: any, output: any) => {
+          if (err) {
+            console.error(`Docker pull failed for ${imageName}:`, err);
+            reject(err);
+          } else {
+            if (output && output.length > 0) {
+              const lastOutput = output[output.length - 1];
+              if (lastOutput && lastOutput.status) {
+                console.log(`Docker pull progress: ${lastOutput.status}`);
               }
-              resolve();
             }
-          });
+            resolve();
+          }
         });
+      });
 
-        console.log(`Successfully pulled image ${imageName}`);
+      console.log(`Successfully pulled image ${imageName}`);
 
-        // Verify the image was pulled successfully
-        try {
-          const image = this.docker.getImage(imageName);
-          await image.inspect();
-          console.log(`Verified image ${imageName} is now available locally`);
-        } catch (verifyError) {
-          console.error(
-            `Failed to verify pulled image ${imageName}:`,
-            verifyError,
-          );
-          throw new Error(
-            `Image pull appeared successful but verification failed: ${verifyError}`,
-          );
-        }
-      } catch (pullError) {
-        console.error(`Failed to pull image ${imageName}:`, pullError);
+      // Verify the image was pulled successfully
+      try {
+        const image = this.docker.getImage(imageName);
+        await image.inspect();
+        console.log(`Verified image ${imageName} is now available locally`);
+        this.imageVerificationCache.add(imageName);
+      } catch (verifyError) {
+        console.error(
+          `Failed to verify pulled image ${imageName}:`,
+          verifyError,
+        );
         throw new Error(
-          `Failed to pull Docker image ${imageName}: ${pullError}`,
+          `Image pull appeared successful but verification failed: ${verifyError}`,
         );
       }
+    } catch (pullError) {
+      console.error(`Failed to pull image ${imageName}:`, pullError);
+      throw new Error(`Failed to pull Docker image ${imageName}: ${pullError}`);
+    }
+  }
+
+  /**
+   * Ensure the internal network exists, optimized to prevent multiple initializations
+   */
+  private async ensureNetworkOnce(): Promise<void> {
+    if (this.networkInitialized) {
+      return;
+    }
+
+    if (this.networkInitPromise) {
+      // Network initialization already in progress, wait for it
+      await this.networkInitPromise;
+      return;
+    }
+
+    // Start network initialization
+    this.networkInitPromise = this.networkManager.ensureNetworkExists();
+
+    try {
+      await this.networkInitPromise;
+      this.networkInitialized = true;
+    } finally {
+      this.networkInitPromise = null;
     }
   }
 
@@ -118,13 +192,16 @@ export class ContainerManager {
   async createContainer(
     serverUuid: string,
     serverParams: ServerParameters,
+    skipImagePreparation: boolean = false,
   ): Promise<DockerMcpServer> {
-    // Ensure the internal network exists
-    await this.networkManager.ensureNetworkExists();
+    // Ensure the internal network exists (optimized to run only once)
+    await this.ensureNetworkOnce();
 
-    // Get the Docker image name and ensure it exists
-    const imageName = await this.getMcpProxyImageName();
-    await this.ensureImageExists(imageName);
+    // Get the Docker image name and ensure it exists (unless skipped)
+    if (!skipImagePreparation) {
+      const imageName = await this.getMcpProxyImageName();
+      await this.ensureImageExists(imageName);
+    }
 
     // Check if already running in database
     let existingSession =
@@ -238,6 +315,7 @@ export class ContainerManager {
     }
 
     // Create container configuration
+    const imageName = await this.getMcpProxyImageName();
     const containerConfig: ContainerConfig = {
       Image: imageName,
       name: containerName,
@@ -432,12 +510,25 @@ export class ContainerManager {
 
     console.log(`Found ${stdioServers.length} stdio servers to initialize`);
 
+    if (stdioServers.length === 0) {
+      return;
+    }
+
+    // Ensure network exists once for all containers
+    await this.ensureNetworkOnce();
+
+    // Prepare Docker image once for all containers
+    const imageName = await this.getMcpProxyImageName();
+    console.log(`Preparing Docker image ${imageName} for all containers...`);
+    await this.ensureImageExists(imageName);
+    console.log(`Docker image ${imageName} ready for all containers`);
+
     const initPromises = stdioServers.map(async ([uuid, params]) => {
       try {
         console.log(
           `Initializing container for server ${uuid} (${params.name})`,
         );
-        const result = await this.createContainer(uuid, params);
+        const result = await this.createContainer(uuid, params, true); // Pass true to skip image preparation
         console.log(
           `✅ Successfully initialized container for server ${uuid}:`,
           result,
@@ -583,12 +674,23 @@ export class ContainerManager {
   }
 
   /**
+   * Clear the image verification cache (useful when updating images)
+   */
+  private clearImageVerificationCache(): void {
+    this.imageVerificationCache.clear();
+    console.log("Image verification cache cleared");
+  }
+
+  /**
    * Update the Docker image configuration and pull the new image if needed
    */
   async updateDockerImage(imageName: string): Promise<void> {
     try {
       // Set the new image configuration
       await configService.setDockerMcpProxyImage(imageName);
+
+      // Clear the cache since we're updating the image
+      this.clearImageVerificationCache();
 
       // Pull the new image to ensure it's available
       await this.ensureImageExists(imageName);
@@ -598,5 +700,33 @@ export class ContainerManager {
       console.error(`Failed to update Docker image to ${imageName}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Reset the optimization state (useful for testing or when manager needs to be reset)
+   */
+  resetOptimizationState(): void {
+    this.ongoingImagePulls.clear();
+    this.imageVerificationCache.clear();
+    this.networkInitialized = false;
+    this.networkInitPromise = null;
+    console.log("Container manager optimization state reset");
+  }
+
+  /**
+   * Get optimization statistics for monitoring
+   */
+  getOptimizationStats(): {
+    cachedImages: number;
+    networkInitialized: boolean;
+    ongoingImagePulls: number;
+    ongoingImagePullNames: string[];
+  } {
+    return {
+      cachedImages: this.imageVerificationCache.size,
+      networkInitialized: this.networkInitialized,
+      ongoingImagePulls: this.ongoingImagePulls.size,
+      ongoingImagePullNames: Array.from(this.ongoingImagePulls.keys()),
+    };
   }
 }
