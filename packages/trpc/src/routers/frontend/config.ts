@@ -25,6 +25,10 @@ export const createConfigRouter = (implementations: {
   getAuthProviders: () => Promise<
     Array<{ id: string; name: string; enabled: boolean }>
   >;
+  getDockerMcpProxyImage: () => Promise<string | undefined>;
+  setDockerMcpProxyImage: (input: {
+    imageName: string;
+  }) => Promise<{ success: boolean }>;
 }) =>
   router({
     getSignupDisabled: publicProcedure.query(async () => {
@@ -80,4 +84,14 @@ export const createConfigRouter = (implementations: {
     getAuthProviders: publicProcedure.query(async () => {
       return await implementations.getAuthProviders();
     }),
+
+    getDockerMcpProxyImage: publicProcedure.query(async () => {
+      return await implementations.getDockerMcpProxyImage();
+    }),
+
+    setDockerMcpProxyImage: protectedProcedure
+      .input(z.object({ imageName: z.string().min(1) }))
+      .mutation(async ({ input }) => {
+        return await implementations.setDockerMcpProxyImage(input);
+      }),
   });

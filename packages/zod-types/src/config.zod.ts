@@ -6,6 +6,7 @@ export const ConfigKeyEnum = z.enum([
   "MCP_RESET_TIMEOUT_ON_PROGRESS",
   "MCP_TIMEOUT",
   "MCP_MAX_TOTAL_TIMEOUT",
+  "DOCKER_MCP_PROXY_IMAGE",
 ]);
 
 // Config schema

@@ -2,6 +2,7 @@ import { DockerSessionStatusEnum, ServerParameters } from "@repo/zod-types";
 import Docker from "dockerode";
 
 import { dockerSessionsRepo } from "../../../db/repositories/docker-sessions.repo.js";
+import { configService } from "../../config.service.js";
 import { DockerErrorUtils } from "./error-utils.js";
 import { HealthMonitor } from "./health-monitor.js";
 import { NetworkManager } from "./network-manager.js";
@@ -31,6 +32,87 @@ export class ContainerManager {
   }
 
   /**
+   * Ensure the required Docker image exists locally, pulling it if necessary
+   */
+  private async ensureImageExists(imageName: string): Promise<void> {
+    try {
+      // Check if image exists locally
+      const image = this.docker.getImage(imageName);
+      await image.inspect();
+      console.log(`Image ${imageName} already exists locally`);
+    } catch {
+      // Image doesn't exist locally, pull it
+      console.log(`Image ${imageName} not found locally, pulling...`);
+      try {
+        console.log(`Starting Docker pull for image: ${imageName}`);
+        const stream = await this.docker.pull(imageName);
+
+        // Wait for the pull to complete
+        await new Promise<void>((resolve, reject) => {
+          this.docker.modem.followProgress(stream, (err: any, output: any) => {
+            if (err) {
+              console.error(`Docker pull failed for ${imageName}:`, err);
+              reject(err);
+            } else {
+              if (output && output.length > 0) {
+                const lastOutput = output[output.length - 1];
+                if (lastOutput && lastOutput.status) {
+                  console.log(`Docker pull progress: ${lastOutput.status}`);
+                }
+              }
+              resolve();
+            }
+          });
+        });
+
+        console.log(`Successfully pulled image ${imageName}`);
+
+        // Verify the image was pulled successfully
+        try {
+          const image = this.docker.getImage(imageName);
+          await image.inspect();
+          console.log(`Verified image ${imageName} is now available locally`);
+        } catch (verifyError) {
+          console.error(
+            `Failed to verify pulled image ${imageName}:`,
+            verifyError,
+          );
+          throw new Error(
+            `Image pull appeared successful but verification failed: ${verifyError}`,
+          );
+        }
+      } catch (pullError) {
+        console.error(`Failed to pull image ${imageName}:`, pullError);
+        throw new Error(
+          `Failed to pull Docker image ${imageName}: ${pullError}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Get the Docker image name for MCP proxy, with fallback to default
+   */
+  private async getMcpProxyImageName(): Promise<string> {
+    try {
+      const imageName = await configService.getDockerMcpProxyImage();
+      if (imageName) {
+        console.log(`Using Docker image: ${imageName}`);
+        return imageName;
+      }
+    } catch (error) {
+      console.warn(
+        "Failed to get configured Docker image, using default:",
+        error,
+      );
+    }
+
+    const defaultImage = "ghcr.io/metatool-ai/mcp-proxy:latest";
+    console.log(`Using default Docker image: ${defaultImage}`);
+    return defaultImage;
+  }
+
+  /**
    * Create a Docker container for an MCP server with retry logic
    */
   async createContainer(
@@ -39,6 +121,10 @@ export class ContainerManager {
   ): Promise<DockerMcpServer> {
     // Ensure the internal network exists
     await this.networkManager.ensureNetworkExists();
+
+    // Get the Docker image name and ensure it exists
+    const imageName = await this.getMcpProxyImageName();
+    await this.ensureImageExists(imageName);
 
     // Check if already running in database
     let existingSession =
@@ -153,7 +239,7 @@ export class ContainerManager {
 
     // Create container configuration
     const containerConfig: ContainerConfig = {
-      Image: "ghcr.io/metatool-ai/mcp-proxy:latest",
+      Image: imageName,
       name: containerName,
       Env: [
         `MCP_SERVER_COMMAND=${serverParams.command || ""}`,
@@ -472,6 +558,45 @@ export class ContainerManager {
         );
       }
       return [];
+    }
+  }
+
+  /**
+   * Check if a Docker image exists locally without pulling it
+   */
+  async checkImageExists(imageName: string): Promise<boolean> {
+    try {
+      const image = this.docker.getImage(imageName);
+      await image.inspect();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get the current Docker image configuration
+   */
+  async getCurrentDockerImage(): Promise<string> {
+    const imageName = await configService.getDockerMcpProxyImage();
+    return imageName || "ghcr.io/metatool-ai/mcp-proxy:latest";
+  }
+
+  /**
+   * Update the Docker image configuration and pull the new image if needed
+   */
+  async updateDockerImage(imageName: string): Promise<void> {
+    try {
+      // Set the new image configuration
+      await configService.setDockerMcpProxyImage(imageName);
+
+      // Pull the new image to ensure it's available
+      await this.ensureImageExists(imageName);
+
+      console.log(`Successfully updated Docker image to: ${imageName}`);
+    } catch (error) {
+      console.error(`Failed to update Docker image to ${imageName}:`, error);
+      throw error;
     }
   }
 }

@@ -26,6 +26,9 @@ export default function SettingsPage() {
   const [mcpResetTimeoutOnProgress, setMcpResetTimeoutOnProgress] =
     useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [dockerImage, setDockerImage] = useState("");
+  const [dockerImageInput, setDockerImageInput] = useState("");
+  const [isDockerImageDirty, setIsDockerImageDirty] = useState(false);
 
   // Form setup
   const form = useForm<SettingsFormData>({
@@ -67,6 +70,12 @@ export default function SettingsPage() {
     refetch: refetchMcpMaxTotal,
   } = trpc.frontend.config.getMcpMaxTotalTimeout.useQuery();
 
+  const {
+    data: dockerImageData,
+    isLoading: dockerImageLoading,
+    refetch: refetchDockerImage,
+  } = trpc.frontend.config.getDockerMcpProxyImage.useQuery();
+
   // Mutations
   const setSignupDisabledMutation =
     trpc.frontend.config.setSignupDisabled.useMutation({
@@ -97,6 +106,15 @@ export default function SettingsPage() {
       },
     });
 
+  const setDockerImageMutation =
+    trpc.frontend.config.setDockerMcpProxyImage.useMutation({
+      onSuccess: () => {
+        refetchDockerImage();
+        setIsDockerImageDirty(false);
+        toast.success(t("settings:dockerImageUpdatedSuccess"));
+      },
+    });
+
   // Update local state when data is loaded
   useEffect(() => {
     if (signupDisabled !== undefined) {
@@ -121,6 +139,13 @@ export default function SettingsPage() {
       form.setValue("mcpMaxTotalTimeout", mcpMaxTotalTimeoutData);
     }
   }, [mcpMaxTotalTimeoutData, form]);
+
+  useEffect(() => {
+    if (dockerImageData !== undefined) {
+      setDockerImage(dockerImageData);
+      setDockerImageInput(dockerImageData);
+    }
+  }, [dockerImageData]);
 
   // Reset form with loaded data to establish proper baseline for change detection
   useEffect(() => {
@@ -195,8 +220,29 @@ export default function SettingsPage() {
     setHasUnsavedChanges(isDirty);
   }, [isDirty]);
 
+  // Check for Docker image changes
+  useEffect(() => {
+    setIsDockerImageDirty(dockerImageInput !== dockerImage);
+  }, [dockerImageInput, dockerImage]);
+
+  // Handle Docker image update
+  const handleDockerImageUpdate = async () => {
+    try {
+      await setDockerImageMutation.mutateAsync({ imageName: dockerImageInput });
+    } catch (error) {
+      console.error("Failed to update Docker image:", error);
+      toast.error(t("settings:dockerImageUpdateError"), {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const isLoading =
-    signupLoading || mcpResetLoading || mcpTimeoutLoading || mcpMaxTotalLoading;
+    signupLoading ||
+    mcpResetLoading ||
+    mcpTimeoutLoading ||
+    mcpMaxTotalLoading ||
+    dockerImageLoading;
 
   if (isLoading) {
     return (
@@ -352,6 +398,53 @@ export default function SettingsPage() {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("settings:dockerSettings")}</CardTitle>
+            <CardDescription>
+              {t("settings:dockerSettingsDescription")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="docker-image" className="text-base">
+                {t("settings:dockerImage")}
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                {t("settings:dockerImageDescription")}
+              </p>
+              <div className="flex items-center space-x-2">
+                <Input
+                  id="docker-image"
+                  type="text"
+                  value={dockerImageInput}
+                  onChange={(e) => setDockerImageInput(e.target.value)}
+                  placeholder="ghcr.io/metatool-ai/mcp-proxy:latest"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  onClick={handleDockerImageUpdate}
+                  disabled={
+                    !isDockerImageDirty || setDockerImageMutation.isPending
+                  }
+                  className="min-w-[100px]"
+                >
+                  {setDockerImageMutation.isPending
+                    ? t("settings:updating")
+                    : t("settings:update")}
+                </Button>
+              </div>
+              {isDockerImageDirty && (
+                <div className="text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
+                  {t("settings:dockerImageUnsavedChanges")}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </form>
