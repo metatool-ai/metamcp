@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "clean": "./scripts/cleanup-managed-containers.sh",
     "dev": "dotenv -e .env.local turbo run dev",
     "dev:docker": "./scripts/dev-docker.sh",
     "lint": "turbo run lint",
