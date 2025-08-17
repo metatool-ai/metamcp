@@ -50,21 +50,26 @@ export default function NamespacesPage() {
 
   // tRPC mutation for creating namespace
   const createNamespaceMutation = trpc.frontend.namespaces.create.useMutation({
-    onSuccess: (_data) => {
-      toast.success(t("namespaces:namespaceCreated"), {
-        description: t("namespaces:namespaceCreatedDescription", {
-          name: form.getValues().name,
-        }),
-      });
-      setCreateOpen(false);
-      form.reset({
-        name: "",
-        description: "",
-        user_id: undefined, // Default to "For myself" (Private)
-      });
-      setSelectedServerUuids([]);
-      // Invalidate and refetch the namespace list
-      utils.frontend.namespaces.list.invalidate();
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(t("namespaces:namespaceCreated"), {
+          description: t("namespaces:namespaceCreatedDescription", {
+            name: form.getValues().name,
+          }),
+        });
+        setCreateOpen(false);
+        form.reset({
+          name: "",
+          description: "",
+          user_id: undefined, // Default to "For myself" (Private)
+        });
+        setSelectedServerUuids([]);
+        // Invalidate and refetch the namespace list
+        utils.frontend.namespaces.list.invalidate();
+      } else {
+        // Handle backend error response
+        toast.error(data.message || t("namespaces:createNamespaceError"));
+      }
     },
     onError: (error) => {
       console.error("Error creating namespace:", error);

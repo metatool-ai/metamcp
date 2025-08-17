@@ -83,13 +83,18 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
 
   // Delete mutation
   const deleteEndpointMutation = trpc.frontend.endpoints.delete.useMutation({
-    onSuccess: () => {
-      toast.success(t("endpoints:list.deleteSuccess"));
-      utils.frontend.endpoints.list.invalidate();
-      utils.frontend.mcpServers.list.invalidate();
-      setDeleteDialogOpen(false);
-      setEndpointToDelete(null);
-      onRefresh?.();
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(t("endpoints:list.deleteSuccess"));
+        utils.frontend.endpoints.list.invalidate();
+        utils.frontend.mcpServers.list.invalidate();
+        setDeleteDialogOpen(false);
+        setEndpointToDelete(null);
+        onRefresh?.();
+      } else {
+        // Handle backend error response
+        toast.error(data.message || t("endpoints:list.deleteError"));
+      }
     },
     onError: (error) => {
       toast.error(t("endpoints:list.deleteError"), {

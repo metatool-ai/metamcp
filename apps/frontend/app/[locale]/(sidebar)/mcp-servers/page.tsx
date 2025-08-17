@@ -66,12 +66,17 @@ export default function McpServersPage() {
   const utils = trpc.useUtils();
 
   const createMutation = trpc.frontend.mcpServers.create.useMutation({
-    onSuccess: () => {
-      // Invalidate and refetch the server list
-      utils.frontend.mcpServers.list.invalidate();
-      setIsDialogOpen(false);
-      form.reset();
-      toast.success(t("mcp-servers:serverCreated"));
+    onSuccess: (data) => {
+      if (data.success) {
+        // Invalidate and refetch the server list
+        utils.frontend.mcpServers.list.invalidate();
+        setIsDialogOpen(false);
+        form.reset();
+        toast.success(t("mcp-servers:serverCreated"));
+      } else {
+        // Handle backend error response
+        toast.error(data.message || t("mcp-servers:createError"));
+      }
     },
     onError: (error) => {
       toast.error(t("mcp-servers:createError") + ": " + error.message);

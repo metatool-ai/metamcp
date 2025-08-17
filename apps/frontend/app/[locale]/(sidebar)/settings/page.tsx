@@ -79,30 +79,46 @@ export default function SettingsPage() {
   // Mutations
   const setSignupDisabledMutation =
     trpc.frontend.config.setSignupDisabled.useMutation({
-      onSuccess: () => {
-        refetchSignup();
+      onSuccess: (data) => {
+        if (data.success) {
+          refetchSignup();
+        } else {
+          console.error("Failed to update signup setting");
+        }
       },
     });
 
   const setMcpResetTimeoutOnProgressMutation =
     trpc.frontend.config.setMcpResetTimeoutOnProgress.useMutation({
-      onSuccess: () => {
-        refetchMcpReset();
+      onSuccess: (data) => {
+        if (data.success) {
+          refetchMcpReset();
+        } else {
+          console.error("Failed to update MCP reset timeout setting");
+        }
       },
     });
 
   const setMcpTimeoutMutation = trpc.frontend.config.setMcpTimeout.useMutation({
-    onSuccess: () => {
-      refetchMcpTimeout();
-      setHasUnsavedChanges(false);
+    onSuccess: (data) => {
+      if (data.success) {
+        refetchMcpTimeout();
+        setHasUnsavedChanges(false);
+      } else {
+        console.error("Failed to update MCP timeout setting");
+      }
     },
   });
 
   const setMcpMaxTotalTimeoutMutation =
     trpc.frontend.config.setMcpMaxTotalTimeout.useMutation({
-      onSuccess: () => {
-        refetchMcpMaxTotal();
-        setHasUnsavedChanges(false);
+      onSuccess: (data) => {
+        if (data.success) {
+          refetchMcpMaxTotal();
+          setHasUnsavedChanges(false);
+        } else {
+          console.error("Failed to update MCP max total timeout setting");
+        }
       },
     });
 

@@ -60,9 +60,14 @@ export default function ApiKeysPage() {
   });
 
   const deleteMutation = trpc.apiKeys.delete.useMutation({
-    onSuccess: () => {
-      refetch();
-      toast.success(t("api-keys:apiKeyDeleted"));
+    onSuccess: (data) => {
+      if (data.success) {
+        refetch();
+        toast.success(t("api-keys:apiKeyDeleted"));
+      } else {
+        // Handle backend error response
+        toast.error(data.message || t("api-keys:apiKeyDeleted"));
+      }
     },
     onError: (error) => {
       toast.error(error.message);
