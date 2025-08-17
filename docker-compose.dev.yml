@@ -59,15 +59,6 @@ services:
     networks:
       - metamcp-network
       - metamcp-internal
-    # Add privileged mode for Docker operations
-    privileged: true
-    # Add security options for Docker socket access
-    security_opt:
-      - seccomp:unconfined
-    # Add capabilities for Docker operations
-    cap_add:
-      - SYS_ADMIN
-      - NET_ADMIN
     # Use init system for proper signal handling
     init: true
 
