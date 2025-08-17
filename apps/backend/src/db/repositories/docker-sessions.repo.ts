@@ -46,6 +46,38 @@ export class DockerSessionsRepository {
     return session || null;
   }
 
+  async getSessionByMcpServerWithServerName(
+    mcp_server_uuid: string,
+  ): Promise<DockerSessionWithServerName | null> {
+    const [session] = await db
+      .select({
+        uuid: dockerSessionsTable.uuid,
+        mcp_server_uuid: dockerSessionsTable.mcp_server_uuid,
+        container_id: dockerSessionsTable.container_id,
+        container_name: dockerSessionsTable.container_name,
+        url: dockerSessionsTable.url,
+        status: dockerSessionsTable.status,
+        created_at: dockerSessionsTable.created_at,
+        updated_at: dockerSessionsTable.updated_at,
+        started_at: dockerSessionsTable.started_at,
+        stopped_at: dockerSessionsTable.stopped_at,
+        error_message: dockerSessionsTable.error_message,
+        retry_count: dockerSessionsTable.retry_count,
+        last_retry_at: dockerSessionsTable.last_retry_at,
+        max_retries: dockerSessionsTable.max_retries,
+        serverName: mcpServersTable.name,
+      })
+      .from(dockerSessionsTable)
+      .innerJoin(
+        mcpServersTable,
+        eq(dockerSessionsTable.mcp_server_uuid, mcpServersTable.uuid),
+      )
+      .where(eq(dockerSessionsTable.mcp_server_uuid, mcp_server_uuid))
+      .limit(1);
+
+    return session || null;
+  }
+
   async stopSession(uuid: string): Promise<DockerSession | null> {
     const [session] = await db
       .update(dockerSessionsTable)

@@ -1,4 +1,4 @@
-import { DockerSessionStatusEnum, ServerParameters } from "@repo/zod-types";
+import { ServerParameters } from "@repo/zod-types";
 import Docker from "dockerode";
 
 import { dockerSessionsRepo } from "../../../db/repositories/docker-sessions.repo.js";
@@ -187,37 +187,36 @@ export class ContainerManager {
   }
 
   /**
-   * Create a Docker container for an MCP server with retry logic
+   * Create a Docker container for an MCP server
    */
   async createContainer(
     serverUuid: string,
     serverParams: ServerParameters,
-    skipImagePreparation: boolean = false,
+    skipImagePreparation = false,
   ): Promise<DockerMcpServer> {
     // Ensure the internal network exists (optimized to run only once)
     await this.ensureNetworkOnce();
 
-    // Get the Docker image name and ensure it exists (unless skipped)
-    if (!skipImagePreparation) {
-      const imageName = await this.getMcpProxyImageName();
-      await this.ensureImageExists(imageName);
+    // Check if we already have a running server for this UUID
+    const existingServer = this.runningServers.get(serverUuid);
+    if (existingServer) {
+      console.log(
+        `Server ${serverUuid} already running in container:`,
+        existingServer.containerName,
+      );
+      return existingServer;
     }
 
-    // Check if already running in database
+    // Get or create a Docker session for this server
     let existingSession =
-      await dockerSessionsRepo.getSessionByMcpServer(serverUuid);
+      await dockerSessionsRepo.getSessionByMcpServerWithServerName(serverUuid);
 
     if (existingSession) {
-      // If the session is marked as error (e.g., due to high restart count), do not recreate automatically
-      // Require explicit manual recovery via retryContainer
-      if (existingSession.status === DockerSessionStatusEnum.Enum.ERROR) {
-        throw new Error(
-          `Server ${serverUuid} is in error state and will not be automatically recreated. Last error: ${existingSession.error_message ?? "unknown"}. Use retryContainer to attempt recovery.`,
-        );
-      }
-
-      if (existingSession.status === DockerSessionStatusEnum.Enum.RUNNING) {
-        // Verify that the container actually exists and is running
+      if (
+        existingSession.container_id &&
+        existingSession.container_id !== "temp"
+      ) {
+        // Check if the existing container is still running
         try {
           const existingContainer = this.docker.getContainer(
             existingSession.container_id,
@@ -226,26 +225,37 @@ export class ContainerManager {
 
           if (containerInfo.State.Running) {
             // Container exists and is running, reuse it
+            const internalUrl = `http://${containerInfo.Name.replace(/^\//, "")}:3000/sse`;
+
             const existingServer: DockerMcpServer = {
-              containerId: existingSession.container_id,
+              containerId: containerInfo.Id,
               serverUuid,
-              containerName: existingSession.container_name,
-              url: existingSession.url,
-              serverName:
-                serverParams.name || `Server ${serverUuid.slice(0, 8)}`,
+              containerName: containerInfo.Name.replace(/^\//, ""),
+              url: internalUrl,
+              serverName: existingSession.serverName || `temp-${serverUuid}`,
             };
+
             this.runningServers.set(serverUuid, existingServer);
             console.log(
-              `Reusing existing running container for server ${serverUuid}:`,
+              `Reusing existing container for server ${serverUuid}:`,
               existingServer,
             );
             return existingServer;
           } else {
-            // Container exists but not running, mark session as stopped
-            console.log(
-              `Container for server ${serverUuid} exists but is not running, marking session as stopped`,
-            );
-            await dockerSessionsRepo.stopSession(existingSession.uuid);
+            // Container exists but not running, remove it
+            try {
+              await existingContainer.remove();
+            } catch (error) {
+              if (DockerErrorUtils.isDockerContainerNotFoundError(error)) {
+                console.info(
+                  `Container ${existingSession.container_id} already removed when attempting cleanup`,
+                );
+              } else {
+                console.warn(
+                  `Could not remove existing stopped container ${existingSession.container_id}: ${DockerErrorUtils.dockerErrorSummary(error)}`,
+                );
+              }
+            }
           }
         } catch {
           // Container doesn't exist, mark session as stopped
@@ -258,39 +268,143 @@ export class ContainerManager {
     } else {
       // Create a temporary session if none exists
       console.log(`Creating temporary session for server ${serverUuid}`);
-      existingSession = await dockerSessionsRepo.createSession({
+      const tempSession = await dockerSessionsRepo.createSession({
         mcp_server_uuid: serverUuid,
         container_id: `temp-${serverUuid}-${Date.now()}`,
         container_name: `temp-${serverUuid}`,
         url: `temp://${serverUuid}`,
       });
+
+      // Create a temporary session with server name for consistency
+      existingSession = {
+        ...tempSession,
+        serverName: `temp-${serverUuid}`,
+      };
     }
 
-    const containerName = `metamcp-stdio-server-${serverUuid}`;
+    // Get the server name for human-readable container naming
+    const serverName = serverParams.name || `temp-${serverUuid}`;
 
-    // Check if container already exists
+    // Sanitize server name for Docker container naming (only allow alphanumeric, hyphens, underscores)
+    const sanitizedServerName = serverName.replace(/[^a-zA-Z0-9_-]/g, "-");
+
+    // Create human-readable container name
+    const containerName = `mcp-stdio-${sanitizedServerName}`;
+
+    // Check if container already exists by UUID in labels
+    try {
+      const containers = await this.docker.listContainers({ all: true });
+      const existingContainerInfo = containers.find(
+        (container) =>
+          container.Labels &&
+          container.Labels["metamcp.server.uuid"] === serverUuid,
+      );
+
+      if (existingContainerInfo) {
+        // Container exists with this UUID, reuse it
+        const container = this.docker.getContainer(existingContainerInfo.Id);
+        const containerInfo = await container.inspect();
+
+        if (containerInfo.State.Running) {
+          // Container exists and is running, reuse it
+          const internalUrl = `http://${containerInfo.Name.replace(/^\//, "")}:3000/sse`;
+
+          const existingServer: DockerMcpServer = {
+            containerId: containerInfo.Id,
+            serverUuid,
+            containerName: containerInfo.Name.replace(/^\//, ""),
+            url: internalUrl,
+            serverName: serverName,
+          };
+
+          this.runningServers.set(serverUuid, existingServer);
+          console.log(
+            `Reusing existing container for server ${serverUuid}:`,
+            existingServer,
+          );
+          return existingServer;
+        } else {
+          // Container exists but not running, remove it
+          try {
+            await container.remove();
+          } catch (error) {
+            if (DockerErrorUtils.isDockerContainerNotFoundError(error)) {
+              console.info(
+                `Container ${existingContainerInfo.Id} already removed when attempting cleanup`,
+              );
+            } else {
+              console.warn(
+                `Could not remove existing stopped container ${existingContainerInfo.Id}: ${DockerErrorUtils.dockerErrorSummary(error)}`,
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`Error checking for existing containers by UUID: ${error}`);
+    }
+
+    // Check if container name already exists (to avoid conflicts)
     try {
       const existingContainer = this.docker.getContainer(containerName);
       const containerInfo = await existingContainer.inspect();
 
       if (containerInfo.State.Running) {
-        // Container exists and is running, reuse it
-        const internalUrl = `http://${containerName}:3000/sse`;
+        // Container with this name exists and is running, check if it's the same server
+        if (
+          containerInfo.Config.Labels &&
+          containerInfo.Config.Labels["metamcp.server.uuid"] === serverUuid
+        ) {
+          // Same server, reuse it
+          const internalUrl = `http://${containerName}:3000/sse`;
 
-        const existingServer: DockerMcpServer = {
-          containerId: containerInfo.Id,
-          serverUuid,
-          containerName,
-          url: internalUrl,
-          serverName: `temp-${serverUuid}`, // Placeholder, will be updated by DB
-        };
+          const existingServer: DockerMcpServer = {
+            containerId: containerInfo.Id,
+            serverUuid,
+            containerName,
+            url: internalUrl,
+            serverName: serverName,
+          };
 
-        this.runningServers.set(serverUuid, existingServer);
-        console.log(
-          `Reusing existing container for server ${serverUuid}:`,
-          existingServer,
-        );
-        return existingServer;
+          this.runningServers.set(serverUuid, existingServer);
+          console.log(
+            `Reusing existing container for server ${serverUuid}:`,
+            existingServer,
+          );
+          return existingServer;
+        } else {
+          // Different server with same name, append UUID to make it unique
+          const uniqueContainerName = `${containerName}-${serverUuid.substring(0, 8)}`;
+          console.log(
+            `Container name conflict detected, using unique name: ${uniqueContainerName}`,
+          );
+
+          // Check if the unique name also exists
+          try {
+            const uniqueContainer =
+              this.docker.getContainer(uniqueContainerName);
+            await uniqueContainer.inspect();
+            // If we get here, the unique name also exists, use full UUID
+            const finalContainerName = `${containerName}-${serverUuid}`;
+            console.log(
+              `Using full UUID for container name: ${finalContainerName}`,
+            );
+            return await this.createContainerWithName(
+              serverUuid,
+              serverParams,
+              finalContainerName,
+              skipImagePreparation,
+            );
+          } catch {
+            // Unique name is available, use it
+            return await this.createContainerWithName(
+              serverUuid,
+              serverParams,
+              uniqueContainerName,
+              skipImagePreparation,
+            );
+          }
+        }
       } else {
         // Container exists but not running, remove it
         try {
@@ -310,8 +424,32 @@ export class ContainerManager {
     } catch {
       // Container doesn't exist, will create new one
       console.log(
-        `No existing container found for server ${serverUuid}, creating new one`,
+        `No existing container found for server ${serverUuid}, creating new one with name: ${containerName}`,
       );
+    }
+
+    // Create container with the sanitized name
+    return await this.createContainerWithName(
+      serverUuid,
+      serverParams,
+      containerName,
+      skipImagePreparation,
+    );
+  }
+
+  /**
+   * Helper method to create a container with a specific name
+   */
+  private async createContainerWithName(
+    serverUuid: string,
+    serverParams: ServerParameters,
+    containerName: string,
+    skipImagePreparation = false,
+  ): Promise<DockerMcpServer> {
+    // Ensure the required Docker image exists locally, pulling it if necessary
+    if (!skipImagePreparation) {
+      const imageName = await this.getMcpProxyImageName();
+      await this.ensureImageExists(imageName);
     }
 
     // Create container configuration
@@ -337,6 +475,7 @@ export class ContainerManager {
         "metamcp.server.uuid": serverUuid,
         "metamcp.server.type": "stdio",
         "metamcp.managed": "true",
+        "metamcp.server.name": serverParams.name || `temp-${serverUuid}`,
       },
     };
 
@@ -383,7 +522,7 @@ export class ContainerManager {
         serverUuid,
         containerName,
         url: internalUrl,
-        serverName: `temp-${serverUuid}`, // Placeholder, will be updated by DB
+        serverName: serverParams.name || `temp-${serverUuid}`,
       };
 
       console.log(`Created Docker container for server ${serverUuid}:`, {

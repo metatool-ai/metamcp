@@ -35,7 +35,8 @@ export const transformDockerUrl = (url: string): string => {
  */
 export const handleDockerContainerUrl = (url: string): string => {
   // If the URL is already an internal container URL (contains container name), use it as-is
-  if (url.includes("metamcp-stdio-server-")) {
+  // Handle both old naming convention (metamcp-stdio-server-) and new naming convention (mcp-stdio-)
+  if (url.includes("metamcp-stdio-server-") || url.includes("mcp-stdio-")) {
     return url;
   }
 
