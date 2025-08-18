@@ -19,21 +19,33 @@ const webAppTransports: Map<string, Transport> = new Map<string, Transport>(); /
 const cleanupSession = async (sessionId: string) => {
   console.log(`Cleaning up SSE session ${sessionId}`);
 
-  // Clean up transport
-  const transport = webAppTransports.get(sessionId);
-  if (transport) {
-    webAppTransports.delete(sessionId);
-    await transport.close();
-  }
-
-  // Clean up MCP client sessions associated with this sessionId
   try {
-    await cleanupMcpSession(sessionId);
-  } catch (err) {
-    console.warn(`Error cleaning up MCP session ${sessionId}:`, err);
-  }
+    // Clean up transport
+    const transport = webAppTransports.get(sessionId);
+    if (transport) {
+      console.log(`Closing transport for session ${sessionId}`);
+      await transport.close();
+      webAppTransports.delete(sessionId);
+      console.log(`Transport cleaned up for session ${sessionId}`);
+    } else {
+      console.log(`No transport found for session ${sessionId}`);
+    }
 
-  console.log(`SSE session ${sessionId} cleaned up`);
+    // Clean up MCP client sessions associated with this sessionId
+    await cleanupMcpSession(sessionId);
+
+    console.log(`Session ${sessionId} cleanup completed successfully`);
+  } catch (error) {
+    console.error(`Error during cleanup of session ${sessionId}:`, error);
+    // Even if cleanup fails, remove the transport from our map to prevent memory leaks
+    if (webAppTransports.has(sessionId)) {
+      webAppTransports.delete(sessionId);
+      console.log(
+        `Removed orphaned transport for session ${sessionId} due to cleanup error`,
+      );
+    }
+    throw error;
+  }
 };
 
 sseRouter.get(
