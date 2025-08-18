@@ -58,9 +58,9 @@ WORKDIR /app
 
 # OCI image labels
 LABEL org.opencontainers.image.source="https://github.com/metatool-ai/metamcp"
-LABEL org.opencontainers.image.description="MetaMCP-DinD - aggregates MCP servers into a unified MetaMCP"
+LABEL org.opencontainers.image.description="MetaMCP-docker-per-mcp - aggregates MCP servers into a unified MetaMCP"
 LABEL org.opencontainers.image.licenses="MIT"
-LABEL org.opencontainers.image.title="MetaMCP-DinD"
+LABEL org.opencontainers.image.title="MetaMCP-docker-per-mcp"
 LABEL org.opencontainers.image.vendor="metatool-ai"
 
 # Install curl for health checks
@@ -101,9 +101,6 @@ RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
-
-# Note: Container runs as root for Docker socket access (DinD requirement)
-# USER nextjs
 
 # Expose frontend port (Next.js)
 EXPOSE 12008
