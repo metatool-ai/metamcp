@@ -28,7 +28,7 @@
 
 ## 🚀 部署到 DigitalOcean
 
-[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/main?refcode=8944aced2580)
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/digitalocean?refcode=8944aced2580)
 
 **一键部署到 DigitalOcean App Platform** - 零配置，几分钟内即可运行 MetaMCP！
 
