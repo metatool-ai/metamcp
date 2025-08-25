@@ -120,7 +120,7 @@ Similar to the official MCP inspector, but with **saved server configs** - MetaM
 
 ### **☁️ Deploy to DigitalOcean (Easiest)**
 
-[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/main)
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/digitalocean?refcode=8944aced2580)
 
 **One-click deployment** - Get MetaMCP running in minutes on DigitalOcean App Platform with zero configuration!
 

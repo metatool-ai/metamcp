@@ -120,7 +120,7 @@ MCP 服务器配置，告诉 MetaMCP 如何启动 MCP 服务器。
 
 ### **☁️ 部署到 DigitalOcean（最简单）**
 
-[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/main)
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/digitalocean?refcode=8944aced2580)
 
 **一键部署** - 零配置，几分钟内即可在 DigitalOcean App Platform 上运行 MetaMCP！
 
