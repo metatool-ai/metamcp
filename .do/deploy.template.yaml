@@ -44,8 +44,6 @@ spec:
         - key: NODE_ENV
           value: production
           scope: RUN_TIME
-      ports:
-        - 12008
       health_check:
         http_path: /health
         initial_delay_seconds: 30
