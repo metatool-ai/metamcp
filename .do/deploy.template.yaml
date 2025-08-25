@@ -2,10 +2,11 @@ spec:
   name: metamcp
   services:
     - name: metamcp-app
-      source_dir: /
-      git:
-        branch: digitalocean
-        repo_clone_url: https://github.com/metatool-ai/metamcp.git
+      image:
+        registry_type: REGISTRY
+        registry: ghcr.io
+        repository: metatool-ai/metamcp
+        tag: latest
       run_command: docker run -p 12008:12008 --env-file .env ghcr.io/metatool-ai/metamcp:latest
       instance_count: 1
       instance_size_slug: basic-m
