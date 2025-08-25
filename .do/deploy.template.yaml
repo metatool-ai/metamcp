@@ -7,7 +7,6 @@ spec:
         registry: ghcr.io
         repository: metatool-ai/metamcp
         tag: latest
-      run_command: docker run -p 12008:12008 --env-file .env ghcr.io/metatool-ai/metamcp:latest
       instance_count: 1
       instance_size_slug: basic-m
       internal_ports:
