@@ -9,8 +9,7 @@ spec:
         tag: latest
       instance_count: 1
       instance_size_slug: basic-m
-      internal_ports:
-        - 12008
+      http_port: 12008
       envs:
         - key: POSTGRES_HOST
           value: ${metamcp-postgres.DATABASE_HOST}
