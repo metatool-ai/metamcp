@@ -7,7 +7,6 @@ spec:
         branch: digitalocean
         repo_clone_url: https://github.com/metatool-ai/metamcp.git
       run_command: docker run -p 12008:12008 --env-file .env ghcr.io/metatool-ai/metamcp:latest
-      environment_slug: docker
       instance_count: 1
       instance_size_slug: basic-xxs
       envs:
