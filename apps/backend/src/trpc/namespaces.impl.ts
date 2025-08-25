@@ -289,7 +289,10 @@ export const namespacesImplementations = {
         };
       }
 
-      const isPublicNamespace = existingNamespace.user_id === null;
+      // Determine the effective ownership for validation (use input.user_id if provided, otherwise existing)
+      const effectiveUserId =
+        input.user_id !== undefined ? input.user_id : existingNamespace.user_id;
+      const isPublicNamespace = effectiveUserId === null;
 
       // Validate server accessibility and relationship rules if servers are being updated
       if (input.mcpServerUuids && input.mcpServerUuids.length > 0) {
@@ -334,6 +337,7 @@ export const namespacesImplementations = {
         uuid: input.uuid,
         name: input.name,
         description: input.description,
+        user_id: input.user_id,
         mcpServerUuids: input.mcpServerUuids,
       });
 

@@ -429,7 +429,7 @@ export function EditMcpServer({
                   id="edit-env"
                   {...editForm.register("env")}
                   placeholder={t("mcp-servers:envPlaceholder")}
-                  className="h-24"
+                  className="h-24 whitespace-pre-wrap break-all overflow-x-hidden"
                 />
                 <p className="text-xs text-muted-foreground">
                   One environment variable per line in KEY=VALUE format

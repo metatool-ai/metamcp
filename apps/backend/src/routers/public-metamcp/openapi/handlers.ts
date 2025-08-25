@@ -1,4 +1,4 @@
-import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol";
+import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import {
   CallToolResult,
   CompatibilityCallToolResultSchema,

@@ -1,5 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol";
+import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import {
   CallToolRequestSchema,
   CallToolResult,
@@ -48,9 +48,6 @@ export const createServer = async (
   const promptToClient: Record<string, ConnectedClient> = {};
   const resourceToClient: Record<string, ConnectedClient> = {};
 
-  // Track visited servers to detect circular references
-  const visitedServers = new Set<string>();
-
   // Helper function to detect if a server is the same instance
   const isSameServerInstance = (
     params: { name?: string; url?: string | null },
@@ -96,6 +93,9 @@ export const createServer = async (
     );
     const allTools: Tool[] = [];
 
+    // Track visited servers to detect circular references - reset on each call
+    const visitedServers = new Set<string>();
+
     // We'll filter servers during processing after getting sessions to check actual MCP server names
     const allServerEntries = Object.entries(serverParams);
 
@@ -125,12 +125,21 @@ export const createServer = async (
           return;
         }
 
+        // Check basic self-reference patterns
+        if (isSameServerInstance(params, mcpServerUuid)) {
+          return;
+        }
+
+        // Mark this server as visited
+        visitedServers.add(mcpServerUuid);
+
         const capabilities = session.client.getServerCapabilities();
         if (!capabilities?.tools) return;
 
         // Use name assigned by user, fallback to name from server
         const serverName =
           params.name || session.client.getServerVersion()?.name || "";
+
         try {
           const result = await session.client.request(
             {
@@ -147,9 +156,6 @@ export const createServer = async (
                 tools: result.tools,
                 mcpServerUuid: mcpServerUuid,
               });
-              console.log(
-                `Saved ${result.tools.length} tools for server: ${serverName}`,
-              );
             } catch (dbError) {
               console.error(
                 `Error saving tools to database for server ${serverName}:`,
@@ -163,6 +169,7 @@ export const createServer = async (
               const toolName = `${sanitizeName(serverName)}__${tool.name}`;
               toolToClient[toolName] = session;
               toolToServerUuid[toolName] = mcpServerUuid;
+
               return {
                 ...tool,
                 name: toolName,
@@ -193,9 +200,73 @@ export const createServer = async (
       throw new Error(`Invalid tool name format: ${name}`);
     }
 
+    const serverPrefix = name.substring(0, firstDoubleUnderscoreIndex);
     const originalToolName = name.substring(firstDoubleUnderscoreIndex + 2);
-    const clientForTool = toolToClient[name];
-    const serverUuid = toolToServerUuid[name];
+
+    // Try to find the tool in pre-populated mappings first
+    let clientForTool = toolToClient[name];
+    let serverUuid = toolToServerUuid[name];
+
+    // If not found in mappings, dynamically find the server and route the call
+    if (!clientForTool || !serverUuid) {
+      try {
+        // Get all MCP servers for this namespace
+        const serverParams = await getMcpServers(
+          namespaceUuid,
+          includeInactiveServers,
+        );
+
+        // Find the server with the matching name prefix
+        for (const [mcpServerUuid, params] of Object.entries(serverParams)) {
+          const session = await mcpServerPool.getSession(
+            sessionId,
+            mcpServerUuid,
+            params,
+          );
+
+          if (session) {
+            const capabilities = session.client.getServerCapabilities();
+            if (!capabilities?.tools) continue;
+
+            // Use name assigned by user, fallback to name from server
+            const serverName =
+              params.name || session.client.getServerVersion()?.name || "";
+
+            if (sanitizeName(serverName) === serverPrefix) {
+              // Found the server, now check if it has this tool
+              try {
+                const result = await session.client.request(
+                  {
+                    method: "tools/list",
+                    params: {},
+                  },
+                  ListToolsResultSchema,
+                );
+
+                if (
+                  result.tools?.some((tool) => tool.name === originalToolName)
+                ) {
+                  // Tool exists, populate mappings for future use and use it
+                  clientForTool = session;
+                  serverUuid = mcpServerUuid;
+                  toolToClient[name] = session;
+                  toolToServerUuid[name] = mcpServerUuid;
+                  break;
+                }
+              } catch (error) {
+                console.error(
+                  `Error checking tools for server ${serverName}:`,
+                  error,
+                );
+                continue;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error dynamically finding tool ${name}:`, error);
+      }
+    }
 
     if (!clientForTool) {
       throw new Error(`Unknown tool: ${name}`);
@@ -318,6 +389,9 @@ export const createServer = async (
     );
     const allPrompts: z.infer<typeof ListPromptsResultSchema>["prompts"] = [];
 
+    // Track visited servers to detect circular references - reset on each call
+    const visitedServers = new Set<string>();
+
     // Filter out self-referencing servers before processing
     const validPromptServers = Object.entries(serverParams).filter(
       ([uuid, params]) => {
@@ -414,6 +488,9 @@ export const createServer = async (
     );
     const allResources: z.infer<typeof ListResourcesResultSchema>["resources"] =
       [];
+
+    // Track visited servers to detect circular references - reset on each call
+    const visitedServers = new Set<string>();
 
     // Filter out self-referencing servers before processing
     const validResourceServers = Object.entries(serverParams).filter(
@@ -541,6 +618,9 @@ export const createServer = async (
         includeInactiveServers,
       );
       const allTemplates: ResourceTemplate[] = [];
+
+      // Track visited servers to detect circular references - reset on each call
+      const visitedServers = new Set<string>();
 
       // Filter out self-referencing servers before processing
       const validTemplateServers = Object.entries(serverParams).filter(

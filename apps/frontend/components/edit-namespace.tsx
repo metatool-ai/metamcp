@@ -7,7 +7,7 @@ import {
   NamespaceWithServers,
   UpdateNamespaceRequest,
 } from "@repo/zod-types";
-import { Check, Server } from "lucide-react";
+import { Check, ChevronDown, Server } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -21,6 +21,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "@/hooks/useTranslations";
@@ -67,7 +73,12 @@ export function EditNamespace({
         });
         onSuccess(data.data);
         onClose();
-        editForm.reset();
+        editForm.reset({
+          name: "",
+          description: "",
+          mcpServerUuids: [],
+          user_id: undefined,
+        });
       } else {
         toast.error(t("namespaces:edit.updateFailed"), {
           description:
@@ -92,6 +103,7 @@ export function EditNamespace({
       name: "",
       description: "",
       mcpServerUuids: [],
+      user_id: undefined,
     },
   });
 
@@ -105,6 +117,7 @@ export function EditNamespace({
         name: namespace.name,
         description: namespace.description || "",
         mcpServerUuids: serverUuids,
+        user_id: namespace.user_id,
       });
       setSelectedServerUuids(serverUuids);
     }
@@ -135,6 +148,7 @@ export function EditNamespace({
         name: data.name,
         description: data.description,
         mcpServerUuids: selectedServerUuids,
+        user_id: data.user_id,
       };
 
       // Use tRPC mutation instead of direct fetch
@@ -153,7 +167,12 @@ export function EditNamespace({
 
   const handleClose = () => {
     onClose();
-    editForm.reset();
+    editForm.reset({
+      name: "",
+      description: "",
+      mcpServerUuids: [],
+      user_id: undefined,
+    });
     setSelectedServerUuids([]);
   };
 
@@ -207,6 +226,40 @@ export function EditNamespace({
                   {editForm.formState.errors.description.message}
                 </p>
               )}
+            </div>
+
+            {/* Namespace Ownership */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t("namespaces:ownership")}
+              </label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between"
+                    type="button"
+                    disabled={isUpdating}
+                  >
+                    {editForm.watch("user_id") === null
+                      ? t("namespaces:everyone")
+                      : t("namespaces:forMyself")}
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
+                  <DropdownMenuItem
+                    onClick={() => editForm.setValue("user_id", undefined)}
+                  >
+                    {t("namespaces:forMyself")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => editForm.setValue("user_id", null)}
+                  >
+                    {t("namespaces:everyone")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             {/* MCP Servers Selection */}

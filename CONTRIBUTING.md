@@ -24,6 +24,32 @@ We welcome contributions to MetaMCP! This guide will help you get started.
    ```bash
    pnpm dev
    ```
+### **🐳 Docker Development with Hot Reload**
+
+For development with Docker that includes hot reloading for both frontend and backend:
+
+```bash
+# Start development environment with hot reload
+pnpm run dev:docker
+
+# Stop development environment
+pnpm run dev:docker:down
+
+# Clean up development environment (removes volumes)
+pnpm run dev:docker:clean
+```
+
+**Features:**
+- 🔄 **Hot Reload**: Both frontend (Next.js) and backend (Express) automatically reload on code changes
+- 🐳 **Containerized**: Full development environment in Docker with PostgreSQL
+- 📊 **Ports**: Frontend on 12008, Backend on 12009, PostgreSQL on 9433
+- 🛠️ **Development Tools**: Includes all necessary development dependencies and tools
+
+**Requirements:**
+- Docker and Docker Compose installed
+- `.env` file configured (copy from `example.env`)
+
+**Note:** The first run may take longer as it builds the development image. Subsequent runs will be faster.
 
 ## OpenID Connect (OIDC) Provider Setup
 

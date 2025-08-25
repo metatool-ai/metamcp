@@ -426,6 +426,7 @@ function CreateServerDialog({
                             "search:dialog.form.placeholders.envVars",
                           )}
                           rows={3}
+                          className="whitespace-pre-wrap break-all overflow-x-hidden"
                         />
                       </FormControl>
                       <FormMessage />
