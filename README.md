@@ -41,6 +41,7 @@ English | [中文](./README_cn.md)
   - [🔍 Inspector](#-inspector)
 - [🚀 Quick Start](#-quick-start)
   - [🐳 Run with Docker Compose (Recommended)](#-run-with-docker-compose-recommended)
+  - [🚀 One-Click Deploy to DigitalOcean App Platform](#-one-click-deploy-to-digitalocean-app-platform)
   - [💻 Local Development](#-local-development)
 - [🔌 MCP Protocol Compatibility](#-mcp-protocol-compatibility)
 - [🔗 Connect to MetaMCP](#-connect-to-metamcp)
@@ -116,6 +117,7 @@ Clone repo, prepare `.env`, and start with docker compose:
 
 ```bash
 git clone https://github.com/metatool-ai/metamcp.git
+git checkout docker-per-mcp
 cd metamcp
 cp example.env .env
 docker compose up -d
@@ -130,6 +132,34 @@ volumes:
   metamcp_postgres_data:
     driver: local
 ```
+
+### **🚀 One-Click Deploy to DigitalOcean VPS**
+
+[![Deploy to DigitalOcean](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/docker-per-mcp&refcode=8944aced2580)
+
+Deploy MetaMCP to a DigitalOcean VPS with Docker Compose in a single click! This will:
+
+- 🐳 **Automatically deploy** MetaMCP with PostgreSQL using Docker Compose
+- 🖥️ **Provision a VPS** with 2GB RAM and 30GB SSD (basic-s droplet)
+- 🗄️ **Set up PostgreSQL database** running in Docker alongside the app
+- 🔐 **Generate secure secrets** for authentication
+- 🌐 **Provide a public HTTPS URL** for your MetaMCP instance
+- 📊 **Monitor performance** with built-in metrics
+
+**Requirements:**
+- DigitalOcean account (free tier available)
+- VPS with minimum 2GB RAM and 30GB SSD
+
+**After deployment:**
+1. Access your MetaMCP instance at the provided URL
+2. Create your first admin account
+3. Start configuring MCP servers and namespaces
+
+**Note:** This deployment uses Docker Compose to run both the app and PostgreSQL database on the same VPS, providing a self-contained deployment solution.
+
+### **🖥️ Manual VPS Deployment**
+
+Checkout https://docs.metamcp.com/en/deployment/custom-deployment
 
 ### **💻 Local Development**
 

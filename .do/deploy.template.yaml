@@ -1,0 +1,87 @@
+name: metamcp-vps
+services:
+  - name: metamcp-droplet
+    source_dir: /
+    github:
+      repo: metatool-ai/metamcp
+      branch: docker-per-mcp
+    instance_count: 1
+    instance_size_slug: basic-m
+    environment_slug: docker
+    run_command: |
+      # Update system and install Docker
+      apt-get update
+      apt-get install -y docker.io docker-compose curl git
+      
+      # Start Docker service
+      systemctl start docker
+      systemctl enable docker
+      
+      # Clone the repository
+      git clone https://github.com/metatool-ai/metamcp.git /opt/metamcp
+      cd /opt/metamcp
+      
+      # Create .env file
+      cat > .env << 'EOF'
+      NODE_ENV=production
+      POSTGRES_HOST=localhost
+      POSTGRES_PORT=5432
+      POSTGRES_USER=metamcp_user
+      POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      POSTGRES_DB=metamcp_db
+      DATABASE_URL=postgresql://metamcp_user:${POSTGRES_PASSWORD}@localhost:5432/metamcp_db
+      APP_URL=https://${APP_DOMAIN}
+      NEXT_PUBLIC_APP_URL=https://${APP_DOMAIN}
+      BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL=false
+      DOCKER_HOST=unix:///var/run/docker.sock
+      EOF
+      
+      # Start services with docker-compose
+      docker-compose up -d
+      
+      # Wait for services to be ready
+      sleep 30
+      
+      # Show status
+      docker-compose ps
+      
+      echo "MetaMCP deployment completed successfully!"
+      echo "Access your instance at: https://${APP_DOMAIN}"
+      echo "SSH access: ssh root@${DROPLET_IP}"
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: POSTGRES_HOST
+        value: localhost
+      - key: POSTGRES_PORT
+        value: "5432"
+      - key: POSTGRES_USER
+        value: metamcp_user
+      - key: POSTGRES_PASSWORD
+        value: ${POSTGRES_PASSWORD}
+      - key: POSTGRES_DB
+        value: metamcp_db
+      - key: DATABASE_URL
+        value: postgresql://metamcp_user:${POSTGRES_PASSWORD}@localhost:5432/metamcp_db
+      - key: APP_URL
+        value: https://${APP_DOMAIN}
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://${APP_DOMAIN}
+      - key: BETTER_AUTH_SECRET
+        value: ${BETTER_AUTH_SECRET}
+      - key: TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL
+        value: "false"
+      - key: DOCKER_HOST
+        value: "unix:///var/run/docker.sock"
+
+envs:
+  - key: POSTGRES_PASSWORD
+    value: ${random_hash}
+    type: SECRET
+  - key: BETTER_AUTH_SECRET
+    value: ${random_hash}
+    type: SECRET
+  - key: APP_DOMAIN
+    value: ${app_domain}
+    type: SECRET
