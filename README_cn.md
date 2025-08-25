@@ -26,6 +26,14 @@
 
 ---
 
+## 🚀 部署到 DigitalOcean
+
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/main?refcode=8944aced2580)
+
+**一键部署到 DigitalOcean App Platform** - 零配置，几分钟内即可运行 MetaMCP！
+
+---
+
 欲了解更多详情，请访问我们的文档站点：https://docs.metamcp.com （暂时没有中文）
 
 [English](./README.md) | 中文
@@ -109,6 +117,12 @@ MCP 服务器配置，告诉 MetaMCP 如何启动 MCP 服务器。
 类似官方 MCP 检查器，但支持**保存服务器配置**——MetaMCP 会自动创建配置，方便你即时调试 MetaMCP 端点。
 
 ## 🚀 快速开始
+
+### **☁️ 部署到 DigitalOcean（最简单）**
+
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/main)
+
+**一键部署** - 零配置，几分钟内即可在 DigitalOcean App Platform 上运行 MetaMCP！
 
 ### **🐳 使用 Docker Compose 运行（推荐）**
 

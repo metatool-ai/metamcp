@@ -26,6 +26,14 @@
 
 ---
 
+## 🚀 Deploy to DigitalOcean
+
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/main?refcode=8944aced2580)
+
+**One-click deployment to DigitalOcean App Platform** - Get MetaMCP running in minutes with zero configuration!
+
+---
+
 For more details, consider visiting our documentation site: https://docs.metamcp.com
 
 English | [中文](./README_cn.md)
@@ -109,6 +117,12 @@ A MCP server configuration that tells MetaMCP how to start a MCP server.
 Similar to the official MCP inspector, but with **saved server configs** - MetaMCP automatically creates configurations so you can debug MetaMCP endpoints immediately.
 
 ## 🚀 Quick Start
+
+### **☁️ Deploy to DigitalOcean (Easiest)**
+
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/metatool-ai/metamcp/tree/main)
+
+**One-click deployment** - Get MetaMCP running in minutes on DigitalOcean App Platform with zero configuration!
 
 ### **🐳 Run with Docker Compose (Recommended)**
 
