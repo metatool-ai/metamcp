@@ -218,7 +218,7 @@ export const createServer = async (
 
         // Find the server with the matching name prefix
         for (const [mcpServerUuid, params] of Object.entries(serverParams)) {
-          const session = await mcpServerPool.getSession(
+          const session = await getOrConnectSessionClient(
             sessionId,
             mcpServerUuid,
             params,
