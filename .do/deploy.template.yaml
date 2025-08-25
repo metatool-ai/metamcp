@@ -1,5 +1,6 @@
 spec:
   name: metamcp
+
   services:
     - name: metamcp-app
       image:
@@ -11,39 +12,47 @@ spec:
       instance_size_slug: basic-m
       http_port: 12008
       envs:
+        # Postgres (correct bindable keys)
         - key: POSTGRES_HOST
-          value: ${metamcp-postgres.DATABASE_HOST}
+          value: ${metamcp-postgres.HOSTNAME}
           scope: RUN_TIME
         - key: POSTGRES_PORT
-          value: ${metamcp-postgres.DATABASE_PORT}
+          value: ${metamcp-postgres.PORT}
           scope: RUN_TIME
         - key: POSTGRES_USER
-          value: ${metamcp-postgres.DATABASE_USER}
+          value: ${metamcp-postgres.USERNAME}
           scope: RUN_TIME
         - key: POSTGRES_PASSWORD
-          value: ${metamcp-postgres.DATABASE_PASSWORD}
+          value: ${metamcp-postgres.PASSWORD}
           scope: RUN_TIME
+          type: SECRET
         - key: POSTGRES_DB
-          value: ${metamcp-postgres.DATABASE_NAME}
+          value: ${metamcp-postgres.DATABASE}
           scope: RUN_TIME
         - key: DATABASE_URL
           value: ${metamcp-postgres.DATABASE_URL}
           scope: RUN_TIME
+
+        # App URLs (APP_URL is a DO bindable var)
         - key: APP_URL
           value: ${APP_URL}
           scope: RUN_TIME
         - key: NEXT_PUBLIC_APP_URL
           value: ${APP_URL}
           scope: RUN_TIME
+
+        # Your other settings
         - key: BETTER_AUTH_SECRET
           value: ${BETTER_AUTH_SECRET}
           scope: RUN_TIME
+          type: SECRET
         - key: TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL
           value: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL}
           scope: RUN_TIME
         - key: NODE_ENV
           value: production
           scope: RUN_TIME
+
       health_check:
         http_path: /health
         initial_delay_seconds: 30
