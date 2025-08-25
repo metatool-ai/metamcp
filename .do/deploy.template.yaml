@@ -1,0 +1,61 @@
+spec:
+  name: metamcp
+  services:
+    - name: metamcp-app
+      source_dir: /
+      git:
+        branch: digitalocean
+        repo_clone_url: https://github.com/metatool-ai/metamcp.git
+      run_command: docker run -p 12008:12008 --env-file .env ghcr.io/metatool-ai/metamcp:latest
+      environment_slug: docker
+      instance_count: 1
+      instance_size_slug: basic-xxs
+      envs:
+        - key: POSTGRES_HOST
+          value: ${metamcp-postgres.DATABASE_HOST}
+          scope: RUN_TIME
+        - key: POSTGRES_PORT
+          value: ${metamcp-postgres.DATABASE_PORT}
+          scope: RUN_TIME
+        - key: POSTGRES_USER
+          value: ${metamcp-postgres.DATABASE_USER}
+          scope: RUN_TIME
+        - key: POSTGRES_PASSWORD
+          value: ${metamcp-postgres.DATABASE_PASSWORD}
+          scope: RUN_TIME
+        - key: POSTGRES_DB
+          value: ${metamcp-postgres.DATABASE_NAME}
+          scope: RUN_TIME
+        - key: DATABASE_URL
+          value: ${metamcp-postgres.DATABASE_URL}
+          scope: RUN_TIME
+        - key: APP_URL
+          value: ${APP_URL}
+          scope: RUN_TIME
+        - key: NEXT_PUBLIC_APP_URL
+          value: ${APP_URL}
+          scope: RUN_TIME
+        - key: BETTER_AUTH_SECRET
+          value: ${BETTER_AUTH_SECRET}
+          scope: RUN_TIME
+        - key: TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL
+          value: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL}
+          scope: RUN_TIME
+        - key: NODE_ENV
+          value: production
+          scope: RUN_TIME
+      ports:
+        - 12008
+      health_check:
+        http_path: /health
+        initial_delay_seconds: 30
+        period_seconds: 10
+        timeout_seconds: 5
+        success_threshold: 1
+        failure_threshold: 3
+
+  databases:
+    - name: metamcp-postgres
+      engine: PG
+      version: "16"
+      production: false
