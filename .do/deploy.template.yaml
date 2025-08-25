@@ -3,7 +3,7 @@ spec:
   services:
     - name: metamcp-app
       image:
-        registry_type: GITHUB_CONTAINER_REGISTRY
+        registry_type: GHCR
         registry: ghcr.io
         repository: metatool-ai/metamcp
         tag: latest
