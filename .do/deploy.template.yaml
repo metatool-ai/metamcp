@@ -29,6 +29,9 @@ spec:
         - key: POSTGRES_DB
           value: ${metamcp-postgres.DATABASE}
           scope: RUN_TIME
+        - key: POSTGRES_CA_CERT
+          value: ${metamcp-postgres.CA_CERT}
+          scope: RUN_TIME
         - key: DATABASE_URL
           value: ${metamcp-postgres.DATABASE_URL}
           scope: RUN_TIME

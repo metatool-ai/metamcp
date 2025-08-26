@@ -3,7 +3,7 @@ import { Pool } from "pg";
 
 import * as schema from "./schema";
 
-const { DATABASE_URL } = process.env;
+const { DATABASE_URL, POSTGRES_CA_CERT } = process.env;
 
 if (!DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
@@ -14,6 +14,12 @@ if (!DATABASE_URL) {
 // when the database terminates idle connections (e.g., during maintenance).
 export const pool = new Pool({
   connectionString: DATABASE_URL,
+  ...(POSTGRES_CA_CERT && {
+    ssl: {
+      ca: POSTGRES_CA_CERT,
+      rejectUnauthorized: true,
+    },
+  }),
 });
 
 pool.on("error", (err) => {
