@@ -29,6 +29,12 @@ services:
       
       # Docker networking fix
       TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL:-true}
+      
+      # Docker socket access
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      # Mount Docker socket to allow container management
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -37,6 +43,7 @@ services:
     restart: "no"
     networks:
       - metamcp-network
+      - metamcp-internal
 
   postgres:
     image: postgres:16-alpine
@@ -67,4 +74,6 @@ volumes:
 
 networks:
   metamcp-network:
+    driver: bridge
+  metamcp-internal:
     driver: bridge
