@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -180,15 +181,9 @@ export function NamespacesList() {
         const isPublic = namespace.user_id === null;
         return (
           <div className="py-2">
-            <span
-              className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-                isPublic
-                  ? "bg-green-50 text-green-700 ring-green-700/10"
-                  : "bg-gray-50 text-gray-700 ring-gray-700/10"
-              }`}
-            >
+            <Badge variant={isPublic ? "success" : "neutral"}>
               {isPublic ? t("namespaces.public") : t("namespaces.private")}
-            </span>
+            </Badge>
           </div>
         );
       },

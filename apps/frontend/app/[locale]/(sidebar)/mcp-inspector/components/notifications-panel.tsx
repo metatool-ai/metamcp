@@ -95,9 +95,9 @@ export function NotificationsPanel({
     if (notification.type === "stderr") {
       return {
         icon: AlertTriangle,
-        color: "text-red-600",
-        bgColor: "bg-red-50",
-        borderColor: "border-red-200",
+        color: "text-red-600 dark:text-red-400",
+        bgColor: "bg-red-50 dark:bg-red-950/20",
+        borderColor: "border-red-200 dark:border-red-800",
         badge: "stderr",
         badgeVariant: "destructive" as const,
       };
@@ -108,9 +108,9 @@ export function NotificationsPanel({
     if (method?.includes("progress")) {
       return {
         icon: Bell,
-        color: "text-blue-600",
-        bgColor: "bg-blue-50",
-        borderColor: "border-blue-200",
+        color: "text-blue-600 dark:text-blue-400",
+        bgColor: "bg-blue-50 dark:bg-blue-950/20",
+        borderColor: "border-blue-200 dark:border-blue-800",
         badge: "progress",
         badgeVariant: "secondary" as const,
       };
@@ -118,9 +118,9 @@ export function NotificationsPanel({
 
     return {
       icon: Bell,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-      borderColor: "border-green-200",
+      color: "text-green-600 dark:text-green-400",
+      bgColor: "bg-green-50 dark:bg-green-950/20",
+      borderColor: "border-green-200 dark:border-green-800",
       badge: "info",
       badgeVariant: "default" as const,
     };
@@ -129,7 +129,7 @@ export function NotificationsPanel({
   const renderNotificationContent = (notification: NotificationEntry) => {
     if (notification.type === "stderr") {
       return (
-        <div className="text-xs text-red-700 font-mono bg-red-50 p-1.5 rounded border">
+        <div className="text-xs text-red-700 dark:text-red-300 font-mono bg-red-50 dark:bg-red-950/20 p-1.5 rounded border border-red-200 dark:border-red-800">
           {(notification.notification as any).params?.content ||
             "stderr output"}
         </div>
@@ -142,14 +142,16 @@ export function NotificationsPanel({
 
     return (
       <div className="space-y-1">
-        <div className="text-xs font-medium text-gray-700">
+        <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
           Method:{" "}
-          <code className="text-xs bg-gray-100 px-1 rounded">{method}</code>
+          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">
+            {method}
+          </code>
         </div>
         {params && (
-          <div className="text-xs text-gray-600">
+          <div className="text-xs text-gray-600 dark:text-gray-400">
             <div className="font-medium mb-0.5">Parameters:</div>
-            <pre className="text-xs bg-gray-50 p-1.5 rounded border overflow-x-auto">
+            <pre className="text-xs bg-gray-50 dark:bg-gray-900 p-1.5 rounded border overflow-x-auto">
               {JSON.stringify(params, null, 2)}
             </pre>
           </div>
@@ -267,7 +269,7 @@ export function NotificationsPanel({
             <TabsContent value={activeFilter} className="mt-2">
               <div className="space-y-0.5 max-h-64 overflow-y-auto">
                 {filteredNotifications.length === 0 ? (
-                  <div className="text-center text-xs text-gray-500 py-4">
+                  <div className="text-center text-xs text-muted-foreground py-4">
                     No {activeFilter === "all" ? "" : activeFilter}{" "}
                     notifications
                   </div>
@@ -292,7 +294,7 @@ export function NotificationsPanel({
                               >
                                 {typeInfo.badge}
                               </Badge>
-                              <span className="text-xs text-gray-500 flex-shrink-0">
+                              <span className="text-xs text-muted-foreground flex-shrink-0">
                                 {formatTimestamp(notification.timestamp)}
                               </span>
                             </div>

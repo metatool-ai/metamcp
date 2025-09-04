@@ -33,6 +33,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTranslations } from "@/hooks/useTranslations";
 import { authClient } from "@/lib/auth-client";
 import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
@@ -112,15 +113,18 @@ function UserInfoFooter() {
 
   return (
     <SidebarFooter>
-      <div className="flex flex-col gap-2 p-2">
+      <div className="flex flex-col gap-4 p-3">
         <div className="flex items-center justify-between">
-          <LanguageSwitcher />
-          <p>Version v2.5.6-docker-per-mcp</p>
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher />
+            <ThemeToggle />
+          </div>
+          <p className="text-xs text-muted-foreground">v2.5.7-docker-per-mcp</p>
         </div>
         <Separator />
         {user && (
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
               <span className="text-sm font-medium">
                 {user.name || user.email}
               </span>
@@ -128,7 +132,12 @@ function UserInfoFooter() {
                 {user.email}
               </span>
             </div>
-            <Button variant="outline" size="sm" onClick={handleSignOut}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSignOut}
+              className="w-full"
+            >
               {t("auth:signOut")}
             </Button>
           </div>
@@ -150,15 +159,17 @@ export default function SidebarLayout({
     <SidebarProvider>
       <Sidebar>
         <SidebarHeader className="flex flex-col justify-center items-center px-2 py-4">
-          <div className="flex items-center gap-4 mb-2">
-            <Image
-              src="/favicon.ico"
-              alt="MetaMCP Logo"
-              width={256}
-              height={256}
-              className="h-12 w-12"
-            />
-            <h2 className="text-2xl font-semibold">MetaMCP</h2>
+          <div className="flex items-center justify-center w-full mb-2">
+            <div className="flex items-center gap-4">
+              <Image
+                src="/favicon.ico"
+                alt="MetaMCP Logo"
+                width={256}
+                height={256}
+                className="h-12 w-12"
+              />
+              <h2 className="text-2xl font-semibold">MetaMCP</h2>
+            </div>
           </div>
         </SidebarHeader>
 

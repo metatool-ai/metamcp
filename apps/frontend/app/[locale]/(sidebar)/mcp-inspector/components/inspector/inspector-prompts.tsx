@@ -163,13 +163,13 @@ export function InspectorPrompts({
     const getRoleColor = (role: string) => {
       switch (role) {
         case "user":
-          return "text-blue-700 bg-blue-50 border-blue-200";
+          return "text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800";
         case "assistant":
-          return "text-green-700 bg-green-50 border-green-200";
+          return "text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800";
         case "system":
-          return "text-orange-700 bg-orange-50 border-orange-200";
+          return "text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800";
         default:
-          return "text-gray-700 bg-gray-50 border-gray-200";
+          return "text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700";
       }
     };
 
@@ -225,7 +225,7 @@ export function InspectorPrompts({
             {message.content.resource?.mimeType ||
               t("inspector:promptsComponent.unknownFormat")}
             ]
-            <div className="mt-2 p-2 bg-gray-100 rounded border">
+            <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded border">
               <div className="font-mono text-xs break-all">
                 URI: {message.content.resource?.uri}
               </div>
@@ -332,8 +332,8 @@ export function InspectorPrompts({
                     key={prompt.name}
                     className={`border rounded-lg p-3 cursor-pointer transition-colors ${
                       selectedPrompt?.name === prompt.name
-                        ? "border-purple-500 bg-purple-50"
-                        : "hover:border-gray-300"
+                        ? "border-purple-500 bg-purple-50 dark:bg-purple-950/20 dark:border-purple-400"
+                        : "hover:border-gray-300 dark:hover:border-gray-600"
                     }`}
                     onClick={() => {
                       setSelectedPrompt(prompt);
@@ -364,7 +364,7 @@ export function InspectorPrompts({
                       </div>
                       <div className="flex items-center gap-1">
                         {prompt.arguments && prompt.arguments.length > 0 && (
-                          <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                          <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 px-2 py-1 rounded">
                             {prompt.arguments.length}{" "}
                             {prompt.arguments.length > 1
                               ? t("inspector:promptsComponent.args")
@@ -412,7 +412,7 @@ export function InspectorPrompts({
                               {prompt.arguments.map((arg) => (
                                 <div
                                   key={arg.name}
-                                  className="text-xs bg-white p-2 rounded border"
+                                  className="text-xs bg-white dark:bg-gray-800 p-2 rounded border"
                                 >
                                   <div className="flex items-center gap-2">
                                     <span className="font-mono">
@@ -520,7 +520,7 @@ export function InspectorPrompts({
           ) : (
             <div className="space-y-4">
               {promptResult.description && (
-                <div className="border rounded-lg p-3 bg-gray-50">
+                <div className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-900/50">
                   <div className="text-xs font-medium text-muted-foreground mb-1">
                     {t("inspector:promptsComponent.description")}
                   </div>
@@ -545,14 +545,14 @@ export function InspectorPrompts({
       </div>
 
       {/* Info Section */}
-      <div className="rounded-lg bg-purple-50 border border-purple-200 p-4">
+      <div className="rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 p-4">
         <div className="flex items-start gap-3">
           <MessageSquare className="h-5 w-5 text-purple-500 mt-0.5" />
           <div>
-            <h4 className="text-sm font-medium text-purple-900 mb-1">
+            <h4 className="text-sm font-medium text-purple-900 dark:text-purple-100 mb-1">
               {t("inspector:promptsComponent.aboutPrompts")}
             </h4>
-            <p className="text-xs text-purple-700">
+            <p className="text-xs text-purple-700 dark:text-purple-300">
               {t("inspector:promptsComponent.aboutPromptsDesc")}
             </p>
           </div>

@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 
 import OAuthCallback from "@/components/OAuthCallback";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTranslations } from "@/hooks/useTranslations";
 
 function LoadingFallback() {
@@ -12,8 +13,13 @@ function LoadingFallback() {
 
 export default function OAuthCallbackPage() {
   return (
-    <Suspense fallback={<LoadingFallback />}>
-      <OAuthCallback />
-    </Suspense>
+    <div className="relative min-h-screen">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <Suspense fallback={<LoadingFallback />}>
+        <OAuthCallback />
+      </Suspense>
+    </div>
   );
 }

@@ -89,6 +89,28 @@ A MCP server configuration that tells MetaMCP how to start a MCP server.
 }
 ```
 
+#### 🔐 **Environment Variables & Secrets (STDIO MCP Servers)**
+
+For **STDIO MCP servers**, MetaMCP supports three ways to handle environment variables and secrets:
+
+**1. Raw Values** - Direct string values (not recommended for secrets):
+```
+API_KEY=your-actual-api-key-here
+DEBUG=true
+```
+
+**2. Environment Variable References** - Use `${ENV_VAR_NAME}` syntax:
+```
+API_KEY=${OPENAI_API_KEY}
+DATABASE_URL=${DB_CONNECTION_STRING}
+```
+
+**3. Auto-matching** - If the expected environment variable name in your tool matches the container's environment variable, you can omit it entirely. MetaMCP will automatically pass through matching environment variables.
+
+> **🔒 Security Note**: Environment variable references (`${VAR_NAME}`) are resolved from the MetaMCP container's environment at runtime. This keeps actual secret values out of your configuration and git repository.
+
+> **⚙️ Development Note**: For local development with `pnpm run dev:docker`, ensure your environment variables are listed in `turbo.json` under `globalEnv` to be passed to the development processes. This is not required for production Docker deployments.
+
 ### 🏷️ **MetaMCP Namespace**
 - Group one or more MCP servers into a namespace
 - Enable/disable MCP servers or at tool level

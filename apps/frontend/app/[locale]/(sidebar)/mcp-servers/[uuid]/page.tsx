@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { EditMcpServer } from "@/components/edit-mcp-server";
 import { ServerDetailsSkeleton } from "@/components/skeletons/server-details-skeleton";
 import { ToolManagementSkeleton } from "@/components/skeletons/tool-management-skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -164,26 +165,26 @@ export default function McpServerDetailPage({
       case "connected":
         return {
           text: t("mcp-servers:connected"),
-          color: "text-green-600",
+          color: "text-green-600 dark:text-green-400",
           icon: Plug,
         };
       case "disconnected":
         return {
           text: t("mcp-servers:disconnected"),
-          color: "text-gray-500",
+          color: "text-muted-foreground",
           icon: Server,
         };
       case "error":
       case "error-connecting-to-proxy":
         return {
           text: t("mcp-servers:detail.connectionError"),
-          color: "text-red-600",
+          color: "text-destructive",
           icon: Server,
         };
       default:
         return {
           text: t("mcp-servers:detail.connecting"),
-          color: "text-yellow-600",
+          color: "text-yellow-600 dark:text-yellow-400",
           icon: Plug,
         };
     }
@@ -421,9 +422,7 @@ export default function McpServerDetailPage({
                     {t("mcp-servers:detail.type")}:
                   </span>
                   <div className="flex-1 ml-6 flex justify-end">
-                    <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                      {server.type.toUpperCase()}
-                    </span>
+                    <Badge variant="info">{server.type.toUpperCase()}</Badge>
                   </div>
                 </div>
                 <div className="flex justify-between items-center">
@@ -449,7 +448,7 @@ export default function McpServerDetailPage({
                     <span className="text-sm font-medium text-muted-foreground">
                       {t("mcp-servers:detail.command")}:
                     </span>
-                    <p className="text-sm font-mono bg-gray-50 p-2 rounded break-all">
+                    <p className="text-sm font-mono bg-muted p-2 rounded break-all">
                       {server.command}
                     </p>
                   </div>
@@ -459,7 +458,7 @@ export default function McpServerDetailPage({
                     <span className="text-sm font-medium text-muted-foreground">
                       {t("mcp-servers:detail.arguments")}:
                     </span>
-                    <p className="text-sm font-mono bg-gray-50 p-2 rounded break-all">
+                    <p className="text-sm font-mono bg-muted p-2 rounded break-all">
                       {server.args.join(" ")}
                     </p>
                   </div>
@@ -469,7 +468,7 @@ export default function McpServerDetailPage({
                     <span className="text-sm font-medium text-muted-foreground">
                       {t("mcp-servers:detail.url")}:
                     </span>
-                    <p className="text-sm font-mono bg-gray-50 p-2 rounded break-all">
+                    <p className="text-sm font-mono bg-muted p-2 rounded break-all">
                       {server.url}
                     </p>
                   </div>
@@ -479,7 +478,7 @@ export default function McpServerDetailPage({
                     <span className="text-sm font-medium text-muted-foreground">
                       {t("mcp-servers:detail.authBearerToken")}:
                     </span>
-                    <div className="flex items-start gap-2 bg-gray-50 p-2 rounded">
+                    <div className="flex items-start gap-2 bg-muted p-2 rounded">
                       <span className="text-sm font-mono text-muted-foreground flex-1 break-all">
                         {bearerTokenRevealed
                           ? server.bearerToken
@@ -524,10 +523,7 @@ export default function McpServerDetailPage({
                       : maskSensitiveValue(value);
 
                     return (
-                      <div
-                        key={key}
-                        className="p-3 bg-gray-50 rounded space-y-2"
-                      >
+                      <div key={key} className="p-3 bg-muted rounded space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-mono font-medium">
                             {key}

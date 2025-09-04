@@ -8,6 +8,7 @@ import { use, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { EditNamespace } from "@/components/edit-namespace";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -466,12 +467,12 @@ export default function NamespaceDetailPage({
                   {t("namespaces:detail.mcpServers")}:
                 </span>
                 <div className="flex-1 ml-6 flex justify-end">
-                  <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                  <Badge variant="info">
                     {namespace.servers.length}{" "}
                     {namespace.servers.length === 1
                       ? t("namespaces:detail.server")
                       : t("namespaces:detail.servers")}
-                  </span>
+                  </Badge>
                 </div>
               </div>
               <div className="flex justify-between items-center">
@@ -479,13 +480,13 @@ export default function NamespaceDetailPage({
                   {t("namespaces:detail.activeServers")}:
                 </span>
                 <div className="flex-1 ml-6 flex justify-end">
-                  <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-700/10">
+                  <Badge variant="success">
                     {
                       namespace.servers.filter((s) => s.status === "ACTIVE")
                         .length
                     }{" "}
                     {t("namespaces:detail.active")}
-                  </span>
+                  </Badge>
                 </div>
               </div>
               <div className="flex justify-between items-center">
@@ -497,12 +498,9 @@ export default function NamespaceDetailPage({
                     {Array.from(
                       new Set(namespace.servers.map((s) => s.type)),
                     ).map((type) => (
-                      <span
-                        key={type}
-                        className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 ring-1 ring-inset ring-gray-700/10"
-                      >
+                      <Badge key={type} variant="neutral">
                         {type}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 </div>

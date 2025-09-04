@@ -386,7 +386,7 @@ export function InspectorResources({
             {resourceTemplates.map((template) => (
               <div
                 key={template.uriTemplate}
-                className="border rounded-lg p-3 bg-blue-50 border-blue-200"
+                className="border rounded-lg p-3 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
               >
                 <div className="flex items-center gap-2 mb-1">
                   <Plus className="h-4 w-4 text-blue-500" />
@@ -400,7 +400,7 @@ export function InspectorResources({
                     {template.description}
                   </div>
                 )}
-                <div className="text-xs font-mono bg-white p-2 rounded border">
+                <div className="text-xs font-mono bg-white dark:bg-gray-800 p-2 rounded border">
                   {template.uriTemplate}
                 </div>
               </div>
@@ -431,8 +431,8 @@ export function InspectorResources({
                   key={resource.uri}
                   className={`border rounded-lg p-3 cursor-pointer transition-colors ${
                     selectedResource?.uri === resource.uri
-                      ? "border-green-500 bg-green-50"
-                      : "hover:border-gray-300"
+                      ? "border-green-500 bg-green-50 dark:bg-green-950/20 dark:border-green-400"
+                      : "hover:border-gray-300 dark:hover:border-gray-600"
                   }`}
                   onClick={() => {
                     setSelectedResource(resource);
@@ -455,7 +455,7 @@ export function InspectorResources({
                     </div>
                     <div className="flex items-center gap-1">
                       {resourceSubscriptions.has(resource.uri) && (
-                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                        <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-2 py-1 rounded">
                           {t("inspector:resourcesComponent.subscribed")}
                         </span>
                       )}
@@ -568,7 +568,7 @@ export function InspectorResources({
                   </div>
                 )}
               </div>
-              <div className="border rounded-lg p-3 bg-gray-50 max-h-96 overflow-y-auto">
+              <div className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-900/50 max-h-96 overflow-y-auto">
                 <CodeBlock
                   language="json"
                   maxHeight="384px"
@@ -584,14 +584,14 @@ export function InspectorResources({
       </div>
 
       {/* Info Section */}
-      <div className="rounded-lg bg-green-50 border border-green-200 p-4">
+      <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 p-4">
         <div className="flex items-start gap-3">
           <FileText className="h-5 w-5 text-green-500 mt-0.5" />
           <div>
-            <h4 className="text-sm font-medium text-green-900 mb-1">
+            <h4 className="text-sm font-medium text-green-900 dark:text-green-100 mb-1">
               {t("inspector:resourcesComponent.aboutResources")}
             </h4>
-            <p className="text-xs text-green-700">
+            <p className="text-xs text-green-700 dark:text-green-300">
               {t("inspector:resourcesComponent.aboutResourcesDesc")}
             </p>
           </div>

@@ -319,11 +319,15 @@ export function InspectorTools({
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "running":
-        return <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />;
+        return (
+          <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
+        );
       case "success":
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
+        return (
+          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+        );
       case "error":
-        return <XCircle className="h-4 w-4 text-red-600" />;
+        return <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />;
       default:
         return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
@@ -399,13 +403,13 @@ export function InspectorTools({
                   key={tool.name}
                   className={`rounded-lg border p-3 cursor-pointer transition-colors ${
                     selectedTool?.name === tool.name
-                      ? "border-blue-500 bg-blue-50"
+                      ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-950/20"
                       : "hover:bg-muted/50"
                   }`}
                   onClick={() => setSelectedTool(tool)}
                 >
                   <div className="flex items-center gap-2">
-                    <Code className="h-4 w-4 text-blue-500" />
+                    <Code className="h-4 w-4 text-blue-500 dark:text-blue-400" />
                     <span className="font-mono text-sm">{tool.name}</span>
                   </div>
                 </div>
@@ -560,7 +564,7 @@ export function InspectorTools({
 
                   {/* Error */}
                   {execution.error && (
-                    <div className="text-xs text-red-600 bg-red-50 p-2 rounded mb-2">
+                    <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 p-2 rounded mb-2">
                       <div className="font-medium mb-1">
                         {t("inspector:toolsComponent.error")}:
                       </div>

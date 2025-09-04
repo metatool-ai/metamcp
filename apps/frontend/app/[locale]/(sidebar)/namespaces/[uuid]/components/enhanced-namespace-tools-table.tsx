@@ -19,6 +19,7 @@ import Link from "next/link";
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import {
@@ -340,25 +341,19 @@ export function EnhancedNamespaceToolsTable({
 
     if (tool.sources.metamcp) {
       badges.push(
-        <span
-          key="metamcp"
-          className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded"
-        >
+        <Badge key="metamcp" variant="info" className="gap-1">
           <Wrench className="h-3 w-3" />
           {t("namespaces:enhancedToolsTable.sources.metamcp")}
-        </span>,
+        </Badge>,
       );
     }
 
     if (tool.sources.saved) {
       badges.push(
-        <span
-          key="saved"
-          className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded"
-        >
+        <Badge key="saved" variant="success" className="gap-1">
           <Database className="h-3 w-3" />
           {t("namespaces:enhancedToolsTable.sources.saved")}
-        </span>,
+        </Badge>,
       );
     }
 
@@ -368,10 +363,10 @@ export function EnhancedNamespaceToolsTable({
 
     return (
       badges[0] || (
-        <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+        <Badge variant="neutral" className="gap-1">
           <Wrench className="h-3 w-3" />
           {t("namespaces:enhancedToolsTable.sources.unknown")}
-        </span>
+        </Badge>
       )
     );
   };
@@ -626,9 +621,12 @@ export function EnhancedNamespaceToolsTable({
                           <Wrench className="h-4 w-4 text-blue-500 flex-shrink-0" />
                           <span className="truncate">{tool.name}</span>
                           {tool.isTemporary && (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-1 rounded flex-shrink-0">
+                            <Badge
+                              variant="warning"
+                              className="text-xs flex-shrink-0"
+                            >
                               {t("namespaces:enhancedToolsTable.badges.new")}
-                            </span>
+                            </Badge>
                           )}
                         </div>
                       </TableCell>

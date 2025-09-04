@@ -28,6 +28,7 @@ import { toast } from "sonner";
 
 import { EditMcpServer } from "@/components/edit-mcp-server";
 import { McpServersListSkeleton } from "@/components/skeletons/mcp-servers-list-skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -182,9 +183,7 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
         const type = row.getValue("type") as string;
         return (
           <div className="px-3 py-2">
-            <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-              {type.toUpperCase()}
-            </span>
+            <Badge variant="info">{type.toUpperCase()}</Badge>
           </div>
         );
       },
@@ -208,15 +207,9 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
         const isPublic = server.user_id === null;
         return (
           <div className="px-3 py-2">
-            <span
-              className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-                isPublic
-                  ? "bg-green-50 text-green-700 ring-green-700/10"
-                  : "bg-gray-50 text-gray-700 ring-gray-700/10"
-              }`}
-            >
+            <Badge variant={isPublic ? "success" : "neutral"}>
               {isPublic ? t("mcp-servers:public") : t("mcp-servers:private")}
-            </span>
+            </Badge>
           </div>
         );
       },

@@ -146,7 +146,9 @@ export function InspectorPing({ makeRequest }: InspectorPingProps) {
   };
 
   const getStatusColor = (success: boolean) => {
-    return success ? "text-green-600" : "text-red-600";
+    return success
+      ? "text-green-600 dark:text-green-400"
+      : "text-red-600 dark:text-red-400";
   };
 
   const getStatusIcon = (success: boolean) => {
@@ -361,14 +363,14 @@ export function InspectorPing({ makeRequest }: InspectorPingProps) {
       </div>
 
       {/* Info Section */}
-      <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-4">
+      <div className="rounded-lg bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 p-4">
         <div className="flex items-start gap-3">
           <Zap className="h-5 w-5 text-yellow-500 mt-0.5" />
           <div>
-            <h4 className="text-sm font-medium text-yellow-900 mb-1">
+            <h4 className="text-sm font-medium text-yellow-900 dark:text-yellow-100 mb-1">
               {t("inspector:pingComponent.aboutPing")}
             </h4>
-            <p className="text-xs text-yellow-700">
+            <p className="text-xs text-yellow-700 dark:text-yellow-300">
               {t("inspector:pingComponent.aboutPingDescription")}
             </p>
           </div>

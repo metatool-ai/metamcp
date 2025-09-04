@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import {
@@ -230,25 +231,19 @@ export function UnifiedToolsTable({
 
     if (tool.sources.mcp) {
       badges.push(
-        <span
-          key="mcp"
-          className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded"
-        >
+        <Badge key="mcp" variant="info" className="gap-1">
           <Wrench className="h-3 w-3" />
           {t("mcp-servers:tools.mcp")}
-        </span>,
+        </Badge>,
       );
     }
 
     if (tool.sources.database) {
       badges.push(
-        <span
-          key="database"
-          className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded"
-        >
+        <Badge key="database" variant="success" className="gap-1">
           <Database className="h-3 w-3" />
           {t("mcp-servers:tools.saved")}
-        </span>,
+        </Badge>,
       );
     }
 
@@ -258,10 +253,10 @@ export function UnifiedToolsTable({
 
     return (
       badges[0] || (
-        <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+        <Badge variant="neutral" className="gap-1">
           <Wrench className="h-3 w-3" />
           {t("mcp-servers:tools.unknown")}
-        </span>
+        </Badge>
       )
     );
   };

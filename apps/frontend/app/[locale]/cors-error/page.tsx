@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTranslations } from "@/hooks/useTranslations";
 import { getAppUrl } from "@/lib/env";
 
@@ -150,8 +151,13 @@ function LoadingFallback() {
 
 export default function CorsErrorPage() {
   return (
-    <Suspense fallback={<LoadingFallback />}>
-      <CorsErrorContent />
-    </Suspense>
+    <div className="relative min-h-screen">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <Suspense fallback={<LoadingFallback />}>
+        <CorsErrorContent />
+      </Suspense>
+    </div>
   );
 }

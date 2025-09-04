@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -312,30 +313,32 @@ export default function ApiKeysPage() {
                     {format(new Date(apiKey.created_at), "MMM d, yyyy")}
                   </TableCell>
                   <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                    <Badge
+                      variant={apiKey.is_active ? "default" : "secondary"}
+                      className={
                         apiKey.is_active
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
-                      }`}
+                          ? "bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 border-green-200 dark:border-green-800"
+                          : "bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200 border-red-200 dark:border-red-800"
+                      }
                     >
                       {apiKey.is_active
                         ? t("common:active")
                         : t("common:inactive")}
-                    </span>
+                    </Badge>
                   </TableCell>
                   <TableCell>
-                    <span
-                      className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
+                    <Badge
+                      variant="outline"
+                      className={
                         apiKey.user_id === null
-                          ? "bg-green-50 text-green-700 ring-green-700/10"
-                          : "bg-gray-50 text-gray-700 ring-gray-700/10"
-                      }`}
+                          ? "bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+                          : "bg-gray-50 dark:bg-gray-950/20 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-800"
+                      }
                     >
                       {apiKey.user_id === null
                         ? t("api-keys:public")
                         : t("api-keys:private")}
-                    </span>
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Button

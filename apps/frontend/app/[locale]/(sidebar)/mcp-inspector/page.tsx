@@ -143,14 +143,26 @@ function McpInspectorContent() {
   const getConnectionStatusInfo = useMemoizedFn(() => {
     switch (connection.connectionStatus) {
       case "connected":
-        return { text: t("inspector:connected"), color: "text-green-600" };
+        return {
+          text: t("inspector:connected"),
+          color: "text-green-600 dark:text-green-400",
+        };
       case "disconnected":
-        return { text: t("inspector:disconnected"), color: "text-gray-500" };
+        return {
+          text: t("inspector:disconnected"),
+          color: "text-gray-500 dark:text-gray-400",
+        };
       case "error":
       case "error-connecting-to-proxy":
-        return { text: t("inspector:connectionError"), color: "text-red-600" };
+        return {
+          text: t("inspector:connectionError"),
+          color: "text-red-600 dark:text-red-400",
+        };
       default:
-        return { text: t("inspector:connecting"), color: "text-yellow-600" };
+        return {
+          text: t("inspector:connecting"),
+          color: "text-yellow-600 dark:text-yellow-400",
+        };
     }
   });
 

@@ -122,6 +122,33 @@ Pass environment variables to STDIO servers:
 }
 ```
 
+#### Environment Variable Interpolation
+
+Use `${ENV_VAR}` syntax to reference environment variables at runtime:
+
+```json
+{
+  "name": "ExampleServer",
+  "type": "STDIO",
+  "command": "uvx",
+  "args": ["mcp-example"],
+  "env": {
+    "API_KEY": "${API_KEY}",
+    "DEBUG": "true"
+  }
+}
+```
+
+**Benefits:**
+- **Secure**: API keys and secrets aren't hardcoded in configs
+- **Flexible**: Values resolved from container environment
+- **Backward compatible**: Raw values still work as before
+
+**How it works:**
+- `${VAR_NAME}` gets replaced with `process.env.VAR_NAME` at runtime
+- Missing variables log a warning but don't crash the server
+- Secrets are automatically redacted in logs
+
 ### Authentication
 
 For servers requiring authentication:

@@ -120,3 +120,40 @@ export async function convertDbServerToParams(
     return null;
   }
 }
+
+/**
+ * Resolves environment variable placeholders in an environment object.
+ * Replaces values like "${VAR_NAME}" with the actual environment variable value.
+ * @param envObject Environment object that may contain placeholder values
+ * @returns Environment object with resolved values
+ */
+export function resolveEnvVariables(
+  envObject: Record<string, any>,
+): Record<string, any> {
+  const resolved: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(envObject)) {
+    if (
+      typeof value === "string" &&
+      value.startsWith("${") &&
+      value.endsWith("}")
+    ) {
+      const varName = value.slice(2, -1);
+      if (process.env[varName]) {
+        resolved[key] = process.env[varName];
+        console.log(
+          `Resolved environment variable: ${key}=${value} -> ${varName}=[REDACTED]`,
+        );
+      } else {
+        resolved[key] = value; // Keep original value if env var not found
+        console.warn(
+          `Environment variable not found: ${varName}, keeping original value: ${value}`,
+        );
+      }
+    } else {
+      resolved[key] = value;
+    }
+  }
+
+  return resolved;
+}

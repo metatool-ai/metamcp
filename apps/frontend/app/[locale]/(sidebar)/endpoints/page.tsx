@@ -411,8 +411,8 @@ export default function EndpointsPage() {
 
                   {/* OAuth HTTPS Warning */}
                   {form.watch("enableOauth") && (
-                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                      <p className="text-sm text-yellow-800">
+                    <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800/30 rounded-md">
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
                         {t("endpoints:oauthHttpsWarning")}
                       </p>
                     </div>

@@ -16,7 +16,8 @@
     "OIDC_PROVIDER_ID",
     "TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL",
     "NODE_ENV",
-    "DOCKER_HOST"
+    "DOCKER_HOST",
+    "POSTGRES_CA_CERT"
   ],
   "tasks": {
     "build": {

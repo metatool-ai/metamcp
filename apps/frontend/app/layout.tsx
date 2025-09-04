@@ -5,6 +5,7 @@ import localFont from "next/font/local";
 import { PublicEnvScript } from "next-runtime-env";
 import { Toaster } from "sonner";
 
+import { ThemeProvider } from "../components/providers/theme-provider";
 import { TRPCProvider } from "../components/providers/trpc-provider";
 
 const geistSans = localFont({
@@ -28,15 +29,17 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html>
+    <html suppressHydrationWarning>
       <head>
         <PublicEnvScript />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <TRPCProvider>
-          {children}
-          <Toaster richColors position="top-right" closeButton />
-        </TRPCProvider>
+        <ThemeProvider>
+          <TRPCProvider>
+            {children}
+            <Toaster richColors position="top-right" closeButton />
+          </TRPCProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
