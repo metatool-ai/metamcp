@@ -158,7 +158,7 @@ export const connectMetaMcpClient = async (
   const waitFor = 5000;
 
   // Get max attempts from server error tracker instead of hardcoding
-  const maxAttempts = serverErrorTracker.getServerMaxAttempts(
+  const maxAttempts = await serverErrorTracker.getServerMaxAttempts(
     serverParams.uuid,
   );
   let count = 0;
