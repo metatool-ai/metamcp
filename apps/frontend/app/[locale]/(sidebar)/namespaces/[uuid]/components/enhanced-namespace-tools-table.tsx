@@ -42,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 
@@ -346,10 +347,13 @@ export function EnhancedNamespaceToolsTable({
     setEditingOverrides((prev) => new Set(prev).add(toolId));
     setTempOverrides((prev) =>
       new Map(prev).set(toolId, {
-        name: tool.overrideName || "",
-        description: tool.overrideDescription || "",
+        name: tool.overrideName || tool.name || "",
+        description: tool.overrideDescription || tool.description || "",
       }),
     );
+
+    // Auto-expand the row when starting to edit overrides
+    setExpandedRows((prev) => new Set(prev).add(toolId));
   };
 
   const cancelEditingOverrides = (toolId: string) => {
@@ -369,10 +373,19 @@ export function EnhancedNamespaceToolsTable({
     const overrides = tempOverrides.get(toolId);
     if (!overrides) return;
 
+    // Determine if we should clear overrides (set to null) or keep them
+    // Clear name override if it matches the original name or is empty
+    const shouldClearName =
+      overrides.name === tool.name || overrides.name?.trim() === "";
+
+    // Clear description override if it matches the original description
+    // But allow empty string as a valid override (user wants to remove description)
+    const shouldClearDescription = overrides.description === tool.description;
+
     await handleOverridesUpdate(
       tool,
-      overrides.name || null,
-      overrides.description || null,
+      shouldClearName ? null : overrides.name?.trim() || "",
+      shouldClearDescription ? null : overrides.description,
     );
 
     // Clear editing state
@@ -925,8 +938,7 @@ export function EnhancedNamespaceToolsTable({
                                   <div className="space-y-3">
                                     <div>
                                       <label className="text-xs font-medium text-muted-foreground">
-                                        Override Name (leave empty to use
-                                        original)
+                                        Tool Name
                                       </label>
                                       <Input
                                         value={
@@ -939,16 +951,18 @@ export function EnhancedNamespaceToolsTable({
                                             e.target.value,
                                           )
                                         }
-                                        placeholder={tool.name}
+                                        placeholder="Enter custom tool name"
                                         className="mt-1"
                                       />
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Original: {tool.name}
+                                      </p>
                                     </div>
                                     <div>
                                       <label className="text-xs font-medium text-muted-foreground">
-                                        Override Description (leave empty to use
-                                        original)
+                                        Tool Description
                                       </label>
-                                      <Input
+                                      <Textarea
                                         value={
                                           tempOverrides.get(toolId)
                                             ?.description || ""
@@ -960,11 +974,14 @@ export function EnhancedNamespaceToolsTable({
                                             e.target.value,
                                           )
                                         }
-                                        placeholder={
-                                          tool.description || "No description"
-                                        }
-                                        className="mt-1"
+                                        placeholder="Enter custom tool description"
+                                        className="mt-1 min-h-[60px] max-h-[120px] resize-none"
+                                        rows={3}
                                       />
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Original:{" "}
+                                        {tool.description || "No description"}
+                                      </p>
                                     </div>
                                     <div className="flex gap-2">
                                       <Button
@@ -989,28 +1006,25 @@ export function EnhancedNamespaceToolsTable({
                                         <X className="h-3 w-3 mr-1" />
                                         Cancel
                                       </Button>
-                                      {(tool.overrideName ||
-                                        tool.overrideDescription) && (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => {
-                                            updateTempOverride(
-                                              toolId,
-                                              "name",
-                                              "",
-                                            );
-                                            updateTempOverride(
-                                              toolId,
-                                              "description",
-                                              "",
-                                            );
-                                          }}
-                                        >
-                                          <RotateCcw className="h-3 w-3 mr-1" />
-                                          Reset to Original
-                                        </Button>
-                                      )}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          updateTempOverride(
+                                            toolId,
+                                            "name",
+                                            tool.name || "",
+                                          );
+                                          updateTempOverride(
+                                            toolId,
+                                            "description",
+                                            tool.description || "",
+                                          );
+                                        }}
+                                      >
+                                        <RotateCcw className="h-3 w-3 mr-1" />
+                                        Reset to Original
+                                      </Button>
                                     </div>
                                   </div>
                                 </div>
@@ -1100,7 +1114,7 @@ export function EnhancedNamespaceToolsTable({
                                   )}
                                 </h5>
                                 <div className="bg-background p-3 rounded border">
-                                  <p className="text-sm text-muted-foreground">
+                                  <p className="text-sm text-muted-foreground break-words whitespace-pre-wrap overflow-wrap-anywhere">
                                     {tool.description}
                                   </p>
                                 </div>

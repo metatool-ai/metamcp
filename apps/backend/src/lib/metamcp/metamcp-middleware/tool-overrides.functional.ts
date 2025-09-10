@@ -111,6 +111,15 @@ class ToolOverridesCache {
     return this.reverseNameCache.get(reverseKey) || null;
   }
 
+  setOriginalName(
+    namespaceUuid: string,
+    overrideName: string,
+    originalName: string,
+  ): void {
+    const reverseKey = this.getReverseKey(namespaceUuid, overrideName);
+    this.reverseNameCache.set(reverseKey, originalName);
+  }
+
   clear(namespaceUuid?: string): void {
     if (namespaceUuid) {
       for (const key of this.overrideCache.keys()) {
@@ -267,12 +276,34 @@ async function applyToolOverrides(
           return;
         }
 
-        // Apply overrides
+        // Apply overrides - preserve server prefix format
+        // For name: only apply if overrideName is not null and not empty
+        const overriddenName =
+          override.overrideName && override.overrideName.trim() !== ""
+            ? `${parsed.serverName}__${override.overrideName}`
+            : tool.name;
+
+        // For description: apply override if it's not null, even if empty string
+        // This allows users to explicitly set empty descriptions
+        const overriddenDescription =
+          override.overrideDescription !== null
+            ? override.overrideDescription
+            : tool.description;
+
         const overriddenTool: Tool = {
           ...tool,
-          name: override.overrideName || tool.name,
-          description: override.overrideDescription || tool.description,
+          name: overriddenName,
+          description: overriddenDescription,
         };
+
+        // Update reverse mapping cache for the new full override name
+        if (override.overrideName && useCache) {
+          toolOverridesCache.setOriginalName(
+            namespaceUuid,
+            override.overrideName,
+            tool.name,
+          );
+        }
 
         overriddenTools.push(overriddenTool);
       } catch (error) {
