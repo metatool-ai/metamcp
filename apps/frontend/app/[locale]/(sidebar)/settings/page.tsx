@@ -24,6 +24,7 @@ export default function SettingsPage() {
   const { t } = useTranslations();
   const [isSignupDisabled, setIsSignupDisabled] = useState(false);
   const [isSsoSignupDisabled, setIsSsoSignupDisabled] = useState(false);
+  const [isBasicAuthDisabled, setIsBasicAuthDisabled] = useState(false);
   const [mcpResetTimeoutOnProgress, setMcpResetTimeoutOnProgress] =
     useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -56,6 +57,12 @@ export default function SettingsPage() {
     isLoading: ssoSignupLoading,
     refetch: refetchSsoSignup,
   } = trpc.frontend.config.getSsoSignupDisabled.useQuery();
+
+  const {
+    data: basicAuthDisabled,
+    isLoading: basicAuthLoading,
+    refetch: refetchBasicAuth,
+  } = trpc.frontend.config.getBasicAuthDisabled.useQuery();
 
   const {
     data: mcpResetTimeoutOnProgressData,
@@ -100,6 +107,17 @@ export default function SettingsPage() {
           refetchSsoSignup();
         } else {
           console.error("Failed to update SSO signup setting");
+        }
+      },
+    });
+
+  const setBasicAuthDisabledMutation =
+    trpc.frontend.config.setBasicAuthDisabled.useMutation({
+      onSuccess: (data) => {
+        if (data.success) {
+          refetchBasicAuth();
+        } else {
+          console.error("Failed to update basic auth setting");
         }
       },
     });
@@ -162,6 +180,12 @@ export default function SettingsPage() {
       setIsSsoSignupDisabled(ssoSignupDisabled);
     }
   }, [ssoSignupDisabled]);
+
+  useEffect(() => {
+    if (basicAuthDisabled !== undefined) {
+      setIsBasicAuthDisabled(basicAuthDisabled);
+    }
+  }, [basicAuthDisabled]);
 
   useEffect(() => {
     if (mcpResetTimeoutOnProgressData !== undefined) {
@@ -239,6 +263,24 @@ export default function SettingsPage() {
     }
   };
 
+  const handleBasicAuthToggle = async (checked: boolean) => {
+    setIsBasicAuthDisabled(checked);
+    try {
+      await setBasicAuthDisabledMutation.mutateAsync({ disabled: checked });
+      toast.success(
+        checked
+          ? t("settings:basicAuthDisabledSuccess")
+          : t("settings:basicAuthEnabledSuccess"),
+      );
+    } catch (error) {
+      setIsBasicAuthDisabled(!checked);
+      console.error("Failed to update basic auth setting:", error);
+      toast.error(t("settings:basicAuthToggleError"), {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const handleMcpResetTimeoutToggle = async (checked: boolean) => {
     setMcpResetTimeoutOnProgress(checked);
     try {
@@ -289,6 +331,7 @@ export default function SettingsPage() {
   const isLoading =
     signupLoading ||
     ssoSignupLoading ||
+    basicAuthLoading ||
     mcpResetLoading ||
     mcpTimeoutLoading ||
     mcpMaxTotalLoading ||
@@ -357,6 +400,23 @@ export default function SettingsPage() {
                 checked={isSsoSignupDisabled}
                 onCheckedChange={handleSsoSignupToggle}
                 disabled={setSsoSignupDisabledMutation.isPending}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="disable-basic-auth" className="text-base">
+                  {t("settings:disableBasicAuth")}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {t("settings:disableBasicAuthDescription")}
+                </p>
+              </div>
+              <Switch
+                id="disable-basic-auth"
+                checked={isBasicAuthDisabled}
+                onCheckedChange={handleBasicAuthToggle}
+                disabled={setBasicAuthDisabledMutation.isPending}
               />
             </div>
           </CardContent>

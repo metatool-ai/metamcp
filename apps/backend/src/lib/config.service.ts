@@ -33,6 +33,21 @@ export const configService = {
     );
   },
 
+  async isBasicAuthDisabled(): Promise<boolean> {
+    const config = await configRepo.getConfig(
+      ConfigKeyEnum.Enum.DISABLE_BASIC_AUTH,
+    );
+    return config?.value === "true";
+  },
+
+  async setBasicAuthDisabled(disabled: boolean): Promise<void> {
+    await configRepo.setConfig(
+      ConfigKeyEnum.Enum.DISABLE_BASIC_AUTH,
+      disabled.toString(),
+      "Whether basic email/password authentication is disabled",
+    );
+  },
+
   async getMcpResetTimeoutOnProgress(): Promise<boolean> {
     const config = await configRepo.getConfig(
       ConfigKeyEnum.Enum.MCP_RESET_TIMEOUT_ON_PROGRESS,

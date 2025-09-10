@@ -300,9 +300,12 @@ export class NamespacesRepository {
       // If mcpServerUuids are provided, update the mappings
       if (input.mcpServerUuids) {
         // Get existing tool mappings to preserve their status
-        const existingToolMappings = await namespaceMappingsRepository.findToolMappingsByNamespace(input.uuid);
+        const existingToolMappings =
+          await namespaceMappingsRepository.findToolMappingsByNamespace(
+            input.uuid,
+          );
         const existingToolStatusMap = new Map<string, "ACTIVE" | "INACTIVE">();
-        
+
         // Create a map of existing tool statuses by tool_uuid
         existingToolMappings.forEach((mapping) => {
           existingToolStatusMap.set(mapping.tool_uuid, mapping.status);
@@ -343,7 +346,8 @@ export class NamespacesRepository {
               tool_uuid: tool.uuid,
               mcp_server_uuid: tool.mcp_server_uuid,
               // Preserve existing status if tool was previously mapped, otherwise default to ACTIVE
-              status: existingToolStatusMap.get(tool.uuid) || ("ACTIVE" as const),
+              status:
+                existingToolStatusMap.get(tool.uuid) || ("ACTIVE" as const),
             }));
 
             await tx.insert(namespaceToolMappingsTable).values(toolMappings);

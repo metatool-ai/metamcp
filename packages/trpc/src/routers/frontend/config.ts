@@ -12,6 +12,10 @@ export const createConfigRouter = (implementations: {
   setSsoSignupDisabled: (input: {
     disabled: boolean;
   }) => Promise<{ success: boolean }>;
+  getBasicAuthDisabled: () => Promise<boolean>;
+  setBasicAuthDisabled: (input: {
+    disabled: boolean;
+  }) => Promise<{ success: boolean }>;
   getMcpResetTimeoutOnProgress: () => Promise<boolean>;
   setMcpResetTimeoutOnProgress: (input: {
     enabled: boolean;
@@ -53,6 +57,16 @@ export const createConfigRouter = (implementations: {
       .input(z.object({ disabled: z.boolean() }))
       .mutation(async ({ input }) => {
         return await implementations.setSsoSignupDisabled(input);
+      }),
+
+    getBasicAuthDisabled: publicProcedure.query(async () => {
+      return await implementations.getBasicAuthDisabled();
+    }),
+
+    setBasicAuthDisabled: protectedProcedure
+      .input(z.object({ disabled: z.boolean() }))
+      .mutation(async ({ input }) => {
+        return await implementations.setBasicAuthDisabled(input);
       }),
 
     getMcpResetTimeoutOnProgress: publicProcedure.query(async () => {

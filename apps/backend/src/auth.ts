@@ -17,6 +17,19 @@ if (!process.env.APP_URL) {
 const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET;
 const BETTER_AUTH_URL = process.env.APP_URL;
 
+// Helper function to create basic auth middleware
+const createBasicAuthCheckMiddleware = () => {
+  return async (request: unknown) => {
+    const isBasicAuthDisabled = await configService.isBasicAuthDisabled();
+    if (isBasicAuthDisabled) {
+      throw new Error(
+        "Basic email/password authentication is currently disabled. Please use SSO/OIDC authentication instead.",
+      );
+    }
+    return { request };
+  };
+};
+
 // OIDC Provider configuration - optional, only if environment variables are provided
 const oidcProviders: GenericOAuthConfig[] = [];
 
@@ -66,7 +79,7 @@ export const auth = betterAuth({
       : []),
   ],
   emailAndPassword: {
-    enabled: true,
+    enabled: true, // This will be dynamically controlled by middleware
     requireEmailVerification: false, // Set to true if you want email verification
   },
   account: {
@@ -134,6 +147,25 @@ export const auth = betterAuth({
       },
     },
   },
+  // Add middleware to check basic auth setting
+  middleware: [
+    {
+      path: "/sign-in/email",
+      middleware: createBasicAuthCheckMiddleware(),
+    },
+    {
+      path: "/sign-up/email",
+      middleware: createBasicAuthCheckMiddleware(),
+    },
+    {
+      path: "/forgot-password",
+      middleware: createBasicAuthCheckMiddleware(),
+    },
+    {
+      path: "/reset-password",
+      middleware: createBasicAuthCheckMiddleware(),
+    },
+  ],
 });
 
 console.log("✓ Better Auth instance created successfully");

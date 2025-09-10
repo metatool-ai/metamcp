@@ -25,6 +25,17 @@ export const configImplementations = {
     return { success: true };
   },
 
+  getBasicAuthDisabled: async (): Promise<boolean> => {
+    return await configService.isBasicAuthDisabled();
+  },
+
+  setBasicAuthDisabled: async (input: {
+    disabled: boolean;
+  }): Promise<{ success: boolean }> => {
+    await configService.setBasicAuthDisabled(input.disabled);
+    return { success: true };
+  },
+
   getMcpResetTimeoutOnProgress: async (): Promise<boolean> => {
     return await configService.getMcpResetTimeoutOnProgress();
   },
