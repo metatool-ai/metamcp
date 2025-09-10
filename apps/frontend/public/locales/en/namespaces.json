@@ -136,7 +136,8 @@
     "showFullSchemaJson": "Show full schema JSON",
     "autoSaving": "Auto-saving...",
     "active": "ACTIVE",
-    "inactive": "INACTIVE"
+    "inactive": "INACTIVE",
+    "editOverrides": "Edit Overrides"
   },
   "serversTable": {
     "noServers": "No MCP Servers",

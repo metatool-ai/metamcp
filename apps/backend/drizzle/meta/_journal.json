@@ -64,6 +64,13 @@
       "when": 1756782185214,
       "tag": "0008_shallow_puppet_master",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1757529812218,
+      "tag": "0009_stormy_sentinel",
+      "breakpoints": true
     }
   ]
 }

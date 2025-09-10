@@ -36,6 +36,10 @@ import {
   ListToolsHandler,
   MetaMCPHandlerContext,
 } from "./metamcp-middleware/functional-middleware";
+import {
+  createToolOverridesCallToolMiddleware,
+  createToolOverridesListToolsMiddleware,
+} from "./metamcp-middleware/tool-overrides.functional";
 import { sanitizeName } from "./utils";
 
 export const createServer = async (
@@ -321,6 +325,10 @@ export const createServer = async (
 
   // Compose middleware with handlers - this is the Express-like functional approach
   const listToolsWithMiddleware = compose(
+    createToolOverridesListToolsMiddleware({ 
+      cacheEnabled: true, 
+      persistentCacheOnListTools: true 
+    }),
     createFilterListToolsMiddleware({ cacheEnabled: true }),
     // Add more middleware here as needed
     // createLoggingMiddleware(),
@@ -333,6 +341,7 @@ export const createServer = async (
       customErrorMessage: (toolName, reason) =>
         `Access denied to tool "${toolName}": ${reason}`,
     }),
+    createToolOverridesCallToolMiddleware({ cacheEnabled: true }),
     // Add more middleware here as needed
     // createAuditingMiddleware(),
     // createAuthorizationMiddleware(),

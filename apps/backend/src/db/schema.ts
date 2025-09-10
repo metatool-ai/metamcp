@@ -304,7 +304,7 @@ export const namespaceServerMappingsTable = pgTable(
   ],
 );
 
-// Many-to-many relationship table between namespaces and tools for status control
+// Many-to-many relationship table between namespaces and tools for status control and overrides
 export const namespaceToolMappingsTable = pgTable(
   "namespace_tool_mappings",
   {
@@ -321,6 +321,8 @@ export const namespaceToolMappingsTable = pgTable(
     status: mcpServerStatusEnum("status")
       .notNull()
       .default(McpServerStatusEnum.Enum.ACTIVE),
+    override_name: text("override_name"),
+    override_description: text("override_description"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

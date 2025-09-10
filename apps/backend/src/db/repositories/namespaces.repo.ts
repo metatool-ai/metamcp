@@ -253,7 +253,10 @@ export class NamespacesRepository {
         // Server fields
         serverName: mcpServersTable.name,
         serverUuid: mcpServersTable.uuid,
+        // Namespace mapping fields
         status: namespaceToolMappingsTable.status,
+        overrideName: namespaceToolMappingsTable.override_name,
+        overrideDescription: namespaceToolMappingsTable.override_description,
       })
       .from(toolsTable)
       .innerJoin(

@@ -3,17 +3,21 @@
 import { NamespaceTool, ToolStatusEnum } from "@repo/zod-types";
 import {
   Calendar,
+  Check,
   ChevronDownIcon,
   ChevronUpIcon,
   Database,
+  Edit3,
   Eye,
   EyeOff,
   Hash,
   MoreHorizontal,
   RefreshCw,
+  RotateCcw,
   Search,
   Server,
   Wrench,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import React, { useMemo, useState } from "react";
@@ -65,6 +69,10 @@ interface EnhancedNamespaceTool {
   serverName?: string;
   serverUuid?: string;
 
+  // Override fields
+  overrideName?: string | null;
+  overrideDescription?: string | null;
+
   // Source tracking
   sources: {
     metamcp: boolean;
@@ -110,6 +118,12 @@ export function EnhancedNamespaceToolsTable({
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [editingOverrides, setEditingOverrides] = useState<Set<string>>(
+    new Set(),
+  );
+  const [tempOverrides, setTempOverrides] = useState<
+    Map<string, { name?: string; description?: string }>
+  >(new Map());
 
   // Get translations
   const { t } = useTranslations();
@@ -136,6 +150,33 @@ export function EnhancedNamespaceToolsTable({
         toast.error(t("namespaces:enhancedToolsTable.toolStatusUpdateFailed"), {
           description: error.message,
         });
+      },
+    });
+
+  // Use namespace-specific tool overrides update mutation
+  const updateToolOverridesMutation =
+    trpc.frontend.namespaces.updateToolOverrides.useMutation({
+      onSuccess: (response) => {
+        if (response.success) {
+          toast.success(
+            t("namespaces:enhancedToolsTable.toolOverridesUpdated"),
+          );
+          // Invalidate the namespace tools query to refresh the data
+          utils.frontend.namespaces.getTools.invalidate({ namespaceUuid });
+        } else {
+          toast.error(
+            t("namespaces:enhancedToolsTable.toolOverridesUpdateFailed"),
+          );
+        }
+      },
+      onError: (error) => {
+        console.error("Error updating tool overrides:", error);
+        toast.error(
+          t("namespaces:enhancedToolsTable.toolOverridesUpdateFailed"),
+          {
+            description: error.message,
+          },
+        );
       },
     });
 
@@ -269,6 +310,85 @@ export function EnhancedNamespaceToolsTable({
       toolUuid: tool.uuid,
       serverUuid: tool.serverUuid,
       status: newStatus,
+    });
+  };
+
+  // Handle tool overrides update (only for saved tools)
+  const handleOverridesUpdate = async (
+    tool: EnhancedNamespaceTool,
+    overrideName?: string | null,
+    overrideDescription?: string | null,
+  ) => {
+    if (!tool.sources.saved || !tool.uuid || !tool.serverUuid) {
+      toast.error(t("namespaces:enhancedToolsTable.cannotUpdateOverrides"));
+      return;
+    }
+
+    // Don't allow updates during session initialization
+    if (sessionInitializing || updateToolOverridesMutation.isPending) {
+      return;
+    }
+
+    updateToolOverridesMutation.mutate({
+      namespaceUuid,
+      toolUuid: tool.uuid,
+      serverUuid: tool.serverUuid,
+      overrideName,
+      overrideDescription,
+    });
+  };
+
+  // Handle editing overrides
+  const startEditingOverrides = (
+    toolId: string,
+    tool: EnhancedNamespaceTool,
+  ) => {
+    setEditingOverrides((prev) => new Set(prev).add(toolId));
+    setTempOverrides((prev) =>
+      new Map(prev).set(toolId, {
+        name: tool.overrideName || "",
+        description: tool.overrideDescription || "",
+      }),
+    );
+  };
+
+  const cancelEditingOverrides = (toolId: string) => {
+    setEditingOverrides((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(toolId);
+      return newSet;
+    });
+    setTempOverrides((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(toolId);
+      return newMap;
+    });
+  };
+
+  const saveOverrides = async (toolId: string, tool: EnhancedNamespaceTool) => {
+    const overrides = tempOverrides.get(toolId);
+    if (!overrides) return;
+
+    await handleOverridesUpdate(
+      tool,
+      overrides.name || null,
+      overrides.description || null,
+    );
+
+    // Clear editing state
+    cancelEditingOverrides(toolId);
+  };
+
+  const updateTempOverride = (
+    toolId: string,
+    field: "name" | "description",
+    value: string,
+  ) => {
+    setTempOverrides((prev) => {
+      const newMap = new Map(prev);
+      const current = newMap.get(toolId) || {};
+      newMap.set(toolId, { ...current, [field]: value });
+      return newMap;
     });
   };
 
@@ -627,7 +747,24 @@ export function EnhancedNamespaceToolsTable({
                       <TableCell className="font-medium min-w-[150px] w-[200px]">
                         <div className="flex items-center gap-2">
                           <Wrench className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                          <span className="truncate">{tool.name}</span>
+                          <div className="flex flex-col">
+                            <span className="truncate font-medium">
+                              {tool.overrideName || tool.name}
+                            </span>
+                            {tool.overrideName && (
+                              <span className="text-xs text-muted-foreground truncate">
+                                Original: {tool.name}
+                              </span>
+                            )}
+                          </div>
+                          {tool.overrideName && (
+                            <Badge
+                              variant="secondary"
+                              className="text-xs flex-shrink-0"
+                            >
+                              Override
+                            </Badge>
+                          )}
                           {tool.isTemporary && (
                             <Badge
                               variant="warning"
@@ -679,10 +816,17 @@ export function EnhancedNamespaceToolsTable({
                       </TableCell>
                       <TableCell className="min-w-[200px] max-w-[300px]">
                         <div className="w-full">
-                          {tool.description ? (
-                            <p className="text-sm text-muted-foreground line-clamp-2 break-words">
-                              {tool.description}
-                            </p>
+                          {tool.overrideDescription || tool.description ? (
+                            <div className="flex flex-col gap-1">
+                              <p className="text-sm text-muted-foreground line-clamp-2 break-words">
+                                {tool.overrideDescription || tool.description}
+                              </p>
+                              {tool.overrideDescription && tool.description && (
+                                <p className="text-xs text-muted-foreground/70 line-clamp-1 break-words">
+                                  Original: {tool.description}
+                                </p>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-sm text-muted-foreground italic">
                               {t("namespaces:enhancedToolsTable.noDescription")}
@@ -738,6 +882,19 @@ export function EnhancedNamespaceToolsTable({
                                 </>
                               )}
                             </DropdownMenuItem>
+                            {tool.sources.saved && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  startEditingOverrides(toolId, tool)
+                                }
+                                disabled={editingOverrides.has(toolId)}
+                              >
+                                <Edit3 className="mr-2 h-4 w-4" />
+                                {t(
+                                  "namespaces:enhancedToolsTable.editOverrides",
+                                )}
+                              </DropdownMenuItem>
+                            )}
                             {tool.serverUuid && (
                               <DropdownMenuItem asChild>
                                 <Link href={`/mcp-servers/${tool.serverUuid}`}>
@@ -758,6 +915,107 @@ export function EnhancedNamespaceToolsTable({
                       <TableRow>
                         <TableCell colSpan={8} className="bg-muted/50">
                           <div className="py-4 space-y-4">
+                            {/* Tool Override Editing */}
+                            {editingOverrides.has(toolId) &&
+                              tool.sources.saved && (
+                                <div className="mb-4 p-4 border rounded-lg bg-muted/20">
+                                  <h5 className="text-sm font-medium mb-3">
+                                    Edit Tool Overrides
+                                  </h5>
+                                  <div className="space-y-3">
+                                    <div>
+                                      <label className="text-xs font-medium text-muted-foreground">
+                                        Override Name (leave empty to use
+                                        original)
+                                      </label>
+                                      <Input
+                                        value={
+                                          tempOverrides.get(toolId)?.name || ""
+                                        }
+                                        onChange={(e) =>
+                                          updateTempOverride(
+                                            toolId,
+                                            "name",
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder={tool.name}
+                                        className="mt-1"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs font-medium text-muted-foreground">
+                                        Override Description (leave empty to use
+                                        original)
+                                      </label>
+                                      <Input
+                                        value={
+                                          tempOverrides.get(toolId)
+                                            ?.description || ""
+                                        }
+                                        onChange={(e) =>
+                                          updateTempOverride(
+                                            toolId,
+                                            "description",
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder={
+                                          tool.description || "No description"
+                                        }
+                                        className="mt-1"
+                                      />
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        onClick={() =>
+                                          saveOverrides(toolId, tool)
+                                        }
+                                        disabled={
+                                          updateToolOverridesMutation.isPending
+                                        }
+                                      >
+                                        <Check className="h-3 w-3 mr-1" />
+                                        Save
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          cancelEditingOverrides(toolId)
+                                        }
+                                      >
+                                        <X className="h-3 w-3 mr-1" />
+                                        Cancel
+                                      </Button>
+                                      {(tool.overrideName ||
+                                        tool.overrideDescription) && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            updateTempOverride(
+                                              toolId,
+                                              "name",
+                                              "",
+                                            );
+                                            updateTempOverride(
+                                              toolId,
+                                              "description",
+                                              "",
+                                            );
+                                          }}
+                                        >
+                                          <RotateCcw className="h-3 w-3 mr-1" />
+                                          Reset to Original
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
                             {/* Tool Info */}
                             <div className="flex items-center gap-4">
                               {tool.uuid && (

@@ -129,7 +129,8 @@
     "showFullSchemaJson": "显示完整架构 JSON",
     "autoSaving": "自动保存中...",
     "active": "活跃",
-    "inactive": "非活跃"
+    "inactive": "非活跃",
+    "editOverrides": "编辑覆盖"
   },
   "serversTable": {
     "noServers": "无 MCP 服务器",

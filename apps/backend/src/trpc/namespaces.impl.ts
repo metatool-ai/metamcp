@@ -12,6 +12,8 @@ import {
   UpdateNamespaceResponseSchema,
   UpdateNamespaceServerStatusRequestSchema,
   UpdateNamespaceServerStatusResponseSchema,
+  UpdateNamespaceToolOverridesRequestSchema,
+  UpdateNamespaceToolOverridesResponseSchema,
   UpdateNamespaceToolStatusRequestSchema,
   UpdateNamespaceToolStatusResponseSchema,
 } from "@repo/zod-types";
@@ -556,6 +558,62 @@ export const namespacesImplementations = {
       };
     } catch (error) {
       console.error("Error updating tool status:", error);
+      return {
+        success: false as const,
+        message:
+          error instanceof Error ? error.message : "Internal server error",
+      };
+    }
+  },
+
+  updateToolOverrides: async (
+    input: z.infer<typeof UpdateNamespaceToolOverridesRequestSchema>,
+    userId: string,
+  ): Promise<z.infer<typeof UpdateNamespaceToolOverridesResponseSchema>> => {
+    try {
+      // First, check if user has permission to update this namespace
+      const namespace = await namespacesRepository.findByUuid(
+        input.namespaceUuid,
+      );
+
+      if (!namespace) {
+        return {
+          success: false as const,
+          message: "Namespace not found",
+        };
+      }
+
+      // Check if user owns this namespace (only owners can update tool overrides)
+      if (namespace.user_id && namespace.user_id !== userId) {
+        return {
+          success: false as const,
+          message:
+            "Access denied: You can only update tool overrides for namespaces you own",
+        };
+      }
+
+      const updatedMapping =
+        await namespaceMappingsRepository.updateToolOverrides({
+          namespaceUuid: input.namespaceUuid,
+          toolUuid: input.toolUuid,
+          serverUuid: input.serverUuid,
+          overrideName: input.overrideName,
+          overrideDescription: input.overrideDescription,
+        });
+
+      if (!updatedMapping) {
+        return {
+          success: false as const,
+          message: "Tool not found in namespace",
+        };
+      }
+
+      return {
+        success: true as const,
+        message: "Tool overrides updated successfully",
+      };
+    } catch (error) {
+      console.error("Error updating tool overrides:", error);
       return {
         success: false as const,
         message:

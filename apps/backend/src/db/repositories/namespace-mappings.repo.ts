@@ -1,5 +1,6 @@
 import {
   NamespaceServerStatusUpdate,
+  NamespaceToolOverridesUpdate,
   NamespaceToolStatusUpdate,
 } from "@repo/zod-types";
 import { and, eq, sql } from "drizzle-orm";
@@ -33,6 +34,25 @@ export class NamespaceMappingsRepository {
       .update(namespaceToolMappingsTable)
       .set({
         status: input.status,
+      })
+      .where(
+        and(
+          eq(namespaceToolMappingsTable.namespace_uuid, input.namespaceUuid),
+          eq(namespaceToolMappingsTable.tool_uuid, input.toolUuid),
+          eq(namespaceToolMappingsTable.mcp_server_uuid, input.serverUuid),
+        ),
+      )
+      .returning();
+
+    return updatedMapping;
+  }
+
+  async updateToolOverrides(input: NamespaceToolOverridesUpdate) {
+    const [updatedMapping] = await db
+      .update(namespaceToolMappingsTable)
+      .set({
+        override_name: input.overrideName,
+        override_description: input.overrideDescription,
       })
       .where(
         and(
