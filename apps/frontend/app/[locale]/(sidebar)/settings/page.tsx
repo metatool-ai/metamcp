@@ -404,7 +404,7 @@ export default function SettingsPage() {
                       id="mcp-timeout"
                       type="number"
                       min="1000"
-                      max="3000000"
+                      max="86400000"
                       onChange={(e) => {
                         const value = parseInt(e.target.value, 10);
                         field.onChange(isNaN(value) ? 1000 : value);
@@ -434,7 +434,7 @@ export default function SettingsPage() {
                       id="mcp-max-total-timeout"
                       type="number"
                       min="1000"
-                      max="3000000"
+                      max="86400000"
                       onChange={(e) => {
                         const value = parseInt(e.target.value, 10);
                         field.onChange(isNaN(value) ? 1000 : value);

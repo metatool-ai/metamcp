@@ -70,7 +70,7 @@ export const createConfigRouter = (implementations: {
     }),
 
     setMcpTimeout: protectedProcedure
-      .input(z.object({ timeout: z.number().min(1000).max(3000000) }))
+      .input(z.object({ timeout: z.number().min(1000).max(86400000) }))
       .mutation(async ({ input }) => {
         return await implementations.setMcpTimeout(input);
       }),
@@ -80,7 +80,7 @@ export const createConfigRouter = (implementations: {
     }),
 
     setMcpMaxTotalTimeout: protectedProcedure
-      .input(z.object({ timeout: z.number().min(1000).max(3000000) }))
+      .input(z.object({ timeout: z.number().min(1000).max(86400000) }))
       .mutation(async ({ input }) => {
         return await implementations.setMcpMaxTotalTimeout(input);
       }),
