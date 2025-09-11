@@ -124,7 +124,7 @@
       "source": "来源",
       "status": "状态"
     },
-    "toolDescription": "工具描述",
+    "toolDescription": "工具描述 (原始)",
     "toolSchema": "工具架构",
     "type": "类型",
     "parameters": "参数",

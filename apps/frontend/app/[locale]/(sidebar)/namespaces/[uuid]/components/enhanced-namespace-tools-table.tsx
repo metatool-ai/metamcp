@@ -378,8 +378,8 @@ export function EnhancedNamespaceToolsTable({
     const shouldClearName =
       overrides.name === tool.name || overrides.name?.trim() === "";
 
-    // Clear description override if it matches the original description
-    // But allow empty string as a valid override (user wants to remove description)
+    // Clear description override only if it exactly matches the original description
+    // This allows users to set empty string as an override (to remove description)
     const shouldClearDescription = overrides.description === tool.description;
 
     await handleOverridesUpdate(
@@ -978,10 +978,10 @@ export function EnhancedNamespaceToolsTable({
                                         className="mt-1 min-h-[60px] max-h-[120px] resize-none"
                                         rows={3}
                                       />
-                                      <p className="text-xs text-muted-foreground mt-1">
+                                      {/* <p className="text-xs text-muted-foreground mt-1">
                                         Original:{" "}
                                         {tool.description || "No description"}
-                                      </p>
+                                      </p> */}
                                     </div>
                                     <div className="flex gap-2">
                                       <Button
