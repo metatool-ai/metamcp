@@ -27,6 +27,7 @@ import {
 } from "../db/repositories";
 import { NamespacesSerializer } from "../db/serializers";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
+import { mapOverrideNameToOriginal } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 
 export const namespacesImplementations = {
   create: async (
@@ -658,6 +659,8 @@ export const namespacesImplementations = {
       }
 
       // Parse tool names to extract server names and actual tool names
+      // Important: The input tools may have overridden names applied by MetaMCP middleware
+      // We need to map them back to original names to avoid overwriting original names in the database
       const parsedTools: Array<{
         serverName: string;
         toolName: string;
@@ -677,7 +680,26 @@ export const namespacesImplementations = {
         }
 
         const serverName = tool.name.substring(0, lastDoubleUnderscoreIndex);
-        const toolName = tool.name.substring(lastDoubleUnderscoreIndex + 2);
+        let toolName = tool.name.substring(lastDoubleUnderscoreIndex + 2);
+
+        // Check if this tool name might be an override name by looking up the original name
+        // If it is an override name, skip this tool entirely to avoid duplicates
+        try {
+          const originalToolName = await mapOverrideNameToOriginal(
+            toolName,
+            input.namespaceUuid,
+          );
+          
+          // If we found an original name mapping, this means the current toolName is an override
+          // Skip this tool to avoid creating duplicates
+          if (originalToolName !== toolName) {
+            console.log(`Skipping override tool "${toolName}" as it maps to original "${originalToolName}"`);
+            continue;
+          }
+        } catch (error) {
+          // If mapping fails, continue with the parsed name (it's likely an original tool)
+          console.warn(`Failed to map override name for tool "${toolName}":`, error);
+        }
 
         if (!serverName || !toolName) {
           console.warn(`Invalid tool name format "${tool.name}", skipping`);

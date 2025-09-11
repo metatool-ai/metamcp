@@ -320,7 +320,7 @@ async function applyToolOverrides(
 /**
  * Map override name back to original name for tool calls
  */
-async function mapOverrideNameToOriginal(
+export async function mapOverrideNameToOriginal(
   toolName: string,
   namespaceUuid: string,
   useCache: boolean = true,

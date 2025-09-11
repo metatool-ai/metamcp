@@ -271,18 +271,42 @@ export function EnhancedNamespaceToolsTable({
           existingTool.description = mcpTool.description;
         }
       } else {
-        // Tool only exists in MetaMCP, add as new
-        toolMap.set(toolKey, {
-          name: toolName,
-          description: mcpTool.description,
-          inputSchema: mcpTool.inputSchema,
-          serverName: serverName,
-          sources: {
-            metamcp: true,
-            saved: false,
-          },
-          isTemporary: true,
-        });
+        // Check if this MCP tool name matches any existing tool's override name
+        // This prevents showing duplicate tools when MCP returns override names
+        let isOverrideOfExistingTool = false;
+        for (const [, existingTool] of toolMap) {
+          if (
+            existingTool.serverName === serverName &&
+            existingTool.overrideName === toolName
+          ) {
+            // This MCP tool is actually the override name of an existing saved tool
+            // Mark the existing tool as available in MetaMCP and skip adding this duplicate
+            existingTool.sources.metamcp = true;
+            if (mcpTool.inputSchema) {
+              existingTool.inputSchema = mcpTool.inputSchema;
+            }
+            if (mcpTool.description && !existingTool.description) {
+              existingTool.description = mcpTool.description;
+            }
+            isOverrideOfExistingTool = true;
+            break;
+          }
+        }
+
+        if (!isOverrideOfExistingTool) {
+          // Tool only exists in MetaMCP, add as new
+          toolMap.set(toolKey, {
+            name: toolName,
+            description: mcpTool.description,
+            inputSchema: mcpTool.inputSchema,
+            serverName: serverName,
+            sources: {
+              metamcp: true,
+              saved: false,
+            },
+            isTemporary: true,
+          });
+        }
       }
     });
 
@@ -778,14 +802,6 @@ export function EnhancedNamespaceToolsTable({
                               Override
                             </Badge>
                           )}
-                          {tool.isTemporary && (
-                            <Badge
-                              variant="warning"
-                              className="text-xs flex-shrink-0"
-                            >
-                              {t("namespaces:enhancedToolsTable.badges.new")}
-                            </Badge>
-                          )}
                         </div>
                       </TableCell>
                       <TableCell className="min-w-[120px] w-[150px]">
@@ -823,7 +839,7 @@ export function EnhancedNamespaceToolsTable({
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">
-                            {t("namespaces:enhancedToolsTable.notSaved")}
+                            -
                           </span>
                         )}
                       </TableCell>
@@ -860,7 +876,7 @@ export function EnhancedNamespaceToolsTable({
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">
-                            {t("namespaces:enhancedToolsTable.notSaved")}
+                            -
                           </span>
                         )}
                       </TableCell>
