@@ -107,6 +107,9 @@
     "cannotToggleStatus": "无法切换未保存到命名空间的工具状态",
     "toolStatusUpdated": "工具状态更新成功",
     "toolStatusUpdateFailed": "更新工具状态失败",
+    "cannotUpdateOverrides": "无法更新未保存到命名空间的工具覆盖",
+    "toolOverridesUpdated": "工具覆盖更新成功",
+    "toolOverridesUpdateFailed": "更新工具覆盖失败",
     "sources": {
       "metamcp": "MetaMCP",
       "saved": "已保存",

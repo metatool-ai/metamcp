@@ -114,6 +114,9 @@
     "cannotToggleStatus": "Cannot toggle status for tools not saved to namespace",
     "toolStatusUpdated": "Tool status updated successfully",
     "toolStatusUpdateFailed": "Failed to update tool status",
+    "cannotUpdateOverrides": "Cannot update overrides for tools not saved to namespace",
+    "toolOverridesUpdated": "Tool overrides updated successfully",
+    "toolOverridesUpdateFailed": "Failed to update tool overrides",
     "sources": {
       "metamcp": "MetaMCP",
       "saved": "Saved",
