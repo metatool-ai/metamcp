@@ -27,7 +27,10 @@ import {
 } from "../db/repositories";
 import { NamespacesSerializer } from "../db/serializers";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
-import { mapOverrideNameToOriginal } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
+import { 
+  mapOverrideNameToOriginal,
+  clearOverrideCache 
+} from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 
 export const namespacesImplementations = {
   create: async (
@@ -285,6 +288,10 @@ export const namespacesImplementations = {
         // Don't fail the entire delete operation if idle server cleanup fails
       }
 
+      // Clear the tool overrides cache for the deleted namespace
+      clearOverrideCache(input.uuid);
+      console.log(`Cleared tool overrides cache for deleted namespace ${input.uuid}`);
+
       return {
         success: true as const,
         message: "Namespace deleted successfully",
@@ -408,6 +415,10 @@ export const namespacesImplementations = {
           );
           // Don't fail the entire update operation if OpenAPI session invalidation fails
         });
+
+      // Clear tool overrides cache for this namespace since MCP servers list may have changed
+      clearOverrideCache(input.uuid);
+      console.log(`Cleared tool overrides cache for updated namespace ${input.uuid}`);
 
       return {
         success: true as const,
@@ -608,6 +619,10 @@ export const namespacesImplementations = {
           message: "Tool not found in namespace",
         };
       }
+
+      // Clear the tool overrides cache for this namespace to ensure fresh data is loaded
+      clearOverrideCache(input.namespaceUuid);
+      console.log(`Cleared tool overrides cache for namespace ${input.namespaceUuid} after updating tool overrides`);
 
       return {
         success: true as const,
