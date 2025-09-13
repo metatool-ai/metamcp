@@ -19,6 +19,8 @@
   "mcpMaxTotalTimeoutDescription": "MCP 请求的最大总超时时间（毫秒，1-86400 秒）",
   "mcpMaxAttempts": "MCP 最大崩溃尝试次数",
   "mcpMaxAttemptsDescription": "在将 MCP 服务器标记为错误之前的最大崩溃尝试次数（1-10 次尝试）",
+  "sessionLifetime": "会话生命周期",
+  "sessionLifetimeDescription": "自动清理前的最大会话生命周期（毫秒，60 秒 - 24 小时，默认：4 小时）",
   "attempts": "次尝试",
   "loading": "加载中...",
   "save": "保存",

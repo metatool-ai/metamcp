@@ -36,6 +36,7 @@ export default function SettingsPage() {
       mcpTimeout: 60000,
       mcpMaxTotalTimeout: 60000,
       mcpMaxAttempts: 1,
+      sessionLifetime: 14400000, // 4 hours
     },
   });
 
@@ -87,6 +88,12 @@ export default function SettingsPage() {
     isLoading: mcpMaxAttemptsLoading,
     refetch: refetchMcpMaxAttempts,
   } = trpc.frontend.config.getMcpMaxAttempts.useQuery();
+
+  const {
+    data: sessionLifetimeData,
+    isLoading: sessionLifetimeLoading,
+    refetch: refetchSessionLifetime,
+  } = trpc.frontend.config.getSessionLifetime.useQuery();
 
   // Mutations
   const setSignupDisabledMutation =
@@ -168,6 +175,18 @@ export default function SettingsPage() {
       },
     });
 
+  const setSessionLifetimeMutation =
+    trpc.frontend.config.setSessionLifetime.useMutation({
+      onSuccess: (data) => {
+        if (data.success) {
+          refetchSessionLifetime();
+          setHasUnsavedChanges(false);
+        } else {
+          console.error("Failed to update session lifetime setting");
+        }
+      },
+    });
+
   // Update local state when data is loaded
   useEffect(() => {
     if (signupDisabled !== undefined) {
@@ -211,20 +230,34 @@ export default function SettingsPage() {
     }
   }, [mcpMaxAttemptsData, form]);
 
+  useEffect(() => {
+    if (sessionLifetimeData !== undefined) {
+      form.setValue("sessionLifetime", sessionLifetimeData);
+    }
+  }, [sessionLifetimeData, form]);
+
   // Reset form with loaded data to establish proper baseline for change detection
   useEffect(() => {
     if (
       mcpTimeoutData !== undefined &&
       mcpMaxTotalTimeoutData !== undefined &&
-      mcpMaxAttemptsData !== undefined
+      mcpMaxAttemptsData !== undefined &&
+      sessionLifetimeData !== undefined
     ) {
       form.reset({
         mcpTimeout: mcpTimeoutData,
         mcpMaxTotalTimeout: mcpMaxTotalTimeoutData,
         mcpMaxAttempts: mcpMaxAttemptsData,
+        sessionLifetime: sessionLifetimeData,
       });
     }
-  }, [mcpTimeoutData, mcpMaxTotalTimeoutData, mcpMaxAttemptsData, form]);
+  }, [
+    mcpTimeoutData,
+    mcpMaxTotalTimeoutData,
+    mcpMaxAttemptsData,
+    sessionLifetimeData,
+    form,
+  ]);
 
   // Handle immediate switch updates
   const handleSignupToggle = async (checked: boolean) => {
@@ -312,6 +345,9 @@ export default function SettingsPage() {
         setMcpMaxAttemptsMutation.mutateAsync({
           maxAttempts: data.mcpMaxAttempts,
         }),
+        setSessionLifetimeMutation.mutateAsync({
+          lifetime: data.sessionLifetime,
+        }),
       ]);
       reset(data); // Reset form state to match current values
       toast.success(t("settings:saved"));
@@ -335,7 +371,8 @@ export default function SettingsPage() {
     mcpResetLoading ||
     mcpTimeoutLoading ||
     mcpMaxTotalLoading ||
-    mcpMaxAttemptsLoading;
+    mcpMaxAttemptsLoading ||
+    sessionLifetimeLoading;
 
   if (isLoading) {
     return (
@@ -536,6 +573,36 @@ export default function SettingsPage() {
                 <span className="text-sm text-muted-foreground">
                   {t("settings:attempts")}
                 </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="session-lifetime" className="text-base">
+                {t("settings:sessionLifetime")}
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                {t("settings:sessionLifetimeDescription")}
+              </p>
+              <div className="flex items-center space-x-2">
+                <Controller
+                  name="sessionLifetime"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      id="session-lifetime"
+                      type="number"
+                      min="60000"
+                      max="86400000"
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value, 10);
+                        field.onChange(isNaN(value) ? 14400000 : value);
+                      }}
+                      className="w-32"
+                    />
+                  )}
+                />
+                <span className="text-sm text-muted-foreground">ms</span>
               </div>
             </div>
 

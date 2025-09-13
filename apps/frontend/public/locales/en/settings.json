@@ -19,6 +19,8 @@
   "mcpMaxTotalTimeoutDescription": "Maximum total timeout for MCP requests in milliseconds (1-86400 seconds)",
   "mcpMaxAttempts": "MCP Max Crash Attempts",
   "mcpMaxAttemptsDescription": "Maximum number of crash attempts before marking MCP server as ERROR (1-10 attempts)",
+  "sessionLifetime": "Session Lifetime",
+  "sessionLifetimeDescription": "Maximum session lifetime in milliseconds before automatic cleanup (60 seconds - 24 hours, default: 4 hours)",
   "attempts": "attempts",
   "loading": "Loading...",
   "save": "Save",

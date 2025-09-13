@@ -106,6 +106,21 @@ export const configService = {
     );
   },
 
+  async getSessionLifetime(): Promise<number> {
+    const config = await configRepo.getConfig(
+      ConfigKeyEnum.Enum.SESSION_LIFETIME,
+    );
+    return config?.value ? parseInt(config.value, 10) : 14400000; // Default: 4 hours (14400000ms)
+  },
+
+  async setSessionLifetime(lifetime: number): Promise<void> {
+    await configRepo.setConfig(
+      ConfigKeyEnum.Enum.SESSION_LIFETIME,
+      lifetime.toString(),
+      "Session lifetime in milliseconds before automatic cleanup",
+    );
+  },
+
   async getConfig(key: ConfigKey): Promise<string | undefined> {
     const config = await configRepo.getConfig(key);
     return config?.value;

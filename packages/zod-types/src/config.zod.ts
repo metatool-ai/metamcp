@@ -9,6 +9,7 @@ export const ConfigKeyEnum = z.enum([
   "MCP_TIMEOUT",
   "MCP_MAX_TOTAL_TIMEOUT",
   "MCP_MAX_ATTEMPTS",
+  "SESSION_LIFETIME",
 ]);
 
 // Config schema
@@ -81,6 +82,7 @@ export const SettingsFormSchema = z.object({
   mcpTimeout: z.number().int(),
   mcpMaxTotalTimeout: z.number().int(),
   mcpMaxAttempts: z.number().int(),
+  sessionLifetime: z.number().int(),
 });
 
 export type SettingsFormData = z.infer<typeof SettingsFormSchema>;
