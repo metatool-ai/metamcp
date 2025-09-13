@@ -23,7 +23,8 @@ import { z } from "zod";
 
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { configService } from "../config.service";
-import { ConnectedClient } from "./client";
+import { AnyConnectedClient } from "./client";
+import { listToolsFromClient, callToolOnClient, getServerInfo, clientSupportsCapability } from "./client-utils";
 import { getMcpServers } from "./fetch-metamcp";
 import { mcpServerPool } from "./mcp-server-pool";
 import {
@@ -43,10 +44,10 @@ export const createServer = async (
   sessionId: string,
   includeInactiveServers: boolean = false,
 ) => {
-  const toolToClient: Record<string, ConnectedClient> = {};
+  const toolToClient: Record<string, AnyConnectedClient> = {};
   const toolToServerUuid: Record<string, string> = {};
-  const promptToClient: Record<string, ConnectedClient> = {};
-  const resourceToClient: Record<string, ConnectedClient> = {};
+  const promptToClient: Record<string, AnyConnectedClient> = {};
+  const resourceToClient: Record<string, AnyConnectedClient> = {};
 
   // Helper function to detect if a server is the same instance
   const isSameServerInstance = (
@@ -133,21 +134,15 @@ export const createServer = async (
         // Mark this server as visited
         visitedServers.add(mcpServerUuid);
 
-        const capabilities = session.client.getServerCapabilities();
-        if (!capabilities?.tools) return;
+        // Check if client supports tools
+        if (!clientSupportsCapability(session, 'tools')) return;
 
-        // Use name assigned by user, fallback to name from server
-        const serverName =
-          params.name || session.client.getServerVersion()?.name || "";
+        // Use name assigned by user, fallback to server info
+        const serverInfo = getServerInfo(session);
+        const serverName = params.name || serverInfo.name || "";
 
         try {
-          const result = await session.client.request(
-            {
-              method: "tools/list",
-              params: { _meta: request.params?._meta },
-            },
-            ListToolsResultSchema,
-          );
+          const result = await listToolsFromClient(session);
 
           // Save original tools to database
           if (result.tools && result.tools.length > 0) {
@@ -236,13 +231,7 @@ export const createServer = async (
             if (sanitizeName(serverName) === serverPrefix) {
               // Found the server, now check if it has this tool
               try {
-                const result = await session.client.request(
-                  {
-                    method: "tools/list",
-                    params: {},
-                  },
-                  ListToolsResultSchema,
-                );
+                const result = await listToolsFromClient(session);
 
                 if (
                   result.tools?.some((tool) => tool.name === originalToolName)
@@ -292,27 +281,13 @@ export const createServer = async (
         timeout,
         maxTotalTimeout,
       };
-      // Use the correct schema for tool calls
-      const result = await clientForTool.client.request(
-        {
-          method: "tools/call",
-          params: {
-            name: originalToolName,
-            arguments: args || {},
-            _meta: request.params._meta,
-          },
-        },
-        CompatibilityCallToolResultSchema,
-        mcpRequestOptions,
-      );
-
-      // Cast the result to CallToolResult type
-      return result as CallToolResult;
+      // Use the unified client utility to call the tool
+      const result = await callToolOnClient(clientForTool, originalToolName, args || {});
+      return result;
     } catch (error) {
+      const serverInfo = getServerInfo(clientForTool);
       console.error(
-        `Error calling tool "${name}" through ${
-          clientForTool.client.getServerVersion()?.name || "unknown"
-        }:`,
+        `Error calling tool "${name}" through ${serverInfo.name || "unknown"} (${serverInfo.type}):`,
         error,
       );
       throw error;

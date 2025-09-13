@@ -19,9 +19,11 @@ export const DEFAULT_INHERITED_ENV_VARS =
         "TEMP",
         "USERNAME",
         "USERPROFILE",
+        "DATABASE_URL",
+        "POSTGRES_CA_CERT",
       ]
     : /* list inspired by the default env inheritance of sudo */
-      ["HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"];
+      ["HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER", "DATABASE_URL", "POSTGRES_CA_CERT"];
 
 /**
  * Returns a default environment object including only environment variables deemed safe to inherit.
@@ -106,6 +108,20 @@ export async function convertDbServerToParams(
       if (!params.url) {
         console.warn(
           `${params.type} server ${params.uuid} is missing url field, skipping`,
+        );
+        return null;
+      }
+    } else if (params.type === "REST_API") {
+      // For REST_API servers, add the REST API specific fields
+      const restApiParams = params as any;
+      restApiParams.base_url = server.base_url;
+      restApiParams.api_spec = server.api_spec;
+      restApiParams.auth_config = server.auth_config;
+
+      // Validate required fields for REST API servers
+      if (!restApiParams.base_url || !restApiParams.api_spec) {
+        console.warn(
+          `REST_API server ${params.uuid} is missing base_url or api_spec field, skipping`,
         );
         return null;
       }

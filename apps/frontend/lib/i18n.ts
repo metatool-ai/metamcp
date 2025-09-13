@@ -21,6 +21,7 @@ export type Translations = {
   inspector: Record<string, any>;
   logs: Record<string, any>;
   validation: Record<string, any>;
+  "rest-api": Record<string, any>;
 };
 
 // Utility functions for working with localized paths
@@ -70,6 +71,7 @@ export async function loadTranslations(
       logs: (await import("../public/locales/en/logs.json")).default,
       validation: (await import("../public/locales/en/validation.json"))
         .default,
+      "rest-api": (await import("../public/locales/en/rest-api.json")).default,
     };
   } else if (locale === "zh") {
     // Load Chinese translations with fallback to English
@@ -86,6 +88,7 @@ export async function loadTranslations(
       inspectorZh,
       logsZh,
       validationZh,
+      restApiZh,
     ] = await Promise.all([
       import("../public/locales/zh/common.json").catch(() => ({ default: {} })),
       import("../public/locales/zh/auth.json").catch(() => ({ default: {} })),
@@ -115,6 +118,9 @@ export async function loadTranslations(
       import("../public/locales/zh/validation.json").catch(() => ({
         default: {},
       })),
+      import("../public/locales/zh/rest-api.json").catch(() => ({
+        default: {},
+      })),
     ]);
 
     // Get English fallback
@@ -133,6 +139,7 @@ export async function loadTranslations(
       inspector: { ...englishDict.inspector, ...inspectorZh.default },
       logs: { ...englishDict.logs, ...logsZh.default },
       validation: { ...englishDict.validation, ...validationZh.default },
+      "rest-api": { ...englishDict["rest-api"], ...restApiZh.default },
     };
   } else {
     // Fallback to English for unsupported locales

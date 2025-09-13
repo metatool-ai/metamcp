@@ -3,6 +3,7 @@ export * from "./namespace-mappings.repo";
 export * from "./endpoints.repo";
 export * from "./mcp-servers.repo";
 export * from "./tools.repo";
+export * from "./rest-api-tools.repo";
 export * from "./oauth-sessions.repo";
 export * from "./oauth.repo";
 export * from "./api-keys.repo";

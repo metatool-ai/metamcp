@@ -5,12 +5,14 @@ import {
   CreateServerFormData,
   createServerFormSchema,
   McpServerTypeEnum,
+  RestApiImportRequest,
 } from "@repo/zod-types";
-import { ChevronDown, Plus, Server } from "lucide-react";
+import { ChevronDown, Globe, Plus, Server } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { RestApiImportDialog } from "@/components/rest-api-import-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,7 +20,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -46,6 +47,7 @@ import { McpServersList } from "./mcp-servers-list";
 export default function McpServersPage() {
   const { t } = useTranslations();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isRestApiDialogOpen, setIsRestApiDialogOpen] = useState(false);
 
   const form = useForm<CreateServerFormData>({
     resolver: createTranslatedZodResolver(createServerFormSchema, t),
@@ -80,6 +82,23 @@ export default function McpServersPage() {
     },
     onError: (error) => {
       toast.error(t("mcp-servers:createError") + ": " + error.message);
+    },
+  });
+
+  const restApiImportMutation = trpc.frontend.restApi.importApi.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        // Invalidate and refetch the server list
+        utils.frontend.mcpServers.list.invalidate();
+        setIsRestApiDialogOpen(false);
+        toast.success("REST API server created successfully!");
+      } else {
+        // Handle backend error response
+        toast.error(data.message || "Failed to create REST API server");
+      }
+    },
+    onError: (error) => {
+      toast.error("Failed to create REST API server: " + error.message);
     },
   });
 
@@ -123,6 +142,10 @@ export default function McpServersPage() {
     createMutation.mutate(request);
   };
 
+  const handleRestApiImport = async (request: RestApiImportRequest) => {
+    restApiImportMutation.mutate(request);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -139,13 +162,26 @@ export default function McpServersPage() {
         </div>
         <div className="flex items-center gap-2">
           <ExportImportButtons />
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
                 {t("mcp-servers:addServer")}
+                <ChevronDown className="ml-2 h-4 w-4" />
               </Button>
-            </DialogTrigger>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setIsDialogOpen(true)}>
+                <Server className="mr-2 h-4 w-4" />
+                Add MCP Server
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsRestApiDialogOpen(true)}>
+                <Globe className="mr-2 h-4 w-4" />
+                Import REST API
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>{t("mcp-servers:addServer")}</DialogTitle>
@@ -216,7 +252,10 @@ export default function McpServersPage() {
                                   : field.value ===
                                       McpServerTypeEnum.Enum.STREAMABLE_HTTP
                                     ? "Streamable HTTP"
-                                    : t("mcp-servers:selectType")}
+                                    : field.value ===
+                                        McpServerTypeEnum.Enum.REST_API
+                                      ? "REST API"
+                                      : t("mcp-servers:selectType")}
                               <ChevronDown className="ml-2 h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -246,6 +285,13 @@ export default function McpServersPage() {
                               }
                             >
                               Streamable HTTP
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                field.onChange(McpServerTypeEnum.Enum.REST_API)
+                              }
+                            >
+                              REST API
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -424,6 +470,12 @@ export default function McpServersPage() {
       </div>
 
       <McpServersList />
+
+      <RestApiImportDialog
+        isOpen={isRestApiDialogOpen}
+        onClose={() => setIsRestApiDialogOpen(false)}
+        onImport={handleRestApiImport}
+      />
     </div>
   );
 }

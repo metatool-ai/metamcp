@@ -60,6 +60,10 @@ export const mcpServersTable = pgTable(
     user_id: text("user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),
+    // REST API specific fields
+    api_spec: jsonb("api_spec"),
+    base_url: text("base_url"),
+    auth_config: jsonb("auth_config"),
   },
   (table) => [
     index("mcp_servers_type_idx").on(table.type),
@@ -73,7 +77,8 @@ export const mcpServersTable = pgTable(
     sql`CONSTRAINT mcp_servers_url_check CHECK (
         (type = 'SSE' AND url IS NOT NULL AND command IS NULL AND url ~ '^https?://[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(:[0-9]+)?(/[a-zA-Z0-9-._~:/?#\[\]@!$&''()*+,;=]*)?$') OR
         (type = 'STDIO' AND url IS NULL AND command IS NOT NULL) OR
-        (type = 'STREAMABLE_HTTP' AND url IS NOT NULL AND command IS NULL AND url ~ '^https?://[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(:[0-9]+)?(/[a-zA-Z0-9-._~:/?#\[\]@!$&''()*+,;=]*)?$')
+        (type = 'STREAMABLE_HTTP' AND url IS NOT NULL AND command IS NULL AND url ~ '^https?://[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(:[0-9]+)?(/[a-zA-Z0-9-._~:/?#\[\]@!$&''()*+,;=]*)?$') OR
+        (type = 'REST_API' AND base_url IS NOT NULL AND api_spec IS NOT NULL AND command IS NULL)
       )`,
   ],
 );
@@ -132,6 +137,55 @@ export const toolsTable = pgTable(
     index("tools_mcp_server_uuid_idx").on(table.mcp_server_uuid),
     unique("tools_unique_tool_name_per_server_idx").on(
       table.mcp_server_uuid,
+      table.name,
+    ),
+  ],
+);
+
+// REST API Tools table (following IBM's approach)
+export const restApiToolsTable = pgTable(
+  "rest_api_tools",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    display_name: text("display_name"),
+    description: text("description"),
+    url: text("url").notNull(),
+    integration_type: text("integration_type").notNull().default("REST"),
+    request_type: text("request_type").notNull(), // GET, POST, PUT, DELETE, etc.
+    input_schema: jsonb("input_schema")
+      .$type<{
+        type: "object";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        properties?: Record<string, any>;
+        required?: string[];
+      }>()
+      .notNull(),
+    headers: jsonb("headers")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    auth_type: text("auth_type").notNull().default("none"),
+    auth_value: text("auth_value"), // JSON string of auth headers
+    server_id: uuid("server_id")
+      .notNull()
+      .references(() => mcpServersTable.uuid, { onDelete: "cascade" }),
+    user_id: text("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(true),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("rest_api_tools_server_id_idx").on(table.server_id),
+    index("rest_api_tools_user_id_idx").on(table.user_id),
+    unique("rest_api_tools_unique_name_per_server_idx").on(
+      table.server_id,
       table.name,
     ),
   ],

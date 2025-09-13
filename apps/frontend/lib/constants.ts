@@ -16,6 +16,26 @@ export function getServerSpecificKey(
   return `${baseKey}_${btoa(serverUrl).replace(/[^a-zA-Z0-9]/g, "")}`;
 }
 
+// Helper function to safely access sessionStorage (SSR-safe)
+export const safeSessionStorage = {
+  getItem: (key: string): string | null => {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      return sessionStorage.getItem(key);
+    }
+    return null;
+  },
+  setItem: (key: string, value: string): void => {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      sessionStorage.setItem(key, value);
+    }
+  },
+  removeItem: (key: string): void => {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      sessionStorage.removeItem(key);
+    }
+  }
+};
+
 export type ConnectionStatus =
   | "connecting"
   | "disconnected"

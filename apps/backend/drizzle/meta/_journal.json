@@ -64,6 +64,20 @@
       "when": 1756782185214,
       "tag": "0008_shallow_puppet_master",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1757667550758,
+      "tag": "0009_brief_mystique",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1757672969993,
+      "tag": "0010_cloudy_the_santerians",
+      "breakpoints": true
     }
   ]
 }

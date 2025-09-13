@@ -8,3 +8,4 @@ export * from "./logs.zod";
 export * from "./metamcp.zod";
 export * from "./api-keys.zod";
 export * from "./config.zod";
+export * from "./rest-api.zod";

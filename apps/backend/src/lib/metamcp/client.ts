@@ -5,6 +5,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ServerParameters } from "@repo/zod-types";
 
+import { RestApiMcpServer } from "../rest-api/rest-api-server";
 import { ProcessManagedStdioTransport } from "../stdio-transport/process-managed-transport";
 import { metamcpLogStore } from "./log-store";
 import { serverErrorTracker } from "./server-error-tracker";
@@ -18,6 +19,13 @@ export interface ConnectedClient {
   cleanup: () => Promise<void>;
   onProcessCrash?: (exitCode: number | null, signal: string | null) => void;
 }
+
+export interface RestApiConnectedClient {
+  restApiServer: RestApiMcpServer;
+  cleanup: () => Promise<void>;
+}
+
+export type AnyConnectedClient = ConnectedClient | RestApiConnectedClient;
 
 /**
  * Transforms localhost URLs to use host.docker.internal when running inside Docker
@@ -33,10 +41,44 @@ export const transformDockerUrl = (url: string): string => {
   return url;
 };
 
+export const createRestApiClient = (
+  serverParams: ServerParameters,
+): RestApiConnectedClient | undefined => {
+  if (serverParams.type !== "REST_API") {
+    return undefined;
+  }
+
+  try {
+    const restApiServer = new RestApiMcpServer(serverParams);
+
+    return {
+      restApiServer,
+      cleanup: async () => {
+        // Clean up the generated server file
+        await restApiServer.cleanup();
+        console.log(`Cleaned up REST API server: ${serverParams.name}`);
+      },
+    };
+  } catch (error) {
+    metamcpLogStore.addLog(
+      serverParams.name,
+      "error",
+      `Failed to create REST API server: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
+    return undefined;
+  }
+};
+
 export const createMetaMcpClient = (
   serverParams: ServerParameters,
 ): { client: Client | undefined; transport: Transport | undefined } => {
   let transport: Transport | undefined;
+
+  // Handle REST API servers separately
+  if (serverParams.type === "REST_API") {
+    // REST API servers don't use the standard client/transport pattern
+    return { client: undefined, transport: undefined };
+  }
 
   // Create the appropriate transport based on server type
   // Default to "STDIO" if type is undefined
@@ -151,10 +193,54 @@ export const createMetaMcpClient = (
   return { client, transport };
 };
 
+export const connectRestApiClient = async (
+  serverParams: ServerParameters,
+): Promise<RestApiConnectedClient | undefined> => {
+  if (serverParams.type !== "REST_API") {
+    return undefined;
+  }
+
+  try {
+    const restApiClient = createRestApiClient(serverParams);
+    if (!restApiClient) {
+      return undefined;
+    }
+
+    // Test the connection
+    const testResult = await restApiClient.restApiServer.testConnection();
+    if (!testResult.success) {
+      console.warn(`REST API connection test failed for ${serverParams.name}: ${testResult.message}`);
+      // Don't fail completely - the API might still work for actual requests
+    }
+
+    console.log(`Successfully connected to REST API server: ${serverParams.name}`);
+    return restApiClient;
+  } catch (error) {
+    console.error(`Failed to connect to REST API server ${serverParams.name}:`, error);
+    return undefined;
+  }
+};
+
+export const connectAnyMcpClient = async (
+  serverParams: ServerParameters,
+  onProcessCrash?: (exitCode: number | null, signal: string | null) => void,
+): Promise<AnyConnectedClient | undefined> => {
+  if (serverParams.type === "REST_API") {
+    return await connectRestApiClient(serverParams);
+  } else {
+    return await connectMetaMcpClient(serverParams, onProcessCrash);
+  }
+};
+
 export const connectMetaMcpClient = async (
   serverParams: ServerParameters,
   onProcessCrash?: (exitCode: number | null, signal: string | null) => void,
 ): Promise<ConnectedClient | undefined> => {
+  // Don't handle REST API servers here
+  if (serverParams.type === "REST_API") {
+    return undefined;
+  }
+
   const waitFor = 5000;
 
   // Get max attempts from server error tracker instead of hardcoding

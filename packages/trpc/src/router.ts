@@ -16,6 +16,7 @@ export const createAppRouter = (implementations: {
       apiKeys: frontendRouters.apiKeys,
       config: frontendRouters.config,
       logs: frontendRouters.logs,
+      restApi: frontendRouters.restApi,
     }),
   });
 };

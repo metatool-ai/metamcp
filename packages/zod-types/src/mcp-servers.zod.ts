@@ -1,9 +1,76 @@
 import { z } from "zod";
 
-export const McpServerTypeEnum = z.enum(["STDIO", "SSE", "STREAMABLE_HTTP"]);
+export const McpServerTypeEnum = z.enum(["STDIO", "SSE", "STREAMABLE_HTTP", "REST_API"]);
 export const McpServerStatusEnum = z.enum(["ACTIVE", "INACTIVE"]);
 
 export const McpServerErrorStatusEnum = z.enum(["NONE", "ERROR"]);
+
+// REST API specific schemas
+export const RestApiParameterSchema = z.object({
+  name: z.string(),
+  in: z.enum(["path", "query", "header"]),
+  type: z.enum(["string", "number", "boolean", "array"]),
+  required: z.boolean().optional().default(false),
+  description: z.string().optional(),
+  default: z.any().optional(),
+  enum: z.array(z.string()).optional(),
+});
+
+export const RestApiRequestBodySchema = z.object({
+  contentType: z.string().default("application/json"),
+  schema: z.any().optional(), // JSON schema for validation
+  required: z.boolean().optional().default(false),
+});
+
+export const RestApiResponseSchema = z.object({
+  statusCode: z.number(),
+  description: z.string().optional(),
+  schema: z.any().optional(), // JSON schema for response
+});
+
+export const RestApiEndpointSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]),
+  path: z.string(),
+  parameters: z.array(RestApiParameterSchema).optional().default([]),
+  requestBody: RestApiRequestBodySchema.optional(),
+  responses: z.array(RestApiResponseSchema).optional().default([]),
+  headers: z.record(z.string()).optional().default({}),
+});
+
+export const AuthConfigurationSchema = z.object({
+  type: z.enum(["none", "bearer", "api_key", "basic"]).default("none"),
+  config: z.object({
+    // For bearer token
+    token: z.string().optional(),
+
+    // For API key
+    key: z.string().optional(),
+    location: z.enum(["header", "query"]).optional(),
+    name: z.string().optional(), // Header/query parameter name
+
+    // For basic auth
+    username: z.string().optional(),
+    password: z.string().optional(),
+  }).optional(),
+});
+
+export const RestApiSpecificationSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  version: z.string().optional().default("1.0.0"),
+  endpoints: z.array(RestApiEndpointSchema),
+});
+
+// Types
+export type RestApiParameter = z.infer<typeof RestApiParameterSchema>;
+export type RestApiRequestBody = z.infer<typeof RestApiRequestBodySchema>;
+export type RestApiResponse = z.infer<typeof RestApiResponseSchema>;
+export type RestApiEndpoint = z.infer<typeof RestApiEndpointSchema>;
+export type AuthConfiguration = z.infer<typeof AuthConfigurationSchema>;
+export type RestApiSpecification = z.infer<typeof RestApiSpecificationSchema>;
 
 // Define the form schema (includes UI-specific fields)
 export const createServerFormSchema = z
@@ -24,6 +91,16 @@ export const createServerFormSchema = z
     bearerToken: z.string().optional(),
     env: z.string().optional(),
     user_id: z.string().nullable().optional(),
+    // REST API specific fields (as strings for form handling)
+    api_spec_json: z.string().optional(), // JSON string representation
+    base_url: z.string().optional(),
+    auth_type: z.enum(["none", "bearer", "api_key", "basic"]).optional(),
+    auth_token: z.string().optional(),
+    auth_key: z.string().optional(),
+    auth_key_location: z.enum(["header", "query"]).optional(),
+    auth_key_name: z.string().optional(),
+    auth_username: z.string().optional(),
+    auth_password: z.string().optional(),
   })
   .refine(
     (data) => {
@@ -148,29 +225,52 @@ export const CreateMcpServerRequestSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     user_id: z.string().nullable().optional(),
+    // REST API specific fields
+    api_spec: RestApiSpecificationSchema.optional(),
+    base_url: z.string().optional(),
+    auth_config: AuthConfigurationSchema.optional(),
   })
   .refine(
     (data) => {
-      // For stdio type, command is required and URL should be empty
+      // For stdio type, command is required
       if (data.type === "STDIO") {
         return data.command && data.command.trim() !== "";
       }
 
-      // For other types, URL should be provided and valid
-      if (!data.url || data.url.trim() === "") {
-        return false;
+      // For REST_API type, base_url and api_spec are required
+      if (data.type === "REST_API") {
+        if (!data.base_url || data.base_url.trim() === "") {
+          return false;
+        }
+        if (!data.api_spec || !data.api_spec.endpoints || data.api_spec.endpoints.length === 0) {
+          return false;
+        }
+        try {
+          new URL(data.base_url);
+          return true;
+        } catch {
+          return false;
+        }
       }
 
-      try {
-        new URL(data.url);
-        return true;
-      } catch {
-        return false;
+      // For SSE and STREAMABLE_HTTP types, URL should be provided and valid
+      if (data.type === "SSE" || data.type === "STREAMABLE_HTTP") {
+        if (!data.url || data.url.trim() === "") {
+          return false;
+        }
+        try {
+          new URL(data.url);
+          return true;
+        } catch {
+          return false;
+        }
       }
+
+      return true;
     },
     {
       message:
-        "Command is required for stdio servers. URL is required and must be valid for sse and streamable_http server types",
+        "Command is required for STDIO. URL is required for SSE/STREAMABLE_HTTP. base_url and api_spec are required for REST_API.",
     },
   );
 
@@ -187,6 +287,10 @@ export const McpServerSchema = z.object({
   bearerToken: z.string().nullable(),
   user_id: z.string().nullable(),
   error_status: McpServerErrorStatusEnum.optional(),
+  // REST API specific fields
+  api_spec: RestApiSpecificationSchema.nullable().optional(),
+  base_url: z.string().nullable().optional(),
+  auth_config: AuthConfigurationSchema.nullable().optional(),
 });
 
 export const CreateMcpServerResponseSchema = z.object({
@@ -438,6 +542,10 @@ export const DatabaseMcpServerSchema = z.object({
   created_at: z.date(),
   bearerToken: z.string().nullable(),
   user_id: z.string().nullable(),
+  // REST API specific fields
+  api_spec: z.any().nullable().optional(), // Will be parsed as RestApiSpecificationSchema when needed
+  base_url: z.string().nullable().optional(),
+  auth_config: z.any().nullable().optional(), // Will be parsed as AuthConfigurationSchema when needed
 });
 
 export type DatabaseMcpServer = z.infer<typeof DatabaseMcpServerSchema>;

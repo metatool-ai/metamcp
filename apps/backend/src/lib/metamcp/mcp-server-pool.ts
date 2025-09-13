@@ -1,6 +1,12 @@
 import { ServerParameters } from "@repo/zod-types";
 
-import { ConnectedClient, connectMetaMcpClient } from "./client";
+import {
+  ConnectedClient,
+  RestApiConnectedClient,
+  AnyConnectedClient,
+  connectMetaMcpClient,
+  connectAnyMcpClient
+} from "./client";
 import { serverErrorTracker } from "./server-error-tracker";
 
 export interface McpServerPoolStatus {
@@ -14,11 +20,11 @@ export class McpServerPool {
   // Singleton instance
   private static instance: McpServerPool | null = null;
 
-  // Idle sessions: serverUuid -> ConnectedClient (no sessionId assigned yet)
-  private idleSessions: Record<string, ConnectedClient> = {};
+  // Idle sessions: serverUuid -> AnyConnectedClient (no sessionId assigned yet)
+  private idleSessions: Record<string, AnyConnectedClient> = {};
 
-  // Active sessions: sessionId -> Record<serverUuid, ConnectedClient>
-  private activeSessions: Record<string, Record<string, ConnectedClient>> = {};
+  // Active sessions: sessionId -> Record<serverUuid, AnyConnectedClient>
+  private activeSessions: Record<string, Record<string, AnyConnectedClient>> = {};
 
   // Mapping: sessionId -> Set<serverUuid> for cleanup tracking
   private sessionToServers: Record<string, Set<string>> = {};
@@ -47,14 +53,14 @@ export class McpServerPool {
   }
 
   /**
-   * Get or create a session for a specific MCP server
+   * Get or create a session for a specific MCP server (supports both standard and REST API servers)
    */
   async getSession(
     sessionId: string,
     serverUuid: string,
     params: ServerParameters,
     namespaceUuid?: string,
-  ): Promise<ConnectedClient | undefined> {
+  ): Promise<AnyConnectedClient | undefined> {
     // Update server params cache
     this.serverParamsCache[serverUuid] = params;
 
@@ -107,17 +113,17 @@ export class McpServerPool {
   }
 
   /**
-   * Create a new connection for a server
+   * Create a new connection for a server (supports both standard and REST API servers)
    */
   private async createNewConnection(
     params: ServerParameters,
     namespaceUuid?: string,
-  ): Promise<ConnectedClient | undefined> {
+  ): Promise<AnyConnectedClient | undefined> {
     console.log(
       `Creating new connection for server ${params.name} (${params.uuid}) with namespace: ${namespaceUuid || "none"}`,
     );
 
-    const connectedClient = await connectMetaMcpClient(
+    const connectedClient = await connectAnyMcpClient(
       params,
       (exitCode, signal) => {
         console.log(

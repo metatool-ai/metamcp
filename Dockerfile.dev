@@ -52,9 +52,9 @@ RUN mkdir -p apps/frontend apps/backend packages/trpc packages/zod-types package
 # Expose ports
 EXPOSE 12008 12009
 
-# Health check for development
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:12008/health || exit 1
+# Health check for development - check backend directly
+HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:12009/health || exit 1
 
 # Copy entrypoint script
 COPY docker-entrypoint-dev.sh ./
