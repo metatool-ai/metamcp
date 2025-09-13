@@ -112,7 +112,7 @@
     "errorLoadingDescription": "加载 MCP 服务器失败",
     "retry": "重试",
     "noServersTitle": "无 MCP 服务器",
-    "noServersDescription": "您还没有配置任何 MCP 服务器。点击\"创建 MCP 服务器\"开始使用。",
+    "noServersDescription": "您还没有配置任何 MCP 服务器。点击\"添加服务器\"开始使用。",
     "createMcpServer": "创建 MCP 服务器",
     "deleteConfirmTitle": "删除 MCP 服务器",
     "deleteConfirmDescription": "确定要删除\"{{name}}\"吗？此操作无法撤销。",
