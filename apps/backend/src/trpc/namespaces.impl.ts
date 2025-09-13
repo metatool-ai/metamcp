@@ -700,15 +700,16 @@ export const namespacesImplementations = {
         // Check if this tool name might be an override name by looking up the original name
         // If it is an override name, skip this tool entirely to avoid duplicates
         try {
+          const fullToolName = `${serverName}__${toolName}`;
           const originalToolName = await mapOverrideNameToOriginal(
-            toolName,
+            fullToolName,
             input.namespaceUuid,
           );
           
           // If we found an original name mapping, this means the current toolName is an override
           // Skip this tool to avoid creating duplicates
-          if (originalToolName !== toolName) {
-            console.log(`Skipping override tool "${toolName}" as it maps to original "${originalToolName}"`);
+          if (originalToolName !== fullToolName) {
+            console.log(`Skipping override tool "${fullToolName}" as it maps to original "${originalToolName}"`);
             continue;
           }
         } catch (error) {

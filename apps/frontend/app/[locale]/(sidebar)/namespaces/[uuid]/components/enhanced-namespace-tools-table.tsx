@@ -229,6 +229,10 @@ export function EnhancedNamespaceToolsTable({
 
       let { serverName, originalToolName: toolName } = parsed;
 
+      // Store the original parsed values for deduplication check
+      const originalParsedServerName = serverName;
+      const originalParsedToolName = toolName;
+
       // Handle nested MetaMCP scenarios
       // If the extracted server name doesn't exist in our actual servers list,
       // it might be a nested MetaMCP name like "ParentServer__ChildServer"
@@ -271,12 +275,12 @@ export function EnhancedNamespaceToolsTable({
         }
       } else {
         // Check if this MCP tool name matches any existing tool's override name
-        // This prevents showing duplicate tools when MCP returns override names
+        // Use the ORIGINAL parsed values before nested modifications for this check
         let isOverrideOfExistingTool = false;
         for (const [, existingTool] of toolMap) {
           if (
-            existingTool.serverName === serverName &&
-            existingTool.overrideName === toolName
+            existingTool.serverName === originalParsedServerName &&
+            existingTool.overrideName === originalParsedToolName
           ) {
             // This MCP tool is actually the override name of an existing saved tool
             // Mark the existing tool as available in MetaMCP and skip adding this duplicate
