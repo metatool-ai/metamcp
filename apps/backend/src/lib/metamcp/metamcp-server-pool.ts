@@ -554,6 +554,7 @@ export class MetaMcpServerPool {
 
   /**
    * Clean up expired sessions based on session lifetime setting
+   * Preserves at least one idle session per namespace for warmup
    */
   private async cleanupExpiredSessions(): Promise<void> {
     try {
@@ -561,12 +562,19 @@ export class MetaMcpServerPool {
       const now = Date.now();
       const expiredSessionIds: string[] = [];
 
-      // Find expired sessions
+      // Find expired active sessions (never clean up idle sessions as they are for warmup)
       for (const [sessionId, timestamp] of Object.entries(
         this.sessionTimestamps,
       )) {
-        if (now - timestamp > sessionLifetime) {
-          expiredSessionIds.push(sessionId);
+        // Only clean up active sessions, never idle sessions
+        if (this.activeServers[sessionId] && now - timestamp > sessionLifetime) {
+          // Check if this is an OpenAPI session (persistent sessions should not be cleaned up automatically)
+          const namespaceUuid = this.sessionToNamespace[sessionId];
+          const isOpenApiSession = sessionId.startsWith(`openapi_${namespaceUuid}`);
+          
+          if (!isOpenApiSession) {
+            expiredSessionIds.push(sessionId);
+          }
         }
       }
 

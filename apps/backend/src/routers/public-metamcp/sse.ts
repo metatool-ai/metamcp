@@ -105,22 +105,59 @@ sseRouter.post(
   lookupEndpoint,
   authenticateApiKey,
   async (req, res) => {
-    // const authReq = req as ApiKeyAuthenticatedRequest;
-    // const { namespaceUuid, endpointName } = authReq;
+    const authReq = req as ApiKeyAuthenticatedRequest;
+    const { namespaceUuid, endpointName } = authReq;
 
     try {
       const sessionId = req.query.sessionId;
-      // console.log(
-      //   `Received POST message for public endpoint ${endpointName} -> namespace ${namespaceUuid} sessionId ${sessionId}`,
-      // );
+      console.log(
+        `Received POST message for public endpoint ${endpointName} -> namespace ${namespaceUuid} sessionId ${sessionId}`,
+      );
 
-      const transport = sessionManager.getSession(
+      let transport = sessionManager.getSession(
         sessionId as string,
       ) as SSEServerTransport;
+
       if (!transport) {
-        res.status(404).end("Session not found");
-        return;
+        console.log(`Session ${sessionId} not found, creating new SSE session`);
+
+        // Create new SSE transport for the missing session
+        const newTransport = new SSEServerTransport(
+          `/metamcp/${endpointName}/message`,
+          res,
+        );
+
+        // Override the sessionId to match the requested one
+        (newTransport as SSEServerTransport & { sessionId: string }).sessionId =
+          sessionId as string;
+
+        // Get or create MetaMCP server instance from the pool
+        const mcpServerInstance = await metaMcpServerPool.getServer(
+          sessionId as string,
+          namespaceUuid,
+        );
+        if (!mcpServerInstance) {
+          throw new Error("Failed to get MetaMCP server instance from pool");
+        }
+
+        console.log(
+          `Using MetaMCP server instance for recreated SSE session ${sessionId}`,
+        );
+
+        sessionManager.addSession(sessionId as string, newTransport);
+
+        // Handle cleanup when connection closes
+        res.on("close", async () => {
+          console.log(
+            `Public endpoint SSE connection closed for recreated session ${sessionId}`,
+          );
+          await cleanupSession(sessionId as string);
+        });
+
+        await mcpServerInstance.server.connect(newTransport);
+        transport = newTransport;
       }
+
       await transport.handlePostMessage(req, res);
     } catch (error) {
       console.error("Error in public endpoint /message route:", error);
