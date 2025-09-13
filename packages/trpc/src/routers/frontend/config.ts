@@ -118,7 +118,7 @@ export const createConfigRouter = (implementations: {
     }),
 
     setSessionLifetime: protectedProcedure
-      .input(z.object({ lifetime: z.number().min(60000).max(86400000) }))
+      .input(z.object({ lifetime: z.number().min(300000).max(86400000) }))
       .mutation(async ({ input }) => {
         return await implementations.setSessionLifetime(input);
       }),

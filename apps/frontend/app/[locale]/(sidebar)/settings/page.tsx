@@ -592,7 +592,7 @@ export default function SettingsPage() {
                       {...field}
                       id="session-lifetime"
                       type="number"
-                      min="60000"
+                      min="300000"
                       max="86400000"
                       onChange={(e) => {
                         const value = parseInt(e.target.value, 10);
