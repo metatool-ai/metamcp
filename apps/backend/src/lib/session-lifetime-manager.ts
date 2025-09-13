@@ -17,7 +17,9 @@ export interface SessionLifetimeManager<T> {
   stopCleanupTimer(): void;
 }
 
-export class SessionLifetimeManagerImpl<T> implements SessionLifetimeManager<T> {
+export class SessionLifetimeManagerImpl<T>
+  implements SessionLifetimeManager<T>
+{
   private sessions: Map<string, T> = new Map();
   private sessionTimestamps: Map<string, number> = new Map();
   private cleanupTimer: NodeJS.Timeout | null = null;
@@ -89,7 +91,10 @@ export class SessionLifetimeManagerImpl<T> implements SessionLifetimeManager<T> 
         );
       }
     } catch (error) {
-      console.error(`Error during automatic ${this.name} session cleanup:`, error);
+      console.error(
+        `Error during automatic ${this.name} session cleanup:`,
+        error,
+      );
     }
   }
 
@@ -97,12 +102,9 @@ export class SessionLifetimeManagerImpl<T> implements SessionLifetimeManager<T> 
     cleanupCallback: (sessionId: string, session: T) => Promise<void>,
     intervalMs: number = 5 * 60 * 1000, // Default: 5 minutes
   ): void {
-    this.cleanupTimer = setInterval(
-      async () => {
-        await this.cleanupExpiredSessions(cleanupCallback);
-      },
-      intervalMs,
-    );
+    this.cleanupTimer = setInterval(async () => {
+      await this.cleanupExpiredSessions(cleanupCallback);
+    }, intervalMs);
   }
 
   stopCleanupTimer(): void {

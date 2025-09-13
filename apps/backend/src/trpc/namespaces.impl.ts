@@ -26,11 +26,11 @@ import {
   toolsRepository,
 } from "../db/repositories";
 import { NamespacesSerializer } from "../db/serializers";
-import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
-import { 
+import {
+  clearOverrideCache,
   mapOverrideNameToOriginal,
-  clearOverrideCache 
 } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
+import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
 
 export const namespacesImplementations = {
   create: async (
@@ -290,7 +290,9 @@ export const namespacesImplementations = {
 
       // Clear the tool overrides cache for the deleted namespace
       clearOverrideCache(input.uuid);
-      console.log(`Cleared tool overrides cache for deleted namespace ${input.uuid}`);
+      console.log(
+        `Cleared tool overrides cache for deleted namespace ${input.uuid}`,
+      );
 
       return {
         success: true as const,
@@ -418,7 +420,9 @@ export const namespacesImplementations = {
 
       // Clear tool overrides cache for this namespace since MCP servers list may have changed
       clearOverrideCache(input.uuid);
-      console.log(`Cleared tool overrides cache for updated namespace ${input.uuid}`);
+      console.log(
+        `Cleared tool overrides cache for updated namespace ${input.uuid}`,
+      );
 
       return {
         success: true as const,
@@ -622,7 +626,9 @@ export const namespacesImplementations = {
 
       // Clear the tool overrides cache for this namespace to ensure fresh data is loaded
       clearOverrideCache(input.namespaceUuid);
-      console.log(`Cleared tool overrides cache for namespace ${input.namespaceUuid} after updating tool overrides`);
+      console.log(
+        `Cleared tool overrides cache for namespace ${input.namespaceUuid} after updating tool overrides`,
+      );
 
       return {
         success: true as const,
@@ -695,7 +701,7 @@ export const namespacesImplementations = {
         }
 
         const serverName = tool.name.substring(0, lastDoubleUnderscoreIndex);
-        let toolName = tool.name.substring(lastDoubleUnderscoreIndex + 2);
+        const toolName = tool.name.substring(lastDoubleUnderscoreIndex + 2);
 
         // Check if this tool name might be an override name by looking up the original name
         // If it is an override name, skip this tool entirely to avoid duplicates
@@ -705,16 +711,21 @@ export const namespacesImplementations = {
             fullToolName,
             input.namespaceUuid,
           );
-          
+
           // If we found an original name mapping, this means the current toolName is an override
           // Skip this tool to avoid creating duplicates
           if (originalToolName !== fullToolName) {
-            console.log(`Skipping override tool "${fullToolName}" as it maps to original "${originalToolName}"`);
+            console.log(
+              `Skipping override tool "${fullToolName}" as it maps to original "${originalToolName}"`,
+            );
             continue;
           }
         } catch (error) {
           // If mapping fails, continue with the parsed name (it's likely an original tool)
-          console.warn(`Failed to map override name for tool "${toolName}":`, error);
+          console.warn(
+            `Failed to map override name for tool "${toolName}":`,
+            error,
+          );
         }
 
         if (!serverName || !toolName) {

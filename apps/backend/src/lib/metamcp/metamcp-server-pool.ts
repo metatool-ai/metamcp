@@ -544,9 +544,12 @@ export class MetaMcpServerPool {
    */
   private startCleanupTimer(): void {
     // Check for expired sessions every 5 minutes
-    this.cleanupTimer = setInterval(async () => {
-      await this.cleanupExpiredSessions();
-    }, 5 * 60 * 1000); // 5 minutes
+    this.cleanupTimer = setInterval(
+      async () => {
+        await this.cleanupExpiredSessions();
+      },
+      5 * 60 * 1000,
+    ); // 5 minutes
   }
 
   /**
@@ -559,7 +562,9 @@ export class MetaMcpServerPool {
       const expiredSessionIds: string[] = [];
 
       // Find expired sessions
-      for (const [sessionId, timestamp] of Object.entries(this.sessionTimestamps)) {
+      for (const [sessionId, timestamp] of Object.entries(
+        this.sessionTimestamps,
+      )) {
         if (now - timestamp > sessionLifetime) {
           expiredSessionIds.push(sessionId);
         }
@@ -567,10 +572,12 @@ export class MetaMcpServerPool {
 
       // Clean up expired sessions
       if (expiredSessionIds.length > 0) {
-        console.log(`Cleaning up ${expiredSessionIds.length} expired MetaMCP server pool sessions: ${expiredSessionIds.join(", ")}`);
-        
+        console.log(
+          `Cleaning up ${expiredSessionIds.length} expired MetaMCP server pool sessions: ${expiredSessionIds.join(", ")}`,
+        );
+
         await Promise.allSettled(
-          expiredSessionIds.map((sessionId) => this.cleanupSession(sessionId))
+          expiredSessionIds.map((sessionId) => this.cleanupSession(sessionId)),
         );
       }
     } catch (error) {
@@ -592,7 +599,7 @@ export class MetaMcpServerPool {
   async isSessionExpired(sessionId: string): Promise<boolean> {
     const age = this.getSessionAge(sessionId);
     if (age === undefined) return false;
-    
+
     const sessionLifetime = await configService.getSessionLifetime();
     return age > sessionLifetime;
   }
