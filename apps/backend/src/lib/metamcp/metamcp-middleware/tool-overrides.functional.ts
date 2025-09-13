@@ -7,6 +7,7 @@ import {
   namespaceToolMappingsTable,
   toolsTable,
 } from "../../../db/schema";
+import { parseToolName } from "../tool-name-parser";
 import {
   CallToolMiddleware,
   ListToolsMiddleware,
@@ -220,22 +221,7 @@ async function getToolOverrides(
   }
 }
 
-/**
- * Extract server info from tool name
- */
-function parseToolName(
-  toolName: string,
-): { serverName: string; originalToolName: string } | null {
-  const firstDoubleUnderscoreIndex = toolName.indexOf("__");
-  if (firstDoubleUnderscoreIndex === -1) {
-    return null;
-  }
-
-  return {
-    serverName: toolName.substring(0, firstDoubleUnderscoreIndex),
-    originalToolName: toolName.substring(firstDoubleUnderscoreIndex + 2),
-  };
-}
+// parseToolName is now imported from shared utility
 
 /**
  * Apply overrides to tools
@@ -325,11 +311,18 @@ export async function mapOverrideNameToOriginal(
   namespaceUuid: string,
   useCache: boolean = true,
 ): Promise<string> {
-  // First check if this might be an override name
+  // Parse the tool name to extract server and tool parts
+  const parsed = parseToolName(toolName);
+  if (!parsed) {
+    // If tool name doesn't follow expected format, return as-is
+    return toolName;
+  }
+
+  // First check if this might be an override name using just the tool part
   if (useCache) {
     const originalName = toolOverridesCache.getOriginalName(
       namespaceUuid,
-      toolName,
+      parsed.originalToolName,
     );
     if (originalName) {
       return originalName;
@@ -355,20 +348,20 @@ export async function mapOverrideNameToOriginal(
       .where(
         and(
           eq(namespaceToolMappingsTable.namespace_uuid, namespaceUuid),
-          eq(namespaceToolMappingsTable.override_name, toolName),
+          eq(namespaceToolMappingsTable.override_name, parsed.originalToolName),
+          eq(mcpServersTable.name, parsed.serverName),
         ),
       );
 
     if (toolMapping) {
       const originalFullName = `${toolMapping.serverName}__${toolMapping.originalName}`;
 
-      // Cache the reverse mapping
+      // Cache the reverse mapping using the tool part only
       if (useCache) {
-        toolOverridesCache.set(
+        toolOverridesCache.setOriginalName(
           namespaceUuid,
-          toolMapping.serverName,
-          toolMapping.originalName,
-          { overrideName: toolName, overrideDescription: null },
+          parsed.originalToolName,
+          originalFullName,
         );
       }
 

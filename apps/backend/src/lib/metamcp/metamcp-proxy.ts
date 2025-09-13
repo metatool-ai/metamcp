@@ -40,6 +40,7 @@ import {
   createToolOverridesCallToolMiddleware,
   createToolOverridesListToolsMiddleware,
 } from "./metamcp-middleware/tool-overrides.functional";
+import { parseToolName } from "./tool-name-parser";
 import { sanitizeName } from "./utils";
 
 export const createServer = async (
@@ -198,14 +199,13 @@ export const createServer = async (
   ) => {
     const { name, arguments: args } = request.params;
 
-    // Extract the original tool name by removing the server prefix
-    const firstDoubleUnderscoreIndex = name.indexOf("__");
-    if (firstDoubleUnderscoreIndex === -1) {
+    // Parse the tool name using shared utility
+    const parsed = parseToolName(name);
+    if (!parsed) {
       throw new Error(`Invalid tool name format: ${name}`);
     }
 
-    const serverPrefix = name.substring(0, firstDoubleUnderscoreIndex);
-    const originalToolName = name.substring(firstDoubleUnderscoreIndex + 2);
+    const { serverName: serverPrefix, originalToolName } = parsed;
 
     // Try to find the tool in pre-populated mappings first
     let clientForTool = toolToClient[name];
@@ -325,9 +325,9 @@ export const createServer = async (
 
   // Compose middleware with handlers - this is the Express-like functional approach
   const listToolsWithMiddleware = compose(
-    createToolOverridesListToolsMiddleware({ 
-      cacheEnabled: true, 
-      persistentCacheOnListTools: true 
+    createToolOverridesListToolsMiddleware({
+      cacheEnabled: true,
+      persistentCacheOnListTools: true,
     }),
     createFilterListToolsMiddleware({ cacheEnabled: true }),
     // Add more middleware here as needed
@@ -366,15 +366,13 @@ export const createServer = async (
     }
 
     try {
-      // Extract the original prompt name by removing the server prefix
-      // For nested MetaMCP, names may be like "MetaMCPTest__Everything__promptName"
-      // We need to extract "Everything__promptName" (everything after the first "__")
-      const firstDoubleUnderscoreIndex = name.indexOf("__");
-      if (firstDoubleUnderscoreIndex === -1) {
+      // Parse the prompt name using shared utility
+      const parsed = parseToolName(name);
+      if (!parsed) {
         throw new Error(`Invalid prompt name format: ${name}`);
       }
 
-      const promptName = name.substring(firstDoubleUnderscoreIndex + 2);
+      const promptName = parsed.originalToolName;
       const response = await clientForPrompt.client.request(
         {
           method: "prompts/get",

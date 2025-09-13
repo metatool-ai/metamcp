@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "@/hooks/useTranslations";
+import { parseToolName } from "@/lib/tool-name-parser";
 import { trpc } from "@/lib/trpc";
 
 // MCP Tool type from MetaMCP
@@ -219,16 +220,14 @@ export function EnhancedNamespaceToolsTable({
 
     // Then, add or update with MetaMCP tools, but only if their server is active
     mcpTools.forEach((mcpTool) => {
-      // Parse the tool name to extract server name and actual tool name
-      const lastDoubleUnderscoreIndex = mcpTool.name.lastIndexOf("__");
-
-      if (lastDoubleUnderscoreIndex === -1) {
+      // Parse the tool name using shared utility
+      const parsed = parseToolName(mcpTool.name);
+      if (!parsed) {
         console.warn(`Invalid tool name format: ${mcpTool.name}`);
         return;
       }
 
-      let serverName = mcpTool.name.substring(0, lastDoubleUnderscoreIndex);
-      let toolName = mcpTool.name.substring(lastDoubleUnderscoreIndex + 2);
+      let { serverName, originalToolName: toolName } = parsed;
 
       // Handle nested MetaMCP scenarios
       // If the extracted server name doesn't exist in our actual servers list,
