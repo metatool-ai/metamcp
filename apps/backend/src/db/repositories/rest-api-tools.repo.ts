@@ -1,4 +1,5 @@
 import { eq, sql } from "drizzle-orm";
+import { JsonSchema } from "@repo/zod-types";
 import { db } from "../index";
 import { restApiToolsTable } from "../schema";
 
@@ -9,11 +10,7 @@ export interface RestApiToolCreateInput {
   url: string;
   integration_type?: string;
   request_type: string;
-  input_schema: {
-    type: "object";
-    properties?: Record<string, any>;
-    required?: string[];
-  };
+  input_schema: JsonSchema;
   headers?: Record<string, string>;
   auth_type?: string;
   auth_value?: string;
@@ -30,11 +27,7 @@ export interface RestApiTool {
   url: string;
   integration_type: string;
   request_type: string;
-  input_schema: {
-    type: "object";
-    properties?: Record<string, any>;
-    required?: string[];
-  };
+  input_schema: JsonSchema;
   headers: Record<string, string>;
   auth_type: string;
   auth_value: string | null;

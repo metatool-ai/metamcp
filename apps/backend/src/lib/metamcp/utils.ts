@@ -1,6 +1,14 @@
-import { DatabaseMcpServer, ServerParameters } from "@repo/zod-types";
+import { DatabaseMcpServer, ServerParameters, RestApiSpecification, AuthConfiguration } from "@repo/zod-types";
 
 import { oauthSessionsRepository } from "../../db/repositories/oauth-sessions.repo";
+
+// Extended ServerParameters interface for REST API servers
+export interface RestApiServerParameters extends ServerParameters {
+  type: "REST_API";
+  base_url: string;
+  api_spec: RestApiSpecification;
+  auth_config?: AuthConfiguration;
+}
 
 /**
  * Environment variables to inherit by default, if an environment is not explicitly given.
@@ -55,11 +63,11 @@ export function sanitizeName(name: string): string {
 /**
  * Converts a database MCP server record to ServerParameters format
  * @param server Database MCP server record
- * @returns ServerParameters object or null if conversion fails
+ * @returns ServerParameters or RestApiServerParameters object or null if conversion fails
  */
 export async function convertDbServerToParams(
   server: DatabaseMcpServer,
-): Promise<ServerParameters | null> {
+): Promise<ServerParameters | RestApiServerParameters | null> {
   try {
     // Fetch OAuth tokens from OAuth sessions table
     const oauthSession = await oauthSessionsRepository.findByMcpServerUuid(
@@ -112,19 +120,24 @@ export async function convertDbServerToParams(
         return null;
       }
     } else if (params.type === "REST_API") {
-      // For REST_API servers, add the REST API specific fields
-      const restApiParams = params as any;
-      restApiParams.base_url = server.base_url;
-      restApiParams.api_spec = server.api_spec;
-      restApiParams.auth_config = server.auth_config;
-
-      // Validate required fields for REST API servers
-      if (!restApiParams.base_url || !restApiParams.api_spec) {
+      // For REST_API servers, validate and add the REST API specific fields
+      if (!server.base_url || !server.api_spec) {
         console.warn(
           `REST_API server ${params.uuid} is missing base_url or api_spec field, skipping`,
         );
         return null;
       }
+
+      // Create properly typed REST API server parameters
+      const restApiParams: RestApiServerParameters = {
+        ...params,
+        type: "REST_API",
+        base_url: server.base_url,
+        api_spec: server.api_spec as RestApiSpecification,
+        auth_config: server.auth_config as AuthConfiguration | undefined,
+      };
+
+      return restApiParams;
     }
 
     return params;

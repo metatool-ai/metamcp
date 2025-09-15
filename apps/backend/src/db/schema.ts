@@ -118,9 +118,18 @@ export const toolsTable = pgTable(
     toolSchema: jsonb("tool_schema")
       .$type<{
         type: "object";
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        properties?: Record<string, any>;
+        properties?: Record<string, {
+          type: "string" | "number" | "integer" | "boolean" | "array" | "object";
+          description?: string;
+          default?: string | number | boolean | any[] | Record<string, any>;
+          enum?: (string | number)[];
+          format?: string;
+          items?: any;
+          properties?: Record<string, any>;
+          required?: string[];
+        }>;
         required?: string[];
+        additionalProperties?: boolean;
       }>()
       .notNull(),
     created_at: timestamp("created_at", { withTimezone: true })
@@ -156,9 +165,18 @@ export const restApiToolsTable = pgTable(
     input_schema: jsonb("input_schema")
       .$type<{
         type: "object";
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        properties?: Record<string, any>;
+        properties?: Record<string, {
+          type: "string" | "number" | "integer" | "boolean" | "array" | "object";
+          description?: string;
+          default?: string | number | boolean | any[] | Record<string, any>;
+          enum?: (string | number)[];
+          format?: string;
+          items?: any;
+          properties?: Record<string, any>;
+          required?: string[];
+        }>;
         required?: string[];
+        additionalProperties?: boolean;
       }>()
       .notNull(),
     headers: jsonb("headers")

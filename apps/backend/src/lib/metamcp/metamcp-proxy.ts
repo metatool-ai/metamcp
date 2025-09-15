@@ -39,31 +39,44 @@ import {
 } from "./metamcp-middleware/functional-middleware";
 import { sanitizeName } from "./utils";
 
-export const createServer = async (
+// Types for better organization
+export interface ServerMappings {
+  toolToClient: Record<string, AnyConnectedClient>;
+  toolToServerUuid: Record<string, string>;
+  promptToClient: Record<string, AnyConnectedClient>;
+  resourceToClient: Record<string, AnyConnectedClient>;
+}
+
+export interface ServerCreationContext {
+  namespaceUuid: string;
+  sessionId: string;
+  includeInactiveServers: boolean;
+  mappings: ServerMappings;
+}
+
+// Helper functions for server creation
+export const createServerMappings = (): ServerMappings => ({
+  toolToClient: {},
+  toolToServerUuid: {},
+  promptToClient: {},
+  resourceToClient: {},
+});
+
+export const isSameServerInstance = (
+  params: { name?: string; url?: string | null },
   namespaceUuid: string,
-  sessionId: string,
-  includeInactiveServers: boolean = false,
-) => {
-  const toolToClient: Record<string, AnyConnectedClient> = {};
-  const toolToServerUuid: Record<string, string> = {};
-  const promptToClient: Record<string, AnyConnectedClient> = {};
-  const resourceToClient: Record<string, AnyConnectedClient> = {};
+  _serverUuid: string,
+): boolean => {
+  // Check if server name is exactly the same as our current server instance
+  // This prevents exact recursive calls to the same server
+  if (params.name === `metamcp-unified-${namespaceUuid}`) {
+    return true;
+  }
+  return false;
+};
 
-  // Helper function to detect if a server is the same instance
-  const isSameServerInstance = (
-    params: { name?: string; url?: string | null },
-    _serverUuid: string,
-  ): boolean => {
-    // Check if server name is exactly the same as our current server instance
-    // This prevents exact recursive calls to the same server
-    if (params.name === `metamcp-unified-${namespaceUuid}`) {
-      return true;
-    }
-
-    return false;
-  };
-
-  const server = new Server(
+export const createMcpServer = (namespaceUuid: string): Server => {
+  return new Server(
     {
       name: `metamcp-unified-${namespaceUuid}`,
       version: "1.0.0",
@@ -76,21 +89,15 @@ export const createServer = async (
       },
     },
   );
+};
 
-  // Create the handler context
-  const handlerContext: MetaMCPHandlerContext = {
-    namespaceUuid,
-    sessionId,
-  };
-
-  // Original List Tools Handler
-  const originalListToolsHandler: ListToolsHandler = async (
-    request,
-    context,
-  ) => {
+export const createListToolsHandler = (
+  context: ServerCreationContext
+): ListToolsHandler => {
+  return async (request, handlerContext) => {
     const serverParams = await getMcpServers(
-      context.namespaceUuid,
-      includeInactiveServers,
+      handlerContext.namespaceUuid,
+      context.includeInactiveServers,
     );
     const allTools: Tool[] = [];
 
@@ -107,17 +114,17 @@ export const createServer = async (
           return;
         }
         const session = await mcpServerPool.getSession(
-          context.sessionId,
+          handlerContext.sessionId,
           mcpServerUuid,
           params,
-          namespaceUuid,
+          context.namespaceUuid,
         );
         if (!session) return;
 
         // Now check for self-referencing using the actual MCP server name
-        const serverVersion = session.client.getServerVersion();
+        const serverVersion = session.client?.getServerVersion?.();
         const actualServerName = serverVersion?.name || params.name || "";
-        const ourServerName = `metamcp-unified-${namespaceUuid}`;
+        const ourServerName = `metamcp-unified-${context.namespaceUuid}`;
 
         if (actualServerName === ourServerName) {
           console.log(
@@ -126,67 +133,39 @@ export const createServer = async (
           return;
         }
 
-        // Check basic self-reference patterns
-        if (isSameServerInstance(params, mcpServerUuid)) {
-          return;
-        }
-
         // Mark this server as visited
         visitedServers.add(mcpServerUuid);
 
-        // Check if client supports tools
-        if (!clientSupportsCapability(session, 'tools')) return;
-
-        // Use name assigned by user, fallback to server info
-        const serverInfo = getServerInfo(session);
-        const serverName = params.name || serverInfo.name || "";
-
         try {
-          const result = await listToolsFromClient(session);
-
-          // Save original tools to database
-          if (result.tools && result.tools.length > 0) {
-            try {
-              await toolsImplementations.create({
-                tools: result.tools,
-                mcpServerUuid: mcpServerUuid,
+          const tools = await listToolsFromClient(session);
+          if (tools && tools.length > 0) {
+            for (const tool of tools) {
+              const sanitizedName = sanitizeName(tool.name);
+              context.mappings.toolToClient[sanitizedName] = session;
+              context.mappings.toolToServerUuid[sanitizedName] = mcpServerUuid;
+              allTools.push({
+                ...tool,
+                name: sanitizedName,
               });
-            } catch (dbError) {
-              console.error(
-                `Error saving tools to database for server ${serverName}:`,
-                dbError,
-              );
             }
           }
-
-          const toolsWithSource =
-            result.tools?.map((tool) => {
-              const toolName = `${sanitizeName(serverName)}__${tool.name}`;
-              toolToClient[toolName] = session;
-              toolToServerUuid[toolName] = mcpServerUuid;
-
-              return {
-                ...tool,
-                name: toolName,
-                description: tool.description,
-              };
-            }) || [];
-
-          allTools.push(...toolsWithSource);
         } catch (error) {
-          console.error(`Error fetching tools from: ${serverName}`, error);
+          console.error(
+            `Error listing tools from server ${params.name}:`,
+            error,
+          );
         }
       }),
     );
 
     return { tools: allTools };
   };
+};
 
-  // Original Call Tool Handler
-  const originalCallToolHandler: CallToolHandler = async (
-    request,
-    _context,
-  ) => {
+export const createCallToolHandler = (
+  context: ServerCreationContext
+): CallToolHandler => {
+  return async (request, _handlerContext) => {
     const { name, arguments: args } = request.params;
 
     // Extract the original tool name by removing the server prefix
@@ -199,34 +178,34 @@ export const createServer = async (
     const originalToolName = name.substring(firstDoubleUnderscoreIndex + 2);
 
     // Try to find the tool in pre-populated mappings first
-    let clientForTool = toolToClient[name];
-    let serverUuid = toolToServerUuid[name];
+    let clientForTool = context.mappings.toolToClient[name];
+    let serverUuid = context.mappings.toolToServerUuid[name];
 
     // If not found in mappings, dynamically find the server and route the call
     if (!clientForTool || !serverUuid) {
       try {
         // Get all MCP servers for this namespace
         const serverParams = await getMcpServers(
-          namespaceUuid,
-          includeInactiveServers,
+          context.namespaceUuid,
+          context.includeInactiveServers,
         );
 
         // Find the server with the matching name prefix
         for (const [mcpServerUuid, params] of Object.entries(serverParams)) {
           const session = await mcpServerPool.getSession(
-            sessionId,
+            context.sessionId,
             mcpServerUuid,
             params,
-            namespaceUuid,
+            context.namespaceUuid,
           );
 
           if (session) {
-            const capabilities = session.client.getServerCapabilities();
+            const capabilities = session.client?.getServerCapabilities?.();
             if (!capabilities?.tools) continue;
 
             // Use name assigned by user, fallback to name from server
             const serverName =
-              params.name || session.client.getServerVersion()?.name || "";
+              params.name || session.client?.getServerVersion?.()?.name || "";
 
             if (sanitizeName(serverName) === serverPrefix) {
               // Found the server, now check if it has this tool
@@ -239,60 +218,63 @@ export const createServer = async (
                   // Tool exists, populate mappings for future use and use it
                   clientForTool = session;
                   serverUuid = mcpServerUuid;
-                  toolToClient[name] = session;
-                  toolToServerUuid[name] = mcpServerUuid;
+                  context.mappings.toolToClient[name] = session;
+                  context.mappings.toolToServerUuid[name] = mcpServerUuid;
                   break;
                 }
               } catch (error) {
-                console.error(
-                  `Error checking tools for server ${serverName}:`,
-                  error,
-                );
-                continue;
+                console.error(`Error listing tools from server ${serverName}:`, error);
               }
             }
           }
         }
       } catch (error) {
-        console.error(`Error dynamically finding tool ${name}:`, error);
+        console.error("Error finding server for tool:", error);
+        throw new Error(`Tool "${name}" not found or server unavailable`);
       }
     }
 
     if (!clientForTool) {
-      throw new Error(`Unknown tool: ${name}`);
-    }
-
-    if (!serverUuid) {
-      throw new Error(`Server UUID not found for tool: ${name}`);
+      throw new Error(`Tool "${name}" not found`);
     }
 
     try {
-      const abortController = new AbortController();
-
-      // Get configurable timeout values
-      const resetTimeoutOnProgress =
-        await configService.getMcpResetTimeoutOnProgress();
-      const timeout = await configService.getMcpTimeout();
-      const maxTotalTimeout = await configService.getMcpMaxTotalTimeout();
-
-      const mcpRequestOptions: RequestOptions = {
-        signal: abortController.signal,
-        resetTimeoutOnProgress,
-        timeout,
-        maxTotalTimeout,
-      };
-      // Use the unified client utility to call the tool
-      const result = await callToolOnClient(clientForTool, originalToolName, args || {});
+      const result = await callToolOnClient(clientForTool, originalToolName, args);
       return result;
     } catch (error) {
-      const serverInfo = getServerInfo(clientForTool);
-      console.error(
-        `Error calling tool "${name}" through ${serverInfo.name || "unknown"} (${serverInfo.type}):`,
-        error,
-      );
+      console.error(`Error calling tool "${name}":`, error);
       throw error;
     }
   };
+};
+
+export const createServer = async (
+  namespaceUuid: string,
+  sessionId: string,
+  includeInactiveServers: boolean = false,
+) => {
+  // Create server mappings and context
+  const mappings = createServerMappings();
+  const context: ServerCreationContext = {
+    namespaceUuid,
+    sessionId,
+    includeInactiveServers,
+    mappings,
+  };
+
+  // Create the MCP server instance
+  const server = createMcpServer(namespaceUuid);
+
+  // Create the handler context
+  const handlerContext: MetaMCPHandlerContext = {
+    namespaceUuid,
+    sessionId,
+  };
+
+  // Create handlers using the extracted functions
+  const originalListToolsHandler = createListToolsHandler(context);
+  const originalCallToolHandler = createCallToolHandler(context);
+
 
   // Compose middleware with handlers - this is the Express-like functional approach
   const listToolsWithMiddleware = compose(

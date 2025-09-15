@@ -9,7 +9,27 @@ import { RestApiMcpServer } from "../rest-api/rest-api-server";
 import { ProcessManagedStdioTransport } from "../stdio-transport/process-managed-transport";
 import { metamcpLogStore } from "./log-store";
 import { serverErrorTracker } from "./server-error-tracker";
-import { resolveEnvVariables } from "./utils";
+import { resolveEnvVariables, RestApiServerParameters } from "./utils";
+
+// Error classes for better error handling
+export class McpClientError extends Error {
+  constructor(
+    message: string,
+    public readonly serverName: string,
+    public readonly serverType: string,
+    public readonly cause?: Error
+  ) {
+    super(message);
+    this.name = "McpClientError";
+  }
+}
+
+export class RestApiClientError extends McpClientError {
+  constructor(message: string, serverName: string, cause?: Error) {
+    super(message, serverName, "REST_API", cause);
+    this.name = "RestApiClientError";
+  }
+}
 
 const sleep = (time: number) =>
   new Promise<void>((resolve) => setTimeout(() => resolve(), time));
@@ -27,6 +47,14 @@ export interface RestApiConnectedClient {
 
 export type AnyConnectedClient = ConnectedClient | RestApiConnectedClient;
 
+// Result types for better error handling
+export type ClientConnectionResult<T> =
+  | { success: true; client: T }
+  | { success: false; error: McpClientError };
+
+export type RestApiConnectionResult = ClientConnectionResult<RestApiConnectedClient>;
+export type StandardConnectionResult = ClientConnectionResult<ConnectedClient>;
+
 /**
  * Transforms localhost URLs to use host.docker.internal when running inside Docker
  */
@@ -41,31 +69,99 @@ export const transformDockerUrl = (url: string): string => {
   return url;
 };
 
+/**
+ * Creates a REST API client with proper error handling
+ * @param serverParams Server parameters
+ * @returns RestApiConnectedClient or throws McpClientError
+ */
 export const createRestApiClient = (
   serverParams: ServerParameters,
-): RestApiConnectedClient | undefined => {
+): RestApiConnectedClient => {
   if (serverParams.type !== "REST_API") {
-    return undefined;
+    throw new McpClientError(
+      `Invalid server type for REST API client: ${serverParams.type}`,
+      serverParams.name,
+      serverParams.type
+    );
   }
 
   try {
-    const restApiServer = new RestApiMcpServer(serverParams);
+    // Validate that we have the required REST API parameters
+    const restApiParams = serverParams as RestApiServerParameters;
+    if (!restApiParams.base_url || !restApiParams.api_spec) {
+      throw new RestApiClientError(
+        "Missing required REST API parameters: base_url and api_spec are required",
+        serverParams.name
+      );
+    }
+
+    const restApiServer = new RestApiMcpServer(restApiParams);
 
     return {
       restApiServer,
       cleanup: async () => {
-        // Clean up the generated server file
-        await restApiServer.cleanup();
-        console.log(`Cleaned up REST API server: ${serverParams.name}`);
+        try {
+          // Clean up the generated server file
+          await restApiServer.cleanup();
+          console.log(`Cleaned up REST API server: ${serverParams.name}`);
+        } catch (cleanupError) {
+          const errorMessage = cleanupError instanceof Error ? cleanupError.message : 'Unknown cleanup error';
+          metamcpLogStore.addLog(
+            serverParams.name,
+            "error",
+            `Failed to cleanup REST API server: ${errorMessage}`,
+          );
+          throw new RestApiClientError(
+            `Cleanup failed: ${errorMessage}`,
+            serverParams.name,
+            cleanupError instanceof Error ? cleanupError : undefined
+          );
+        }
       },
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     metamcpLogStore.addLog(
       serverParams.name,
       "error",
-      `Failed to create REST API server: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      `Failed to create REST API server: ${errorMessage}`,
     );
-    return undefined;
+
+    if (error instanceof RestApiClientError || error instanceof McpClientError) {
+      throw error;
+    }
+
+    throw new RestApiClientError(
+      `Failed to create REST API server: ${errorMessage}`,
+      serverParams.name,
+      error instanceof Error ? error : undefined
+    );
+  }
+};
+
+/**
+ * Safe version of createRestApiClient that returns a result type instead of throwing
+ * @param serverParams Server parameters
+ * @returns RestApiConnectionResult with success/error information
+ */
+export const createRestApiClientSafe = (
+  serverParams: ServerParameters,
+): RestApiConnectionResult => {
+  try {
+    const client = createRestApiClient(serverParams);
+    return { success: true, client };
+  } catch (error) {
+    if (error instanceof McpClientError) {
+      return { success: false, error };
+    }
+    return {
+      success: false,
+      error: new RestApiClientError(
+        error instanceof Error ? error.message : 'Unknown error',
+        serverParams.name,
+        error instanceof Error ? error : undefined
+      )
+    };
   }
 };
 

@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: metamcp-postgres-prod
+    environment:
+      POSTGRES_DB: metamcp_prod
+      POSTGRES_USER: metamcp
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password_change_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - metamcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metamcp -d metamcp_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Backend Service
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: metamcp-backend-prod
+    environment:
+      NODE_ENV: production
+      PORT: 12009
+      APP_URL: https://otbitmcp.xyz
+      DATABASE_URL: postgresql://metamcp:${DB_PASSWORD:-secure_password_change_me}@postgres:5432/metamcp_prod
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: https://otbitmcp.xyz
+      CORS_ORIGIN: https://otbitmcp.xyz
+      MCP_TIMEOUT: 30000
+      MCP_MAX_TOTAL_TIMEOUT: 300000
+      MCP_RESET_TIMEOUT_ON_PROGRESS: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "12009:12009"
+    networks:
+      - metamcp-network
+    restart: unless-stopped
+    volumes:
+      - /tmp/metamcp-servers:/tmp/metamcp-servers
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Service
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    container_name: metamcp-frontend-prod
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_URL: https://otbitmcp.xyz
+      NEXT_PUBLIC_API_URL: https://otbitmcp.xyz/api
+      NEXT_PUBLIC_TRPC_URL: https://otbitmcp.xyz/trpc
+      NEXT_PUBLIC_AUTH_URL: https://otbitmcp.xyz/api/auth
+      NEXT_TELEMETRY_DISABLED: 1
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    networks:
+      - metamcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+
+networks:
+  metamcp-network:
+    driver: bridge

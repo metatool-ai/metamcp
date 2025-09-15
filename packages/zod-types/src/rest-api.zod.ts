@@ -140,7 +140,7 @@ export const ManualApiFormSchema = z.object({
   name: z.string().min(1, "API name is required"),
   description: z.string().optional(),
   base_url: z.string().url("Valid base URL is required"),
-  auth_type: z.enum(["none", "bearer", "api_key", "basic"]).default("none"),
+  auth_type: z.enum(["none", "bearer", "api_key", "basic"]),
   auth_token: z.string().optional(),
   auth_key: z.string().optional(),
   auth_key_location: z.enum(["header", "query"]).optional(),

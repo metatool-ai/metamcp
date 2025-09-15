@@ -16,6 +16,31 @@ import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { RestApiConverter } from "../../lib/rest-api/rest-api-converter";
 import { mcpServersRepo } from "../../db/repositories";
 
+// Input sanitization for server names and descriptions
+const sanitizeServerInput = (input: { server_name: string; server_description?: string | null }) => {
+  const sanitizedName = input.server_name
+    .replace(/[<>'"&]/g, '') // Remove HTML/XML special characters
+    .replace(/[^\w\s-]/g, '') // Only allow word characters, spaces, and hyphens
+    .trim()
+    .substring(0, 100); // Limit length
+
+  if (!sanitizedName || sanitizedName.length < 2) {
+    throw new Error('Server name must be at least 2 characters long and contain valid characters');
+  }
+
+  const sanitizedDescription = input.server_description
+    ? input.server_description
+        .replace(/[<>'"&]/g, '')
+        .trim()
+        .substring(0, 500)
+    : null;
+
+  return {
+    server_name: sanitizedName,
+    server_description: sanitizedDescription,
+  };
+};
+
 export const restApiRouter = createTRPCRouter({
   /**
    * Validate REST API specification before import
@@ -57,13 +82,16 @@ export const restApiRouter = createTRPCRouter({
     .output(RestApiImportResponseSchema)
     .mutation(async ({ input, ctx }) => {
       try {
+        // Sanitize server input first
+        const sanitizedInput = sanitizeServerInput(input);
+
         const converter = new RestApiConverter();
         const result = await converter.validateAndConvert(input.format, input.data);
-        
-        // Create MCP server record
+
+        // Create MCP server record with sanitized data
         const serverData = {
-          name: input.server_name,
-          description: input.server_description || null,
+          name: sanitizedInput.server_name,
+          description: sanitizedInput.server_description,
           type: "REST_API" as const,
           command: null,
           args: null,
@@ -79,9 +107,9 @@ export const restApiRouter = createTRPCRouter({
 
         const createdServer = await mcpServersRepo.create(serverData);
         
-        // Generate tool names for response
-        const toolNames = result.apiSpec.endpoints.map(endpoint => 
-          `${input.server_name.replace(/[^a-zA-Z0-9_-]/g, '_')}__${endpoint.name}`
+        // Generate tool names for response using sanitized name
+        const toolNames = result.apiSpec.endpoints.map(endpoint =>
+          `${sanitizedInput.server_name.replace(/[^a-zA-Z0-9_-]/g, '_')}__${endpoint.name}`
         );
 
         return {

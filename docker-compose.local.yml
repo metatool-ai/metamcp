@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for local testing
+  postgres-local:
+    image: postgres:15-alpine
+    container_name: metamcp-postgres-local
+    environment:
+      POSTGRES_DB: metamcp_local
+      POSTGRES_USER: metamcp_local
+      POSTGRES_PASSWORD: local_password
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    volumes:
+      - postgres_local_data:/var/lib/postgresql/data
+    networks:
+      - metamcp-local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metamcp_local -d metamcp_local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Service (Docker build)
+  backend-local:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: metamcp-backend-local
+    environment:
+      NODE_ENV: development
+      PORT: 12009
+      APP_URL: http://localhost:12009
+      DATABASE_URL: postgresql://metamcp_local:local_password@postgres-local:5432/metamcp_local
+      BETTER_AUTH_SECRET: local-development-secret-key-for-testing-only
+      BETTER_AUTH_URL: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000
+      MCP_TIMEOUT: 30000
+      MCP_MAX_TOTAL_TIMEOUT: 300000
+      MCP_RESET_TIMEOUT_ON_PROGRESS: true
+    depends_on:
+      postgres-local:
+        condition: service_healthy
+    ports:
+      - "12009:12009"
+    networks:
+      - metamcp-local
+    volumes:
+      - /tmp/metamcp-servers:/tmp/metamcp-servers
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Service (Docker build)
+  frontend-local:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    container_name: metamcp-frontend-local
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:12009
+      NEXT_PUBLIC_TRPC_URL: http://localhost:12009/trpc
+      NEXT_PUBLIC_AUTH_URL: http://localhost:12009/api/auth
+      NEXT_TELEMETRY_DISABLED: 1
+    depends_on:
+      backend-local:
+        condition: service_healthy
+    ports:
+      - "3001:3000"  # Different port to avoid conflicts with dev server
+    networks:
+      - metamcp-local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_local_data:
+
+networks:
+  metamcp-local:
+    driver: bridge

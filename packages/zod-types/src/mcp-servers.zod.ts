@@ -5,6 +5,34 @@ export const McpServerStatusEnum = z.enum(["ACTIVE", "INACTIVE"]);
 
 export const McpServerErrorStatusEnum = z.enum(["NONE", "ERROR"]);
 
+// JSON Schema type for better type safety
+export const JsonSchemaPropertySchema: z.ZodType<{
+  type: "string" | "number" | "integer" | "boolean" | "array" | "object";
+  description?: string;
+  default?: string | number | boolean | any[] | Record<string, any>;
+  enum?: (string | number)[];
+  format?: string;
+  items?: any;
+  properties?: Record<string, any>;
+  required?: string[];
+}> = z.object({
+  type: z.enum(["string", "number", "integer", "boolean", "array", "object"]),
+  description: z.string().optional(),
+  default: z.union([z.string(), z.number(), z.boolean(), z.array(z.any()), z.object({})]).optional(),
+  enum: z.array(z.union([z.string(), z.number()])).optional(),
+  format: z.string().optional(),
+  items: z.lazy(() => JsonSchemaPropertySchema).optional(),
+  properties: z.record(z.lazy(() => JsonSchemaPropertySchema)).optional(),
+  required: z.array(z.string()).optional(),
+});
+
+export const JsonSchemaSchema = z.object({
+  type: z.literal("object"),
+  properties: z.record(JsonSchemaPropertySchema).optional(),
+  required: z.array(z.string()).optional(),
+  additionalProperties: z.boolean().optional(),
+});
+
 // REST API specific schemas
 export const RestApiParameterSchema = z.object({
   name: z.string(),
@@ -12,7 +40,7 @@ export const RestApiParameterSchema = z.object({
   type: z.enum(["string", "number", "boolean", "array"]),
   required: z.boolean().optional().default(false),
   description: z.string().optional(),
-  default: z.any().optional(),
+  default: z.union([z.string(), z.number(), z.boolean(), z.array(z.any())]).optional(),
   enum: z.array(z.string()).optional(),
 });
 
@@ -549,3 +577,7 @@ export const DatabaseMcpServerSchema = z.object({
 });
 
 export type DatabaseMcpServer = z.infer<typeof DatabaseMcpServerSchema>;
+
+// Additional type exports for better type safety
+export type JsonSchemaProperty = z.infer<typeof JsonSchemaPropertySchema>;
+export type JsonSchema = z.infer<typeof JsonSchemaSchema>;

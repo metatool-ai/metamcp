@@ -1,13 +1,106 @@
 import {
   AuthConfiguration,
   ManualApiForm,
+  ManualApiFormSchema,
   OpenApiSpec,
+  OpenApiSpecSchema,
   RestApiEndpoint,
   RestApiImportFormat,
   RestApiParameter,
   RestApiSpecification,
   SimpleJsonApi,
+  SimpleJsonApiSchema,
 } from "@repo/zod-types";
+
+// Input sanitization utilities
+class InputSanitizer {
+  /**
+   * Sanitize string input to prevent injection attacks
+   */
+  static sanitizeString(input: string, maxLength: number = 1000): string {
+    if (typeof input !== "string") {
+      throw new Error("Input must be a string");
+    }
+
+    // Remove potentially dangerous characters and limit length
+    return input
+      .replace(/[<>'"&]/g, "") // Remove HTML/XML special characters
+      .replace(/javascript:/gi, "") // Remove javascript: protocol
+      .replace(/data:/gi, "") // Remove data: protocol
+      .replace(/vbscript:/gi, "") // Remove vbscript: protocol
+      .trim()
+      .substring(0, maxLength);
+  }
+
+  /**
+   * Sanitize URL input
+   */
+  static sanitizeUrl(input: string): string {
+    if (typeof input !== "string") {
+      throw new Error("URL must be a string");
+    }
+
+    const sanitized = this.sanitizeString(input, 2000);
+
+    // Validate URL format
+    try {
+      const url = new URL(sanitized);
+      // Only allow http and https protocols
+      if (!["http:", "https:"].includes(url.protocol)) {
+        throw new Error("Only HTTP and HTTPS protocols are allowed");
+      }
+      return url.toString();
+    } catch (error) {
+      throw new Error(
+        `Invalid URL format: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
+  }
+
+  /**
+   * Sanitize object keys and string values recursively
+   */
+  static sanitizeObject(obj: any, maxDepth: number = 10): any {
+    if (maxDepth <= 0) {
+      throw new Error("Maximum object depth exceeded");
+    }
+
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+
+    if (typeof obj === "string") {
+      return this.sanitizeString(obj);
+    }
+
+    if (typeof obj === "number" || typeof obj === "boolean") {
+      return obj;
+    }
+
+    if (Array.isArray(obj)) {
+      if (obj.length > 1000) {
+        throw new Error("Array too large");
+      }
+      return obj.map((item) => this.sanitizeObject(item, maxDepth - 1));
+    }
+
+    if (typeof obj === "object") {
+      const keys = Object.keys(obj);
+      if (keys.length > 100) {
+        throw new Error("Object has too many properties");
+      }
+
+      const sanitized: any = {};
+      for (const key of keys) {
+        const sanitizedKey = this.sanitizeString(key, 100);
+        sanitized[sanitizedKey] = this.sanitizeObject(obj[key], maxDepth - 1);
+      }
+      return sanitized;
+    }
+
+    return obj;
+  }
+}
 
 export interface ConversionResult {
   apiSpec: RestApiSpecification;
@@ -18,21 +111,37 @@ export interface ConversionResult {
 
 export class RestApiConverter {
   /**
-   * Validate and convert API specification from any supported format
+   * Validate and convert API specification from any supported format with input sanitization
    */
   async validateAndConvert(
     format: RestApiImportFormat,
     data: any,
   ): Promise<ConversionResult> {
-    switch (format) {
-      case "simple_json":
-        return this.convertFromSimpleJson(data as SimpleJsonApi);
-      case "openapi":
-        return this.convertFromOpenApi(data as OpenApiSpec);
-      case "manual":
-        return this.convertFromManualForm(data as ManualApiForm);
-      default:
-        throw new Error(`Unsupported import format: ${format}`);
+    // First sanitize the input data
+    const sanitizedData = InputSanitizer.sanitizeObject(data);
+
+    // Then validate against the appropriate schema
+    let validatedData: SimpleJsonApi | OpenApiSpec | ManualApiForm;
+
+    try {
+      switch (format) {
+        case "simple_json":
+          validatedData = SimpleJsonApiSchema.parse(sanitizedData);
+          return this.convertFromSimpleJson(validatedData);
+        case "openapi":
+          validatedData = OpenApiSpecSchema.parse(sanitizedData);
+          return this.convertFromOpenApi(validatedData);
+        case "manual":
+          validatedData = ManualApiFormSchema.parse(sanitizedData);
+          return this.convertFromManualForm(validatedData);
+        default:
+          throw new Error(`Unsupported import format: ${format}`);
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Validation failed: ${error.message}`);
+      }
+      throw new Error("Validation failed: Unknown error");
     }
   }
 
