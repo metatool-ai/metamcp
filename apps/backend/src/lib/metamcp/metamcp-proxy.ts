@@ -141,19 +141,39 @@ export const createServer = async (
           params.name || session.client.getServerVersion()?.name || "";
 
         try {
-          const result = await session.client.request(
-            {
-              method: "tools/list",
-              params: { _meta: request.params?._meta },
-            },
-            ListToolsResultSchema,
-          );
+          // Paginated tool discovery - load all pages automatically
+          const allServerTools: any[] = [];
+          let cursor: string | undefined = undefined;
+          let hasMore = true;
+          let pageCount = 0;
 
-          // Save original tools to database
-          if (result.tools && result.tools.length > 0) {
+          while (hasMore) {
+            pageCount++;
+            
+            const result = await session.client.request(
+              {
+                method: "tools/list",
+                params: { 
+                  cursor: cursor,
+                  _meta: request.params?._meta 
+                },
+              },
+              ListToolsResultSchema,
+            );
+
+            if (result.tools && result.tools.length > 0) {
+              allServerTools.push(...result.tools);
+            }
+
+            cursor = result.nextCursor;
+            hasMore = !!result.nextCursor;
+          }
+
+          // Save all original tools to database
+          if (allServerTools.length > 0) {
             try {
               await toolsImplementations.create({
-                tools: result.tools,
+                tools: allServerTools,
                 mcpServerUuid: mcpServerUuid,
               });
             } catch (dbError) {
@@ -164,18 +184,17 @@ export const createServer = async (
             }
           }
 
-          const toolsWithSource =
-            result.tools?.map((tool) => {
-              const toolName = `${sanitizeName(serverName)}__${tool.name}`;
-              toolToClient[toolName] = session;
-              toolToServerUuid[toolName] = mcpServerUuid;
+          const toolsWithSource = allServerTools.map((tool) => {
+            const toolName = `${sanitizeName(serverName)}__${tool.name}`;
+            toolToClient[toolName] = session;
+            toolToServerUuid[toolName] = mcpServerUuid;
 
-              return {
-                ...tool,
-                name: toolName,
-                description: tool.description,
-              };
-            }) || [];
+            return {
+              ...tool,
+              name: toolName,
+              description: tool.description,
+            };
+          });
 
           allTools.push(...toolsWithSource);
         } catch (error) {
@@ -234,24 +253,36 @@ export const createServer = async (
               params.name || session.client.getServerVersion()?.name || "";
 
             if (sanitizeName(serverName) === serverPrefix) {
-              // Found the server, now check if it has this tool
+              // Found the server, now check if it has this tool with pagination
               try {
-                const result = await session.client.request(
-                  {
-                    method: "tools/list",
-                    params: {},
-                  },
-                  ListToolsResultSchema,
-                );
+                let foundTool = false;
+                let cursor: string | undefined = undefined;
+                let hasMore = true;
 
-                if (
-                  result.tools?.some((tool) => tool.name === originalToolName)
-                ) {
-                  // Tool exists, populate mappings for future use and use it
-                  clientForTool = session;
-                  serverUuid = mcpServerUuid;
-                  toolToClient[name] = session;
-                  toolToServerUuid[name] = mcpServerUuid;
+                while (hasMore && !foundTool) {
+                  const result = await session.client.request(
+                    {
+                      method: "tools/list",
+                      params: { cursor: cursor },
+                    },
+                    ListToolsResultSchema,
+                  );
+
+                  if (result.tools?.some((tool) => tool.name === originalToolName)) {
+                    foundTool = true;
+                    // Tool exists, populate mappings for future use and use it
+                    clientForTool = session;
+                    serverUuid = mcpServerUuid;
+                    toolToClient[name] = session;
+                    toolToServerUuid[name] = mcpServerUuid;
+                    break;
+                  }
+
+                  cursor = result.nextCursor;
+                  hasMore = !!result.nextCursor;
+                }
+
+                if (foundTool) {
                   break;
                 }
               } catch (error) {

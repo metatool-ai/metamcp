@@ -85,37 +85,50 @@ export function ToolManagement({
     },
   });
 
-  // Fetch tools from MCP server
+  // Fetch tools from MCP server with pagination
   const fetchMCPTools = useCallback(async () => {
     setLoading(true);
     try {
-      const response = (await makeRequest(
-        {
-          method: "tools/list" as const,
-          params: {},
-        },
-        ListToolsResultSchema,
-        { suppressToast: true },
-      )) as ToolsListResponse;
+      // Paginated tool fetching - load all pages automatically
+      const allTools: MCPTool[] = [];
+      let cursor: string | undefined = undefined;
+      let hasMore = true;
+      let pageCount = 0;
 
-      if (response?.tools) {
-        setMcpTools(response.tools);
+      while (hasMore) {
+        pageCount++;
+        
+        const response = (await makeRequest(
+          {
+            method: "tools/list" as const,
+            params: { cursor },
+          },
+          ListToolsResultSchema,
+          { suppressToast: true },
+        )) as ToolsListResponse & { nextCursor?: string };
+
+        if (response?.tools && response.tools.length > 0) {
+          allTools.push(...response.tools);
+        }
+
+        cursor = response?.nextCursor;
+        hasMore = !!response?.nextCursor;
+      }
+
+      if (allTools.length > 0) {
+        setMcpTools(allTools);
 
         // Automatically save tools to database
-        if (response.tools.length > 0) {
-          const toolsToSave = response.tools.map((tool) => ({
-            name: tool.name,
-            description: tool.description || undefined,
-            inputSchema: tool.inputSchema || { type: "object" as const },
-          }));
+        const toolsToSave = allTools.map((tool) => ({
+          name: tool.name,
+          description: tool.description || undefined,
+          inputSchema: tool.inputSchema || { type: "object" as const },
+        }));
 
-          saveToolsMutation.mutate({
-            mcpServerUuid,
-            tools: toolsToSave,
-          });
-        } else {
-          toast.info(t("mcp-servers:tools.noToolsFromMcp"));
-        }
+        saveToolsMutation.mutate({
+          mcpServerUuid,
+          tools: toolsToSave,
+        });
       } else {
         setMcpTools([]);
         toast.info(t("mcp-servers:tools.noToolsFromMcp"));
