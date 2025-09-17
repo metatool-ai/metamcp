@@ -6,4 +6,5 @@ export * from "./tools.repo";
 export * from "./oauth-sessions.repo";
 export * from "./oauth.repo";
 export * from "./api-keys.repo";
+export * from "./users.repo";
 export { configRepo } from "./config.repo";
