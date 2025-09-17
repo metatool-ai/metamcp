@@ -36,6 +36,19 @@
     "check-types": {
       "dependsOn": ["^check-types"]
     },
+    "test": {
+      "dependsOn": ["^test"],
+      "inputs": ["$TURBO_DEFAULT$", "src/**/*.test.ts", "src/__tests__/**/*"]
+    },
+    "test:run": {
+      "dependsOn": ["^test:run"],
+      "inputs": ["$TURBO_DEFAULT$", "src/**/*.test.ts", "src/__tests__/**/*"]
+    },
+    "test:coverage": {
+      "dependsOn": ["^test:coverage"],
+      "inputs": ["$TURBO_DEFAULT$", "src/**/*.test.ts", "src/__tests__/**/*"],
+      "outputs": ["coverage/**"]
+    },
     "dev": {
       "cache": false,
       "persistent": true,
