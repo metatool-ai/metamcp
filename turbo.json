@@ -14,6 +14,9 @@
     "OIDC_PKCE",
     "OIDC_SCOPES",
     "OIDC_PROVIDER_ID",
+    "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_KEY",
     "TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL",
     "NODE_ENV",
     "POSTGRES_CA_CERT"
@@ -35,7 +38,8 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "dependsOn": ["^build"]
     }
   }
 }
