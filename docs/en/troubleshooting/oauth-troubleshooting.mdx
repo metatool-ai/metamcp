@@ -1,0 +1,224 @@
+---
+title: "MCP OAuth Troubleshooting"
+description: "This page explains the authentication logic in MetaMCP exposed MCP endpoints and helps troubleshoot common OAuth-related issues."
+---
+
+> **Implementation Reference**: The authentication logic described in this page is implemented in [`apps/backend/src/middleware/api-key-oauth.middleware.ts`](https://github.com/metatool-ai/metamcp/blob/main/apps/backend/src/middleware/api-key-oauth.middleware.ts).
+
+## Authentication Scenarios
+
+MetaMCP supports four different authentication configurations, each with specific behaviors:
+
+### 1. Both API Key and OAuth Disabled
+
+**Configuration**: `enable_api_key_auth: false`, `enable_oauth: false`
+
+**Behavior**: 
+- All requests pass through without authentication
+- No authentication headers required
+- Suitable for public endpoints that don't require authentication
+
+**Example Response**:
+```json
+{
+  "message": "Public endpoint - no authentication required"
+}
+```
+
+### 2. API Key Only (OAuth Disabled)
+
+**Configuration**: `enable_api_key_auth: true`, `enable_oauth: false`
+
+**Behavior**:
+- Requires valid API key via `X-API-Key` header or query parameter
+- **Critical Issue**: If API key is missing or invalid, some MCP clients (like Inspector) may attempt OAuth flow
+- This can cause infinite refresh loops and 429 rate limit errors
+
+**Valid Request**:
+```bash
+curl -H "X-API-Key: mcp_1234567890abcdef" \
+  https://your-domain.com/api/endpoint
+```
+
+**Invalid/Missing API Key Response**:
+```json
+{
+  "error": "authentication_required",
+  "error_description": "Authentication required via API key",
+  "supported_methods": [
+    "X-API-Key header",
+    "query parameter (api_key or apikey)"
+  ],
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+**⚠️ Common Issue**: MCP Inspector may still try OAuth flow even when only API keys are enabled, leading to:
+- Infinite token refresh attempts
+- 429 "Too Many Requests" errors
+- Inspector becoming unusable
+
+**Solution**: Ensure your MCP client is configured to use API keys only when OAuth is disabled. Make sure you are providing the correct API key or it may result in 429 rate limited errors.
+
+### 3. Both API Key and OAuth Enabled
+
+**Configuration**: `enable_api_key_auth: true`, `enable_oauth: true`
+
+**Behavior**:
+- Accepts both API keys and OAuth bearer tokens
+- API key takes precedence if provided
+- Falls back to OAuth if no API key is provided
+- Most flexible configuration
+
+**Authentication Flow**:
+
+1. **No Token Provided**: Initiates OAuth flow
+   ```json
+   {
+     "error": "authentication_required",
+     "error_description": "Authentication required via OAuth bearer token or API key",
+     "supported_methods": [
+       "Authorization header (Bearer token)",
+       "X-API-Key header",
+       "query parameter (api_key or apikey)"
+     ]
+   }
+   ```
+
+2. **Valid API Key**: Passes through
+   ```bash
+   curl -H "X-API-Key: mcp_1234567890abcdef" \
+     https://your-domain.com/api/endpoint
+   ```
+
+3. **Valid OAuth Token**: Passes through
+   ```bash
+   curl -H "Authorization: Bearer mcp_token_1234567890abcdef" \
+     https://your-domain.com/api/endpoint
+   ```
+
+4. **Invalid Credentials**: Returns 401 with rate limiting
+   ```json
+   {
+     "error": "invalid_credentials",
+     "error_description": "Authentication failed. Invalid credentials provided.",
+     "timestamp": "2024-01-01T00:00:00.000Z"
+   }
+   ```
+
+### 4. OAuth Only (API Key Disabled)
+
+**Configuration**: `enable_api_key_auth: false`, `enable_oauth: true`
+
+**Behavior**:
+- Requires OAuth bearer token
+- No API key support
+- Clean OAuth-only authentication
+
+**Valid Request**:
+```bash
+curl -H "Authorization: Bearer mcp_token_1234567890abcdef" \
+  https://your-domain.com/api/endpoint
+```
+
+**No Token Response**:
+```json
+{
+  "error": "authentication_required",
+  "error_description": "Authentication required via OAuth bearer token",
+  "supported_methods": ["Authorization header (Bearer token)"],
+  "WWW-Authenticate": "Bearer realm=\"MetaMCP\", scope=\"admin\""
+}
+```
+
+**Invalid Token Response**:
+```json
+{
+  "error": "invalid_token",
+  "error_description": "The provided OAuth token is invalid or has expired.",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+## Common Issues and Solutions
+
+### Issue 1: Infinite OAuth Refresh Loop
+
+**Symptoms**:
+- MCP Inspector continuously refreshes tokens
+- 429 "Too Many Requests" errors
+- Inspector becomes unresponsive
+
+**Root Cause**: MCP client attempting OAuth flow when only API keys are enabled
+
+**Solutions**:
+
+1. **Enable OAuth in endpoint configuration**:
+   ```json
+   {
+     "enable_api_key_auth": true,
+     "enable_oauth": true
+   }
+   ```
+
+2. **Configure MCP client to use API keys only**:
+   - Update client configuration to use `X-API-Key` header
+   - Disable OAuth flow in client settings
+
+3. **Use OAuth-only configuration**:
+   ```json
+   {
+     "enable_api_key_auth": false,
+     "enable_oauth": true
+   }
+   ```
+
+### Issue 2: 429 Rate Limit Errors
+
+**Symptoms**:
+- "Too many failed authentication attempts" errors
+- Temporary lockout from authentication attempts
+
+**Solutions**:
+
+1. **Wait for rate limit to reset** (1 minute)
+2. If you have enabled Auth, make sure you never pass in a wrong API key.
+   ```
+
+### Issue 3: Access Denied (403) Errors
+
+**Symptoms**:
+- "Access denied" errors even with valid credentials
+- "Public API keys cannot access private endpoints" messages
+
+**Root Cause**: Access control based on endpoint ownership
+
+**Solutions**:
+
+1. **For Private Endpoints**: Use API key owned by endpoint creator
+2. **For Public Endpoints**: Any valid API key or OAuth token works
+3. **Check endpoint ownership**:
+   ```bash
+   # Get endpoint details
+   curl -H "Authorization: Bearer your-token" \
+     https://your-domain.com/api/endpoints/endpoint-uuid
+   ```
+
+### Issue 4: Wrong Authentication Method
+
+**Symptoms**:
+- "Authentication required via API key" when using OAuth
+- "Authentication required via OAuth bearer token" when using API key
+
+**Solutions**:
+
+1. **Check endpoint configuration**:
+   ```bash
+   # Get endpoint configuration
+   curl -H "Authorization: Bearer your-token" \
+     https://your-domain.com/api/endpoints/endpoint-uuid
+   ```
+
+2. **Use correct authentication method**:
+   - API key: `X-API-Key` header or `api_key` query parameter
+   - OAuth: `Authorization: Bearer` header

@@ -1,0 +1,129 @@
+---
+title: "Namespaces"
+description: "Group MCP servers and manage tools with unified endpoints"
+---
+
+A **Namespace** in MetaMCP is a logical grouping of MCP servers that allows you to organize multiple servers into a single unified MCP endpoint.
+
+## What are Namespaces?
+
+Namespaces allow you to:
+
+- **Group multiple MCP servers** into a unified collection
+- **Create a single MCP endpoint** that aggregates tools from all servers
+- **Enable/disable individual servers** within the namespace
+- **Control tool visibility** by enabling/disabling specific tools
+- **Support both private and public** namespace access
+
+## How Namespaces Work
+
+When you create a namespace:
+
+1. **Select MCP servers** to include in the namespace
+2. **Tools are automatically discovered** from all active servers
+3. **Tools are prefixed** with server names (e.g., `ServerName__toolName`)
+4. **Create public endpoints** to expose the namespace externally
+
+## Creating a Namespace
+
+1. **Navigate** to Namespaces in the MetaMCP dashboard
+2. **Click** "Create Namespace"
+3. **Configure** basic details:
+   - **Name**: Unique identifier for your namespace
+   - **Description**: Optional description of the namespace purpose
+   - **Ownership**: Private (your use) or Public (organization-wide)
+4. **Select MCP servers** to include in the namespace
+5. **Save** the namespace
+
+### Ownership Types
+
+- **Private Namespace**: Only accessible by the creator
+- **Public Namespace**: Accessible by entire organization
+
+**Note**: Public namespaces can only contain public MCP servers.
+
+## Managing Servers and Tools
+
+### Server Management
+
+- **View server status** in the namespace servers table
+- **Enable/disable servers** individually using the status toggle
+- **Add or remove servers** by editing the namespace
+- **Monitor server health** and connectivity
+
+### Tool Management
+
+- **Automatic discovery**: Tools are discovered from all active servers
+- **Tool prefixing**: Tools are prefixed with server names to avoid conflicts
+- **Status control**: Enable/disable individual tools per namespace
+- **Tool filtering**: Inactive tools are automatically filtered from listings
+
+### Tool Naming Convention
+
+Tools follow the pattern: `{ServerName}__{originalToolName}`
+
+Example: A `search` tool from "WebSearch" server becomes `WebSearch__search`
+
+## Public Access
+
+To expose a namespace externally:
+
+1. **Create an endpoint** that points to your namespace
+2. **Configure authentication** (API key recommended)
+3. **Share the endpoint URL** with external users
+
+The endpoint provides:
+- **MCP access**: Standard MCP protocol support
+- **REST API**: HTTP endpoints for each tool
+- **OpenAPI documentation**: Auto-generated API documentation
+
+## Example
+
+A development namespace containing filesystem and git servers:
+
+```json
+{
+  "name": "development-tools",
+  "description": "Essential development tools",
+  "servers": [
+    {
+      "name": "filesystem",
+      "status": "ACTIVE",
+      "tools": ["read_file", "write_file", "list_directory"]
+    },
+    {
+      "name": "git-helper", 
+      "status": "ACTIVE",
+      "tools": ["git_status", "git_commit", "git_diff"]
+    }
+  ]
+}
+```
+
+Available tools through the namespace:
+- `filesystem__read_file`
+- `filesystem__write_file` 
+- `filesystem__list_directory`
+- `git-helper__git_status`
+- `git-helper__git_commit`
+- `git-helper__git_diff`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Endpoints" icon="link" href="/en/concepts/endpoints">
+    Expose your namespace through public endpoints
+  </Card>
+  
+  <Card title="MCP Servers" icon="server" href="/en/concepts/mcp-servers">
+    Learn about configuring MCP servers
+  </Card>
+  
+  <Card title="Integration Setup" icon="plug" href="/en/integrations/cursor">
+    Connect your namespace to MCP clients
+  </Card>
+  
+  <Card title="Inspector" icon="search-code" href="/en/concepts/inspector">
+    Test and debug your namespace tools
+  </Card>
+</CardGroup> 

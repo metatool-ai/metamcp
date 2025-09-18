@@ -1,0 +1,172 @@
+---
+title: "Claude Desktop 集成"
+description: "使用 mcp-proxy 配置 Claude Desktop 连接到 MetaMCP 端点"
+---
+
+**Claude Desktop** 集成允许您直接通过 Claude 的界面访问 MetaMCP 工具。由于 Claude Desktop 只支持 stdio 服务器，您需要一个本地代理来连接到 MetaMCP 的远程端点。
+
+## 前置要求
+
+在开始之前，请确保您拥有：
+
+- **Claude Desktop** 已安装并运行
+- **MetaMCP** 本地运行或已部署
+- **活动端点**在 MetaMCP 中配置
+- **API 密钥**已生成（如果启用了身份验证）
+
+## 基本配置
+
+### 使用 mcp-proxy（推荐）
+
+由于 MetaMCP 端点仅是远程的（SSE、可流式 HTTP），Claude Desktop 需要一个本地代理来连接。根据测试，`mcp-proxy` 是 API 密钥身份验证的推荐解决方案。
+
+<CodeGroup>
+```json 可流式 HTTP（推荐）
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json SSE（替代）
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/your-endpoint-name/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json 多个端点
+{
+  "mcpServers": {
+    "MetaMCP-Dev": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/dev-tools/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_dev_key"
+      }
+    },
+    "MetaMCP-Research": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/research-tools/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_research_key"
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## 配置文件位置
+
+编辑 Claude Desktop 的配置文件：
+
+- **macOS**：`~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**：`%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**：`~/.config/claude/claude_desktop_config.json`
+
+## 身份验证方法
+
+<AccordionGroup>
+  <Accordion icon="key" title="API 密钥身份验证">
+    **最常见方法**使用环境变量：
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "--transport",
+            "streamablehttp",
+            "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+          ],
+          "env": {
+            "API_ACCESS_TOKEN": "sk_mt_your_key_here"
+          }
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="shield-minus" title="无身份验证">
+    **对于没有身份验证的公共端点**：
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "http://localhost:12008/metamcp/public-tools/sse"
+          ]
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## 远程/生产设置
+
+对于远程 MetaMCP 实例，只需替换 localhost URL：
+
+```json
+{
+  "mcpServers": {
+    "MetaMCP-Production": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "https://your-metamcp-domain.com/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_production_key"
+      }
+    }
+  }
+}
+```
+
+## 重要说明
+
+- **替换** `your-endpoint-name` 为您的实际端点名称
+- **替换** `sk_mt_your_api_key_here` 为您的 MetaMCP API 密钥
+- **mcp-proxy** 处理 stdio 和 HTTP/SSE 之间的协议转换
+- **环境变量**是传递 API 密钥的安全方式
+- 有关详细故障排除，请参阅 [issue #76](https://github.com/metatool-ai/metamcp/issues/76) 

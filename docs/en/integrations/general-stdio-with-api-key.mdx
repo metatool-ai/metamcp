@@ -1,0 +1,191 @@
+---
+title: "General Stdio Integration using `mcp-proxy` with API Key"
+description: "Configure any stdio-based MCP client to connect to MetaMCP endpoints using mcp-proxy"
+---
+
+**General Stdio Integration** allows any MCP client that supports stdio servers to connect to MetaMCP's remote endpoints. Since MetaMCP endpoints are remote-only (SSE, Streamable HTTP), you'll need a local proxy to bridge the connection.
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+- **MCP client** that supports stdio servers (Claude Desktop, Cursor, etc.)
+- **MetaMCP** running locally or deployed
+- **Active endpoint** configured in MetaMCP
+- **API key** generated (if authentication is enabled)
+- **mcp-proxy** installed (`uvx mcp-proxy`)
+
+## Basic Configuration
+
+### Using mcp-proxy (Required)
+
+Since MetaMCP endpoints are remote only, you need `mcp-proxy` to convert between stdio and HTTP/SSE protocols.
+
+<CodeGroup>
+```json Streamable HTTP (Recommended)
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json SSE (Alternative)
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/your-endpoint-name/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json Multiple Endpoints
+{
+  "mcpServers": {
+    "MetaMCP-Dev": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/dev-tools/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_dev_key"
+      }
+    },
+    "MetaMCP-Research": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/research-tools/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_research_key"
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Authentication Methods
+
+<AccordionGroup>
+  <Accordion icon="key" title="API Key Authentication">
+    **Most common method** using environment variable:
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "--transport",
+            "streamablehttp",
+            "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+          ],
+          "env": {
+            "API_ACCESS_TOKEN": "sk_mt_your_key_here"
+          }
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="shield-minus" title="No Authentication">
+    **For public endpoints** without authentication:
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "http://localhost:12008/metamcp/your-endpoint-name/sse"
+          ]
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Connection refused**: Ensure MetaMCP is running and accessible
+2. **Authentication failed**: Verify API key is correct and has proper permissions
+3. **mcp-proxy not found**: Install with `pip install mcp-proxy` or `uvx mcp-proxy`
+
+### Debug Mode
+
+Enable debug logging for mcp-proxy:
+
+```json
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "--debug",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+## Important Notes
+
+- **Replace** `your-endpoint-name` with your actual endpoint name
+- **Replace** `sk_mt_your_api_key_here` with your MetaMCP API key
+- **mcp-proxy** handles the protocol conversion between stdio and Streamable HTTP/SSE
+- **Environment variables** are the secure way to pass API keys
+
+<CardGroup cols={2}>
+  <Card title="General Stdio Integration using `mcp-remote` with OAuth` with API Key" icon="globe" href="/en/integrations/general-stdio-with-oauth">
+    Configure any stdio-based MCP client to connect to MetaMCP endpoints using mcp-remote with OAuth
+  </Card>
+
+  <Card title="MCP OAuth Troubleshooting" icon="lock" href="/en/troubleshooting/oauth-troubleshooting">
+    Troubleshoot common OAuth-related issues
+  </Card>
+  
+  <Card title="Connect to Cursor" icon="mouse-pointer-2" href="/en/integrations/cursor">
+    Configure Cursor IDE to use your MetaMCP endpoints
+  </Card>
+  
+  <Card title="Connect to Claude Desktop" icon="monitor-dot" href="/en/integrations/claude-desktop">
+    Set up Claude Desktop with MetaMCP using mcp-proxy
+  </Card>
+</CardGroup>

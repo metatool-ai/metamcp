@@ -1,0 +1,538 @@
+---
+title: "Middleware"
+description: "Transform MCP requests and responses with pluggable middleware"
+---
+
+**Middleware** in MetaMCP allows you to intercept and transform MCP requests and responses at the namespace level. This powerful feature enables you to add functionality like filtering, logging, validation, and security without modifying individual MCP servers.
+
+## What is Middleware?
+
+Middleware functions are executed in sequence for each MCP request, allowing you to:
+
+- **Filter tools** to reduce context size and improve LLM performance
+- **Log requests** for debugging and analytics
+- **Validate inputs** to ensure data quality and security
+- **Transform responses** to normalize data formats
+- **Implement security** measures like rate limiting
+- **Add observability** with metrics and tracing
+
+<Card title="Middleware Flow" icon="flow">
+```
+MCP Client → Namespace → Middleware 1 → Middleware 2 → MCP Server
+                     ←              ←              ←
+```
+
+Each middleware can modify the request before it reaches the server and the response before it returns to the client.
+</Card>
+
+## Built-in Middleware
+
+MetaMCP provides several built-in middleware options:
+
+<AccordionGroup>
+  <Accordion icon="filter" title="Filter Inactive Tools">
+    **Purpose**: Remove tools that aren't currently available or useful
+    
+    ```json
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "checkHealth": true,
+        "removeUnavailable": true,
+        "maxToolsPerServer": 50,
+        "excludePatterns": ["debug_*", "test_*"],
+        "includePatterns": ["core_*"]
+      }
+    }
+    ```
+    
+    **Configuration Options:**
+    - `checkHealth`: Test tool availability before including
+    - `removeUnavailable`: Filter out non-responsive tools
+    - `maxToolsPerServer`: Limit tools per server to prevent context overflow
+    - `excludePatterns`: Regex patterns for tools to exclude
+    - `includePatterns`: Regex patterns for tools to include (takes precedence)
+    
+    **Benefits:**
+    - Reduces LLM context size
+    - Improves tool selection accuracy
+    - Prevents errors from broken tools
+    - Better performance for large tool sets
+  </Accordion>
+
+  <Accordion icon="chart-line" title="Request Logging">
+    **Purpose**: Log all MCP requests and responses for debugging and analytics
+    
+    ```json
+    {
+      "type": "request-logging",
+      "config": {
+        "logLevel": "info",
+        "includeHeaders": false,
+        "includeBody": true,
+        "sanitizeSecrets": true,
+        "maxBodySize": 1024,
+        "destination": "console"
+      }
+    }
+    ```
+    
+    **Configuration Options:**
+    - `logLevel`: `debug`, `info`, `warn`, `error`
+    - `includeHeaders`: Log request/response headers
+    - `includeBody`: Log request/response bodies
+    - `sanitizeSecrets`: Remove sensitive data from logs
+    - `maxBodySize`: Maximum body size to log (bytes)
+    - `destination`: `console`, `file`, `database`
+  </Accordion>
+
+  <Accordion icon="shield" title="Rate Limiting">
+    **Purpose**: Prevent abuse and manage resource usage
+    
+    ```json
+    {
+      "type": "rate-limiting",
+      "config": {
+        "requestsPerMinute": 60,
+        "burstLimit": 10,
+        "keyStrategy": "api-key",
+        "skipPaths": ["/health", "/status"],
+        "errorMessage": "Rate limit exceeded"
+      }
+    }
+    ```
+    
+    **Configuration Options:**
+    - `requestsPerMinute`: Sustained rate limit
+    - `burstLimit`: Short-term burst allowance
+    - `keyStrategy`: `api-key`, `ip-address`, `user-id`
+    - `skipPaths`: Paths to exclude from rate limiting
+    - `errorMessage`: Custom error message
+  </Accordion>
+
+  <Accordion icon="lock" title="Input Validation">
+    **Purpose**: Validate and sanitize incoming requests
+    
+    ```json
+    {
+      "type": "input-validation",
+      "config": {
+        "maxInputLength": 10000,
+        "allowedTools": ["specific_tool_1", "specific_tool_2"],
+        "blockedPatterns": ["system\\(", "eval\\("],
+        "sanitizeHtml": true,
+        "requireAuth": true
+      }
+    }
+    ```
+    
+    **Configuration Options:**
+    - `maxInputLength`: Maximum input size in characters
+    - `allowedTools`: Whitelist of allowed tools (optional)
+    - `blockedPatterns`: Regex patterns to block
+    - `sanitizeHtml`: Remove HTML tags from inputs
+    - `requireAuth`: Enforce authentication for requests
+  </Accordion>
+
+  <Accordion icon="cache" title="Response Caching">
+    **Purpose**: Cache responses to improve performance
+    
+    ```json
+    {
+      "type": "response-caching",
+      "config": {
+        "ttl": 300,
+        "keyPattern": "{tool}:{hash}",
+        "cacheableTools": ["search_*", "lookup_*"],
+        "excludeErrors": true,
+        "maxCacheSize": "100MB"
+      }
+    }
+    ```
+    
+    **Configuration Options:**
+    - `ttl`: Time to live in seconds
+    - `keyPattern`: Cache key template
+    - `cacheableTools`: Tools to cache (patterns supported)
+    - `excludeErrors`: Don't cache error responses
+    - `maxCacheSize`: Maximum cache size
+  </Accordion>
+</AccordionGroup>
+
+## Custom Middleware
+
+You can create custom middleware for specific use cases:
+
+### Middleware Interface
+
+```typescript
+interface MiddlewareContext {
+  request: MCPRequest;
+  response?: MCPResponse;
+  namespace: Namespace;
+  server: MCPServer;
+  metadata: Record<string, any>;
+}
+
+type Middleware = (
+  context: MiddlewareContext,
+  next: () => Promise<MCPResponse>
+) => Promise<MCPResponse>;
+```
+
+### Example: Content Filter Middleware
+
+```javascript
+{
+  "type": "custom",
+  "name": "content-filter",
+  "config": {
+    "removeAds": true,
+    "extractMainContent": true,
+    "blockDomains": ["spam.com", "malware.site"],
+    "maxContentLength": 50000
+  }
+}
+```
+
+### Example: Translation Middleware
+
+```javascript
+{
+  "type": "custom", 
+  "name": "auto-translate",
+  "config": {
+    "targetLanguage": "en",
+    "translateResponses": true,
+    "apiKey": "translation-api-key",
+    "skipTools": ["code_*", "math_*"]
+  }
+}
+```
+
+## Middleware Configuration
+
+### Basic Setup
+
+Add middleware to a namespace configuration:
+
+```json
+{
+  "namespace": "development-tools",
+  "middleware": [
+    {
+      "type": "request-logging",
+      "enabled": true,
+      "config": {
+        "logLevel": "info"
+      }
+    },
+    {
+      "type": "filter-inactive-tools", 
+      "enabled": true,
+      "config": {
+        "maxToolsPerServer": 30
+      }
+    }
+  ]
+}
+```
+
+### Middleware Order
+
+Middleware executes in the order specified:
+
+```json
+{
+  "middleware": [
+    {
+      "type": "input-validation",
+      "order": 1
+    },
+    {
+      "type": "rate-limiting", 
+      "order": 2
+    },
+    {
+      "type": "request-logging",
+      "order": 3
+    },
+    {
+      "type": "response-caching",
+      "order": 4
+    }
+  ]
+}
+```
+
+### Conditional Middleware
+
+Apply middleware based on conditions:
+
+```json
+{
+  "type": "filter-inactive-tools",
+  "conditions": {
+    "tools": ["web_*", "search_*"],
+    "servers": ["web-server"],
+    "userRoles": ["developer", "admin"]
+  },
+  "config": {
+    "maxToolsPerServer": 20
+  }
+}
+```
+
+## Middleware Examples
+
+### Development Environment
+
+Perfect for debugging and development:
+
+```json
+{
+  "middleware": [
+    {
+      "type": "request-logging",
+      "config": {
+        "logLevel": "debug",
+        "includeHeaders": true,
+        "includeBody": true
+      }
+    },
+    {
+      "type": "input-validation",
+      "config": {
+        "maxInputLength": 50000,
+        "sanitizeHtml": true
+      }
+    },
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "checkHealth": true,
+        "maxToolsPerServer": 100
+      }
+    }
+  ]
+}
+```
+
+### Production Environment
+
+Optimized for performance and security:
+
+```json
+{
+  "middleware": [
+    {
+      "type": "rate-limiting",
+      "config": {
+        "requestsPerMinute": 120,
+        "burstLimit": 20
+      }
+    },
+    {
+      "type": "input-validation",
+      "config": {
+        "maxInputLength": 10000,
+        "blockedPatterns": ["system\\(", "eval\\(", "__"],
+        "requireAuth": true
+      }
+    },
+    {
+      "type": "response-caching",
+      "config": {
+        "ttl": 300,
+        "cacheableTools": ["search_*", "lookup_*"]
+      }
+    },
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "maxToolsPerServer": 50,
+        "removeUnavailable": true
+      }
+    },
+    {
+      "type": "request-logging",
+      "config": {
+        "logLevel": "warn",
+        "sanitizeSecrets": true
+      }
+    }
+  ]
+}
+```
+
+### Content Creation Workflow
+
+Specialized for content and media processing:
+
+```json
+{
+  "middleware": [
+    {
+      "type": "custom",
+      "name": "content-filter",
+      "config": {
+        "removeAds": true,
+        "extractMainContent": true,
+        "maxContentLength": 100000
+      }
+    },
+    {
+      "type": "response-caching",
+      "config": {
+        "ttl": 1800,
+        "cacheableTools": ["web_scraper", "image_search"]
+      }
+    },
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "includePatterns": ["content_*", "image_*", "text_*"]
+      }
+    }
+  ]
+}
+```
+
+## Performance Considerations
+
+### Middleware Impact
+
+<Card title="Performance Tips" icon="zap">
+- **Order matters**: Put fast middleware first
+- **Cache aggressively**: Use caching for expensive operations
+- **Filter early**: Remove unnecessary tools to reduce processing
+- **Monitor performance**: Track middleware execution times
+- **Async processing**: Use non-blocking operations when possible
+</Card>
+
+### Optimization Strategies
+
+```json
+{
+  "middleware": [
+    {
+      "type": "filter-inactive-tools",
+      "config": {
+        "maxToolsPerServer": 25,
+        "checkHealth": false
+      }
+    },
+    {
+      "type": "response-caching",
+      "config": {
+        "ttl": 600,
+        "maxCacheSize": "50MB"
+      }
+    },
+    {
+      "type": "request-logging",
+      "config": {
+        "logLevel": "error",
+        "includeBody": false
+      }
+    }
+  ]
+}
+```
+
+## Monitoring Middleware
+
+### Performance Metrics
+
+Track middleware performance:
+
+- **Execution time** per middleware
+- **Cache hit rates** for caching middleware
+- **Filter effectiveness** for tool filtering
+- **Error rates** by middleware type
+- **Resource usage** and memory consumption
+
+### Debug Information
+
+```bash
+# Enable middleware debugging
+DEBUG=metamcp:middleware pnpm dev
+
+# View middleware execution logs
+GET /api/admin/middleware/logs?namespace=development-tools
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion icon="warning" title="Middleware Errors">
+    **Common causes:**
+    - Invalid configuration parameters
+    - Missing required dependencies
+    - Conflicting middleware interactions
+    - Resource limitations
+    
+    **Debug steps:**
+    1. Check middleware configuration syntax
+    2. Review error logs for specific issues
+    3. Test with minimal middleware setup
+    4. Verify resource availability
+    5. Check middleware order and dependencies
+  </Accordion>
+
+  <Accordion icon="slow" title="Performance Issues">
+    **Optimization strategies:**
+    - Reduce middleware chain length
+    - Optimize configuration parameters
+    - Use caching middleware effectively
+    - Monitor and profile middleware execution
+    - Consider async processing for heavy operations
+  </Accordion>
+
+  <Accordion icon="bug" title="Unexpected Behavior">
+    **Common problems:**
+    - Middleware order affecting results
+    - Configuration conflicts between middleware
+    - Inconsistent error handling
+    - Memory leaks in custom middleware
+    
+    **Solutions:**
+    1. Review middleware execution order
+    2. Check for configuration conflicts
+    3. Implement proper error handling
+    4. Monitor memory usage patterns
+    5. Test middleware in isolation
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Card title="Middleware Best Practices" icon="checklist">
+- ✅ **Start simple**: Begin with basic middleware and add complexity gradually
+- ✅ **Test thoroughly**: Validate middleware behavior with various inputs
+- ✅ **Monitor performance**: Track execution times and resource usage
+- ✅ **Handle errors gracefully**: Implement proper error handling and fallbacks
+- ✅ **Document configuration**: Maintain clear documentation for custom middleware
+- ✅ **Version middleware**: Use versioning for custom middleware changes
+- ✅ **Security first**: Validate and sanitize all inputs in custom middleware
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Inspector" icon="magnifying-glass" href="/en/concepts/inspector">
+    Learn about the MetaMCP inspector for debugging middleware
+  </Card>
+  
+  <Card title="Namespace Configuration" icon="folder" href="/en/concepts/namespaces">
+    Understand how to configure namespaces with middleware
+  </Card>
+  
+  <Card title="Custom Development" icon="code" href="/en/development/contributing">
+    Learn how to develop custom middleware
+  </Card>
+  
+  <Card title="Performance Monitoring" icon="chart-line" href="/en/configuration/monitoring">
+    Set up monitoring for your middleware stack
+  </Card>
+</CardGroup> 

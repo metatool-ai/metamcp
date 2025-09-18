@@ -1,0 +1,149 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "MetaMCP",
+  "logo": {
+    "light": "/favicon.png",
+    "dark": "/favicon.png"
+  },
+  "favicon": {
+    "light": "/favicon.png",
+    "dark": "/favicon.png"
+  },
+  "icons":{
+    "library": "lucide"
+  },
+  "colors": {
+    "primary": "#3b82f6",
+    "light": "#3b82f6",
+    "dark": "#3b82f6"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/metatool-ai/metamcp",
+        "icon": "github"
+      },
+      {
+        "label": "Discord",
+        "href": "https://discord.gg/mNsyat7mFX",
+        "icon": "discord"
+      }
+    ]
+  },
+  "navigation": {
+    "languages": [
+      {
+        "language": "en",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "en/index",
+              "en/quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "en/concepts/mcp-servers",
+              "en/concepts/namespaces",
+              "en/concepts/endpoints",
+              "en/concepts/middleware",
+              "en/concepts/inspector"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "en/deployment/custom-deployment"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "en/integrations/cursor",
+              "en/integrations/claude-desktop",
+              "en/integrations/open-web-ui",
+              "en/integrations/general-stdio-with-api-key",
+              "en/integrations/general-stdio-with-oauth"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "en/development/contributing",
+              "en/development/i18n",
+              "en/development/architecture"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "en/troubleshooting/oauth-troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "language": "cn",
+        "groups": [
+          {
+            "group": "快速开始",
+            "pages": [
+              "cn/index",
+              "cn/quickstart"
+            ]
+          },
+          {
+            "group": "核心概念",
+            "pages": [
+              "cn/concepts/mcp-servers",
+              "cn/concepts/namespaces",
+              "cn/concepts/endpoints",
+              "cn/concepts/middleware",
+              "cn/concepts/inspector"
+            ]
+          },
+          {
+            "group": "部署",
+            "pages": [
+              "cn/deployment/custom-deployment"
+            ]
+          },
+          {
+            "group": "集成",
+            "pages": [
+              "cn/integrations/cursor",
+              "cn/integrations/claude-desktop",
+              "cn/integrations/open-web-ui",
+              "cn/integrations/general-stdio-with-api-key",
+              "cn/integrations/general-stdio-with-oauth"
+            ]
+          },
+          {
+            "group": "开发",
+            "pages": [
+              "cn/development/contributing",
+              "cn/development/i18n",
+              "cn/development/architecture"
+            ]
+          },
+          {
+            "group": "故障排除",
+            "pages": [
+              "cn/troubleshooting/oauth-troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/metatool-ai/metamcp",
+      "discord": "https://discord.gg/mNsyat7mFX"
+    }
+  }
+}

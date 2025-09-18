@@ -1,0 +1,223 @@
+---
+title: "MCP OAuth 故障排除"
+description: "本页面解释了 MetaMCP 暴露的 MCP 端点中的身份验证逻辑，并帮助排除常见的 OAuth 相关问题。"
+---
+
+> **实现参考**: 本页面描述的身份验证逻辑在 [`apps/backend/src/middleware/api-key-oauth.middleware.ts`](https://github.com/metatool-ai/metamcp/blob/main/apps/backend/src/middleware/api-key-oauth.middleware.ts) 中实现。
+
+## 身份验证场景
+
+MetaMCP 支持四种不同的身份验证配置，每种都有特定的行为：
+
+### 1. API 密钥和 OAuth 都禁用
+
+**配置**: `enable_api_key_auth: false`, `enable_oauth: false`
+
+**行为**: 
+- 所有请求都无需身份验证即可通过
+- 不需要身份验证头
+- 适用于不需要身份验证的公共端点
+
+**示例响应**:
+```json
+{
+  "message": "Public endpoint - no authentication required"
+}
+```
+
+### 2. 仅 API 密钥（OAuth 禁用）
+
+**配置**: `enable_api_key_auth: true`, `enable_oauth: false`
+
+**行为**:
+- 需要通过 `X-API-Key` 头或查询参数提供有效的 API 密钥
+- **关键问题**: 如果 API 密钥缺失或无效，某些 MCP 客户端（如 Inspector）可能会尝试 OAuth 流程
+- 这可能导致无限刷新循环和 429 速率限制错误
+
+**有效请求**:
+```bash
+curl -H "X-API-Key: mcp_1234567890abcdef" \
+  https://your-domain.com/api/endpoint
+```
+
+**无效/缺失 API 密钥响应**:
+```json
+{
+  "error": "authentication_required",
+  "error_description": "Authentication required via API key",
+  "supported_methods": [
+    "X-API-Key header",
+    "query parameter (api_key or apikey)"
+  ],
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+**⚠️ 常见问题**: MCP Inspector 即使在仅启用 API 密钥时仍可能尝试 OAuth 流程，导致：
+- 无限令牌刷新尝试
+- 429 "请求过多" 错误
+- Inspector 变得无法使用
+
+**解决方案**: 确保您的 MCP 客户端在禁用 OAuth 时配置为仅使用 API 密钥。确保您提供正确的 API 密钥，否则可能导致 429 速率限制错误。
+
+### 3. API 密钥和 OAuth 都启用
+
+**配置**: `enable_api_key_auth: true`, `enable_oauth: true`
+
+**行为**:
+- 接受 API 密钥和 OAuth 承载令牌
+- 如果提供 API 密钥，则优先使用
+- 如果没有提供 API 密钥，则回退到 OAuth
+- 最灵活的配置
+
+**身份验证流程**:
+
+1. **未提供令牌**: 启动 OAuth 流程
+   ```json
+   {
+     "error": "authentication_required",
+     "error_description": "Authentication required via OAuth bearer token or API key",
+     "supported_methods": [
+       "Authorization header (Bearer token)",
+       "X-API-Key header",
+       "query parameter (api_key or apikey)"
+     ]
+   }
+   ```
+
+2. **有效 API 密钥**: 通过
+   ```bash
+   curl -H "X-API-Key: mcp_1234567890abcdef" \
+     https://your-domain.com/api/endpoint
+   ```
+
+3. **有效 OAuth 令牌**: 通过
+   ```bash
+   curl -H "Authorization: Bearer mcp_token_1234567890abcdef" \
+     https://your-domain.com/api/endpoint
+   ```
+
+4. **无效凭据**: 返回 401 并限制速率
+   ```json
+   {
+     "error": "invalid_credentials",
+     "error_description": "Authentication failed. Invalid credentials provided.",
+     "timestamp": "2024-01-01T00:00:00.000Z"
+   }
+   ```
+
+### 4. 仅 OAuth（API 密钥禁用）
+
+**配置**: `enable_api_key_auth: false`, `enable_oauth: true`
+
+**行为**:
+- 需要 OAuth 承载令牌
+- 不支持 API 密钥
+- 纯 OAuth 身份验证
+
+**有效请求**:
+```bash
+curl -H "Authorization: Bearer mcp_token_1234567890abcdef" \
+  https://your-domain.com/api/endpoint
+```
+
+**无令牌响应**:
+```json
+{
+  "error": "authentication_required",
+  "error_description": "Authentication required via OAuth bearer token",
+  "supported_methods": ["Authorization header (Bearer token)"],
+  "WWW-Authenticate": "Bearer realm=\"MetaMCP\", scope=\"admin\""
+}
+```
+
+**无效令牌响应**:
+```json
+{
+  "error": "invalid_token",
+  "error_description": "The provided OAuth token is invalid or has expired.",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+## 常见问题和解决方案
+
+### 问题 1: 无限 OAuth 刷新循环
+
+**症状**:
+- MCP Inspector 持续刷新令牌
+- 429 "请求过多" 错误
+- Inspector 变得无响应
+
+**根本原因**: MCP 客户端在仅启用 API 密钥时尝试 OAuth 流程
+
+**解决方案**:
+
+1. **在端点配置中启用 OAuth**:
+   ```json
+   {
+     "enable_api_key_auth": true,
+     "enable_oauth": true
+   }
+   ```
+
+2. **配置 MCP 客户端仅使用 API 密钥**:
+   - 更新客户端配置以使用 `X-API-Key` 头
+   - 在客户端设置中禁用 OAuth 流程
+
+3. **使用仅 OAuth 配置**:
+   ```json
+   {
+     "enable_api_key_auth": false,
+     "enable_oauth": true
+   }
+   ```
+
+### 问题 2: 429 速率限制错误
+
+**症状**:
+- "身份验证尝试失败次数过多" 错误
+- 因身份验证尝试而临时锁定
+
+**解决方案**:
+
+1. **等待速率限制重置**（1 分钟）
+2. 如果您启用了身份验证，请确保永远不要传入错误的 API 密钥。
+
+### 问题 3: 访问被拒绝（403）错误
+
+**症状**:
+- 即使凭据有效也出现"访问被拒绝"错误
+- "公共 API 密钥无法访问私有端点"消息
+
+**根本原因**: 基于端点所有权的访问控制
+
+**解决方案**:
+
+1. **对于私有端点**: 使用端点创建者拥有的 API 密钥
+2. **对于公共端点**: 任何有效的 API 密钥或 OAuth 令牌都可以工作
+3. **检查端点所有权**:
+   ```bash
+   # 获取端点详情
+   curl -H "Authorization: Bearer your-token" \
+     https://your-domain.com/api/endpoints/endpoint-uuid
+   ```
+
+### 问题 4: 错误的身份验证方法
+
+**症状**:
+- 使用 OAuth 时出现"需要通过 API 密钥进行身份验证"
+- 使用 API 密钥时出现"需要通过 OAuth 承载令牌进行身份验证"
+
+**解决方案**:
+
+1. **检查端点配置**:
+   ```bash
+   # 获取端点配置
+   curl -H "Authorization: Bearer your-token" \
+     https://your-domain.com/api/endpoints/endpoint-uuid
+   ```
+
+2. **使用正确的身份验证方法**:
+   - API 密钥: `X-API-Key` 头或 `api_key` 查询参数
+   - OAuth: `Authorization: Bearer` 头 

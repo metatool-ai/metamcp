@@ -1,0 +1,675 @@
+# Integration Troubleshooting
+
+Common issues and solutions when integrating MetaMCP with various tools and platforms.
+
+## General Troubleshooting
+
+### Connection Issues
+
+#### "Connection Refused" or "Cannot Connect"
+
+**Symptoms**: Client cannot connect to MetaMCP server
+
+**Solutions**:
+
+1. **Check server status**:
+```bash
+# Test basic connectivity
+curl -I https://your-domain.com/api/health
+
+# Check if server is running locally
+curl -I http://localhost:8000/api/health
+```
+
+2. **Verify network configuration**:
+```bash
+# Check if port is open
+telnet your-domain.com 443
+nc -zv your-domain.com 443
+
+# For local development
+telnet localhost 8000
+```
+
+3. **Check firewall settings**:
+```bash
+# Linux (ufw)
+sudo ufw status
+sudo ufw allow 8000
+
+# macOS
+sudo pfctl -sr | grep 8000
+
+# Windows
+netsh advfirewall firewall show rule name=all | findstr 8000
+```
+
+#### SSL/TLS Certificate Issues
+
+**Symptoms**: "Certificate verification failed" or "SSL handshake error"
+
+**Solutions**:
+
+1. **Check certificate validity**:
+```bash
+# Check certificate
+openssl s_client -connect your-domain.com:443 -servername your-domain.com
+
+# Check certificate expiry
+curl -vI https://your-domain.com 2>&1 | grep -E "(expire|valid)"
+```
+
+2. **For self-signed certificates**:
+```bash
+# Skip certificate verification (development only)
+curl -k https://your-domain.com/api/health
+
+# Add certificate to trust store
+# macOS
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain cert.pem
+
+# Linux
+sudo cp cert.pem /usr/local/share/ca-certificates/metamcp.crt
+sudo update-ca-certificates
+```
+
+### Authentication Issues
+
+#### "Unauthorized" (401) Errors
+
+**Symptoms**: API returns 401 status code
+
+**Solutions**:
+
+1. **Verify API key format**:
+```bash
+# Check if API key starts with correct prefix
+echo "mcp_1234567890abcdef" | grep "^mcp_"
+
+# Test API key
+curl -H "Authorization: Bearer mcp_1234567890abcdef" \
+  https://your-domain.com/api/health
+```
+
+2. **Check API key expiration**:
+```bash
+# Get API key details
+curl -H "Authorization: Bearer your-session-token" \
+  https://your-domain.com/api/api-keys/key-uuid
+```
+
+3. **Verify header format**:
+```bash
+# Correct formats
+curl -H "Authorization: Bearer mcp_key" https://domain.com/api
+curl -H "X-API-Key: mcp_key" https://domain.com/api
+
+# Common mistakes
+curl -H "Authorization: mcp_key" https://domain.com/api  # Missing "Bearer"
+curl -H "API-Key: mcp_key" https://domain.com/api       # Wrong header name
+```
+
+#### "Forbidden" (403) Errors
+
+**Symptoms**: Authentication succeeds but access is denied
+
+**Solutions**:
+
+1. **Check permissions**:
+```bash
+# List API key permissions
+curl -H "Authorization: Bearer mcp_key" \
+  https://your-domain.com/api/api-keys/permissions
+
+# Test specific permission
+curl -H "Authorization: Bearer mcp_key" \
+  https://your-domain.com/api/mcp-servers  # Requires mcp-servers:read
+```
+
+2. **Verify IP restrictions**:
+```bash
+# Check your external IP
+curl ifconfig.me
+
+# Test from allowed IP
+curl --interface allowed-ip -H "Authorization: Bearer mcp_key" \
+  https://your-domain.com/api/health
+```
+
+3. **Check resource scoping**:
+```bash
+# Access scoped namespace
+curl -H "Authorization: Bearer mcp_key" \
+  https://your-domain.com/api/namespaces/allowed-namespace-uuid
+
+# This might fail if not in scope
+curl -H "Authorization: Bearer mcp_key" \
+  https://your-domain.com/api/namespaces/restricted-namespace-uuid
+```
+
+## Platform-Specific Issues
+
+### Claude Desktop
+
+#### Tools Not Appearing
+
+**Symptoms**: MetaMCP tools don't show up in Claude Desktop
+
+**Solutions**:
+
+1. **Check configuration file location**:
+```bash
+# macOS
+ls -la "~/Library/Application Support/Claude/claude_desktop_config.json"
+
+# Windows
+dir "%APPDATA%\Claude\claude_desktop_config.json"
+
+# Linux
+ls -la ~/.config/claude/claude_desktop_config.json
+```
+
+2. **Validate JSON syntax**:
+```bash
+# Use jq to validate JSON
+cat claude_desktop_config.json | jq .
+
+# Or use online validator
+python -m json.tool claude_desktop_config.json
+```
+
+3. **Check MCP server status**:
+```bash
+# Test the exact endpoint used in config
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/mcp-proxy/tools
+```
+
+4. **Enable debug logging**:
+```json
+{
+  "mcpServers": {
+    "metamcp": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-metamcp",
+        "--endpoint", "https://your-domain.com/api/mcp-proxy",
+        "--api-key", "your-api-key",
+        "--debug"
+      ]
+    }
+  }
+}
+```
+
+#### Tool Execution Errors
+
+**Symptoms**: Tools appear but fail when executed
+
+**Solutions**:
+
+1. **Check tool permissions**:
+```bash
+# List available tools
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/tools
+
+# Test tool execution directly
+curl -X POST \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "tool_name", "arguments": {}}' \
+  https://your-domain.com/api/namespaces/uuid/tools/execute
+```
+
+2. **Verify tool arguments**:
+```bash
+# Get tool schema
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/tools/tool_name
+
+# Check required parameters
+jq '.inputSchema.required' tool_schema.json
+```
+
+3. **Check namespace status**:
+```bash
+# Verify namespace is active
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/namespaces/uuid
+
+# Check MCP servers in namespace
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/namespaces/uuid/mcp-servers
+```
+
+### Cursor Integration
+
+#### Extension Not Loading
+
+**Symptoms**: MetaMCP extension fails to load in Cursor
+
+**Solutions**:
+
+1. **Check extension installation**:
+```bash
+# List installed extensions
+code --list-extensions | grep metamcp
+
+# Install if missing
+code --install-extension metamcp-extension
+```
+
+2. **Verify configuration**:
+```json
+// .vscode/settings.json
+{
+  "metamcp.endpoint": "https://your-domain.com",
+  "metamcp.apiKey": "your-api-key",
+  "metamcp.namespace": "your-namespace-uuid"
+}
+```
+
+3. **Check extension logs**:
+   - Open Cursor Developer Tools (Cmd+Shift+I / Ctrl+Shift+I)
+   - Go to Console tab
+   - Look for MetaMCP-related errors
+
+#### Tool Suggestions Not Working
+
+**Symptoms**: Code completion doesn't include MetaMCP tools
+
+**Solutions**:
+
+1. **Refresh tool cache**:
+   - Command Palette → "MetaMCP: Refresh Tools"
+   - Or restart Cursor
+
+2. **Check tool visibility**:
+```bash
+# Verify tools are accessible
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/namespaces/uuid/tools
+```
+
+3. **Update extension settings**:
+```json
+{
+  "metamcp.enableAutoCompletion": true,
+  "metamcp.suggestionDelay": 300,
+  "metamcp.maxSuggestions": 10
+}
+```
+
+### API Integration
+
+#### Rate Limiting Issues
+
+**Symptoms**: "Too Many Requests" (429) errors
+
+**Solutions**:
+
+1. **Check current rate limits**:
+```bash
+# Get rate limit info from headers
+curl -I -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/tools
+
+# Look for headers:
+# X-RateLimit-Limit: 1000
+# X-RateLimit-Remaining: 999
+# X-RateLimit-Reset: 1640995200
+```
+
+2. **Implement exponential backoff**:
+```python
+import time
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+def create_session_with_retries():
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+# Usage
+session = create_session_with_retries()
+response = session.get(
+    "https://your-domain.com/api/tools",
+    headers={"Authorization": "Bearer your-api-key"}
+)
+```
+
+3. **Request higher limits**:
+```bash
+# Contact support for higher limits
+curl -X POST https://your-domain.com/api/support/rate-limit-increase \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reason": "High-volume integration",
+    "current_limit": 1000,
+    "requested_limit": 10000
+  }'
+```
+
+#### Webhook Failures
+
+**Symptoms**: Webhooks not being delivered
+
+**Solutions**:
+
+1. **Check webhook endpoint**:
+```bash
+# Test if your endpoint is reachable
+curl -X POST https://your-webhook-endpoint.com/webhook \
+  -H "Content-Type: application/json" \
+  -d '{"test": true}'
+```
+
+2. **Verify webhook configuration**:
+```bash
+# List configured webhooks
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/webhooks
+
+# Test webhook delivery
+curl -X POST \
+  -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/webhooks/webhook-id/test
+```
+
+3. **Check webhook logs**:
+```bash
+# Get delivery attempts
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/webhooks/webhook-id/deliveries
+
+# Get specific delivery details
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-domain.com/api/webhooks/deliveries/delivery-id
+```
+
+## Network and Infrastructure
+
+### Proxy Configuration
+
+#### Corporate Proxy Issues
+
+**Symptoms**: Connections fail behind corporate firewall
+
+**Solutions**:
+
+1. **Configure proxy settings**:
+```bash
+# Environment variables
+export HTTP_PROXY=http://proxy.company.com:8080
+export HTTPS_PROXY=http://proxy.company.com:8080
+export NO_PROXY=localhost,127.0.0.1,.company.com
+
+# Test connectivity through proxy
+curl --proxy http://proxy.company.com:8080 \
+  https://your-domain.com/api/health
+```
+
+2. **Proxy authentication**:
+```bash
+# With credentials
+export HTTP_PROXY=http://username:password@proxy.company.com:8080
+
+# Or use .netrc file
+echo "machine proxy.company.com login username password" >> ~/.netrc
+chmod 600 ~/.netrc
+```
+
+3. **Certificate issues with proxy**:
+```bash
+# Use corporate certificate bundle
+export REQUESTS_CA_BUNDLE=/path/to/corporate-ca-bundle.crt
+export SSL_CERT_FILE=/path/to/corporate-ca-bundle.crt
+```
+
+### DNS Issues
+
+#### "Name Resolution Failed"
+
+**Symptoms**: Cannot resolve MetaMCP domain
+
+**Solutions**:
+
+1. **Check DNS resolution**:
+```bash
+# Test DNS lookup
+nslookup your-domain.com
+dig your-domain.com
+
+# Try different DNS servers
+nslookup your-domain.com 8.8.8.8
+dig @1.1.1.1 your-domain.com
+```
+
+2. **Use IP address temporarily**:
+```bash
+# Find IP address
+host your-domain.com
+
+# Use IP directly (not recommended for production)
+curl -H "Host: your-domain.com" https://192.168.1.100/api/health
+```
+
+3. **Update hosts file**:
+```bash
+# Add entry to hosts file
+echo "192.168.1.100 your-domain.com" | sudo tee -a /etc/hosts
+
+# Windows
+echo 192.168.1.100 your-domain.com >> C:\Windows\System32\drivers\etc\hosts
+```
+
+## Performance Issues
+
+### Slow Response Times
+
+**Symptoms**: API calls take longer than expected
+
+**Solutions**:
+
+1. **Check server health**:
+```bash
+# Get detailed health info
+curl https://your-domain.com/api/health/detailed
+
+# Check response time
+time curl https://your-domain.com/api/health
+```
+
+2. **Optimize queries**:
+```bash
+# Use pagination
+curl "https://your-domain.com/api/tools?limit=50&offset=0"
+
+# Filter results
+curl "https://your-domain.com/api/tools?name=filesystem*"
+
+# Request only needed fields
+curl "https://your-domain.com/api/tools?fields=name,description"
+```
+
+3. **Enable compression**:
+```bash
+# Request compressed responses
+curl -H "Accept-Encoding: gzip" \
+  https://your-domain.com/api/tools
+```
+
+### Memory Issues
+
+#### "Out of Memory" Errors
+
+**Symptoms**: Applications crash with memory errors
+
+**Solutions**:
+
+1. **Monitor memory usage**:
+```bash
+# Check system memory
+free -h
+top
+htop
+
+# Monitor specific process
+ps aux | grep metamcp
+```
+
+2. **Optimize client configuration**:
+```json
+{
+  "metamcp": {
+    "maxConcurrentRequests": 5,
+    "cacheSize": "100MB",
+    "requestTimeout": 30000
+  }
+}
+```
+
+3. **Use streaming for large responses**:
+```bash
+# Stream large datasets
+curl -N -H "Accept: application/x-ndjson" \
+  https://your-domain.com/api/logs/stream
+```
+
+## Debugging Tools
+
+### Enable Debug Logging
+
+```bash
+# Environment variables
+export DEBUG=metamcp:*
+export LOG_LEVEL=debug
+
+# Application-specific
+export METAMCP_DEBUG=true
+export METAMCP_LOG_LEVEL=trace
+```
+
+### Network Analysis
+
+```bash
+# Capture network traffic
+sudo tcpdump -i any -w metamcp.pcap host your-domain.com
+
+# Analyze with Wireshark
+wireshark metamcp.pcap
+
+# HTTP-specific analysis
+mitmproxy --mode reverse:https://your-domain.com
+```
+
+### Health Check Script
+
+Create a comprehensive health check:
+
+```bash
+#!/bin/bash
+# health-check.sh
+
+DOMAIN="your-domain.com"
+API_KEY="your-api-key"
+
+echo "=== MetaMCP Health Check ==="
+
+# Basic connectivity
+echo "1. Testing basic connectivity..."
+if curl -s -f "https://$DOMAIN/api/health" > /dev/null; then
+    echo "✓ Server is reachable"
+else
+    echo "✗ Server is not reachable"
+    exit 1
+fi
+
+# Authentication
+echo "2. Testing authentication..."
+if curl -s -f -H "Authorization: Bearer $API_KEY" \
+   "https://$DOMAIN/api/api-keys/permissions" > /dev/null; then
+    echo "✓ Authentication successful"
+else
+    echo "✗ Authentication failed"
+    exit 1
+fi
+
+# API endpoints
+echo "3. Testing API endpoints..."
+endpoints=("namespaces" "mcp-servers" "tools")
+for endpoint in "${endpoints[@]}"; do
+    if curl -s -f -H "Authorization: Bearer $API_KEY" \
+       "https://$DOMAIN/api/$endpoint" > /dev/null; then
+        echo "✓ $endpoint endpoint working"
+    else
+        echo "✗ $endpoint endpoint failed"
+    fi
+done
+
+echo "=== Health check complete ==="
+```
+
+### Log Analysis
+
+Common log patterns to look for:
+
+```bash
+# Error patterns
+grep -E "(ERROR|FATAL|Exception)" metamcp.log
+
+# Authentication issues
+grep -E "(401|403|Unauthorized|Forbidden)" metamcp.log
+
+# Performance issues
+grep -E "(timeout|slow|performance)" metamcp.log
+
+# Rate limiting
+grep -E "(429|rate.limit|throttle)" metamcp.log
+```
+
+## Getting Help
+
+### Information to Collect
+
+When reporting issues, include:
+
+1. **Environment details**:
+   - Operating system and version
+   - Client application and version
+   - MetaMCP server version
+   - Network configuration
+
+2. **Configuration**:
+   - Sanitized configuration files
+   - Environment variables (no secrets)
+   - API key permissions
+
+3. **Error details**:
+   - Complete error messages
+   - HTTP status codes
+   - Timestamps
+   - Steps to reproduce
+
+4. **Logs**:
+   - Client-side logs
+   - Server-side logs (if accessible)
+   - Network traces
+
+### Support Channels
+
+- **GitHub Issues**: https://github.com/metatool-ai/metamcp/issues
+- **Discord**: https://discord.gg/mNsyat7mFX
+- **Email**: support@metamcp.com
+- **Documentation**: https://docs.metamcp.com 

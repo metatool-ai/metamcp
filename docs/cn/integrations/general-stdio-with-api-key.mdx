@@ -1,0 +1,173 @@
+---
+title: "通用 Stdio 集成使用 `mcp-proxy` 和 API 密钥"
+description: "配置任何基于 stdio 的 MCP 客户端使用 mcp-proxy 连接到 MetaMCP 端点"
+---
+
+**通用 Stdio 集成**允许任何支持 stdio 服务器的 MCP 客户端连接到 MetaMCP 的远程端点。由于 MetaMCP 端点是纯远程的（SSE、可流式 HTTP），您需要一个本地代理来桥接连接。
+
+## 前置要求
+
+在开始之前，请确保您拥有：
+
+- **MCP 客户端**支持 stdio 服务器（Claude Desktop、Cursor 等）
+- **MetaMCP**本地运行或已部署
+- **活动端点**在 MetaMCP 中配置
+- **API 密钥**已生成（如果启用了身份验证）
+- **mcp-proxy**已安装（`uvx mcp-proxy`）
+
+## 基本配置
+
+### 使用 mcp-proxy（必需）
+
+由于 MetaMCP 端点是纯远程的，您需要 `mcp-proxy` 来在 stdio 和 HTTP/SSE 协议之间进行转换。
+
+<CodeGroup>
+```json 可流式 HTTP（推荐）
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json SSE（替代）
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/your-endpoint-name/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json 多个端点
+{
+  "mcpServers": {
+    "MetaMCP-Dev": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/dev-tools/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_dev_key"
+      }
+    },
+    "MetaMCP-Research": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/research-tools/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_research_key"
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## 身份验证方法
+
+<AccordionGroup>
+  <Accordion icon="key" title="API 密钥身份验证">
+    **最常见方法**使用环境变量：
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "--transport",
+            "streamablehttp",
+            "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+          ],
+          "env": {
+            "API_ACCESS_TOKEN": "sk_mt_your_key_here"
+          }
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="shield-minus" title="无身份验证">
+    **对于没有身份验证的公共端点**：
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "http://localhost:12008/metamcp/your-endpoint-name/sse"
+          ]
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## 故障排除
+
+### 常见问题
+
+1. **连接被拒绝**：确保 MetaMCP 正在运行且可访问
+2. **身份验证失败**：验证 API 密钥是否正确且具有适当权限
+3. **找不到 mcp-proxy**：使用 `pip install mcp-proxy` 或 `uvx mcp-proxy` 安装
+
+### 调试模式
+
+为 mcp-proxy 启用调试日志：
+
+```json
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "--debug",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+## 重要说明
+
+- **替换** `your-endpoint-name` 为您的实际端点名称
+- **替换** `sk_mt_your_api_key_here` 为您的 MetaMCP API 密钥
+- **mcp-proxy** 处理 stdio 和可流式 HTTP/SSE 之间的协议转换
+- **环境变量**是传递 API 密钥的安全方式 

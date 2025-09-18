@@ -1,0 +1,341 @@
+This guide walks you through deploying MetaMCP on a DigitalOcean VPS running Ubuntu from scratch, as an example.
+
+## Prerequisites
+
+- A DigitalOcean account
+- A domain name pointing to your VPS
+- Basic knowledge of Linux command line
+
+## System Requirements
+
+MetaMCP requires at least **2GB-4GB of memory** for optimal performance. The larger the instance, the better the performance due to MCP server pre-allocation and Docker operations.
+
+**Recommended DigitalOcean Droplet:**
+- **Basic/Regular**: 2GB RAM, 1 vCPU, 50GB SSD ($12/month)
+- **Better Performance**: 4GB RAM, 2 vCPU, 80GB SSD ($24/month)
+
+## Step 1: Create and Configure Your VPS
+
+### 1.1 Create a Droplet
+
+1. Log into your DigitalOcean account
+2. Click "Create" → "Droplets"
+3. Choose **Ubuntu 22.04 LTS** as the OS
+4. Select a plan with at least 2GB RAM
+5. Choose a datacenter region close to your users
+6. Add your SSH key for secure access
+7. Create the droplet
+
+### 1.2 Initial Server Setup
+
+Connect to your server via SSH:
+
+```bash
+ssh root@your_server_ip
+```
+
+Update the system:
+
+```bash
+apt update && apt upgrade -y
+```
+
+Install essential packages:
+
+```bash
+apt install -y curl wget git ufw nginx certbot python3-certbot-nginx
+```
+
+Configure firewall:
+
+```bash
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw enable
+```
+
+Create a non-root user (optional but recommended):
+
+```bash
+adduser metamcp
+usermod -aG sudo metamcp
+# Switch to the new user
+su - metamcp
+```
+
+## Step 2: Install Docker and Docker Compose
+
+### 2.1 Install Docker
+
+First, update your package index and install prerequisites:
+
+```bash
+sudo apt update
+sudo apt install -y apt-transport-https ca-certificates curl gnupg lsb-release
+```
+
+Add Docker's official GPG key and repository:
+
+```bash
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+```
+
+Install Docker CE:
+
+```bash
+sudo apt update
+sudo apt install -y docker-ce
+```
+
+Verify Docker is running:
+
+```bash
+sudo systemctl status docker
+```
+
+### 2.2 Install Docker Compose
+
+Download and install Docker Compose:
+
+```bash
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+```
+
+### 2.3 Configure Docker User (Optional)
+
+To run Docker commands without `sudo`:
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+Log out and back in for group changes to take effect, or run:
+
+```bash
+newgrp docker
+```
+
+## Step 3: Deploy MetaMCP
+
+### 3.1 Clone the Repository
+
+```bash
+cd /opt
+sudo git clone https://github.com/metatool-ai/metamcp.git
+sudo chown -R $USER:$USER metamcp
+cd metamcp
+```
+
+### 3.2 Configure Environment
+
+```bash
+cp example.env .env
+```
+
+Edit the `.env` file with your domain and settings:
+
+```bash
+nano .env
+```
+
+**⚠️ IMPORTANT SECURITY NOTE**: Because this is a production environment, make sure you modify `POSTGRES_PASSWORD` and `BETTER_AUTH_SECRET` from their default values. Also ensure you use HTTPS. A typical way to generate secure secrets is:
+
+```bash
+openssl rand -hex 32 | base64
+```
+
+Key configurations to update:
+
+```env
+# Your domain URL (MUST use HTTPS for production)
+APP_URL=https://yourdomain.com
+
+# Database - CHANGE THE PASSWORD from default!
+DATABASE_URL=postgresql://postgres:YOUR_SECURE_PASSWORD@db:5432/metamcp
+POSTGRES_PASSWORD=YOUR_SECURE_PASSWORD
+
+# Generate secure secrets - DO NOT use the example values!
+BETTER_AUTH_SECRET=your-super-secret-key-here
+ENCRYPTION_KEY=your-32-character-encryption-key
+
+# Optional: Configure OIDC if needed
+# OIDC_CLIENT_ID=your-oidc-client-id
+# OIDC_CLIENT_SECRET=your-oidc-client-secret
+# OIDC_DISCOVERY_URL=https://your-provider.com/.well-known/openid-configuration
+```
+
+### 3.3 Update Docker Compose for Production
+
+Edit `docker-compose.yml` to ensure proper volume naming:
+
+```bash
+nano docker-compose.yml
+```
+
+Update the volumes section to avoid conflicts:
+
+```yaml
+volumes:
+  metamcp_postgres_data:
+    driver: local
+```
+
+### 3.4 Start MetaMCP
+
+```bash
+# Pull images and start services
+docker-compose up -d
+
+# Check if services are running
+docker-compose ps
+
+# View logs if needed
+docker-compose logs -f
+```
+
+## Step 4: Configure Nginx Reverse Proxy
+
+### 4.1 Create Nginx Configuration
+
+Create a new site configuration:
+
+```bash
+sudo nano /etc/nginx/sites-available/metamcp
+```
+
+Add the following configuration (replace `yourdomain.com` with your actual domain):
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name yourdomain.com;
+
+    # SSL configuration (will be managed by Certbot)
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+
+    location / {
+        proxy_pass http://localhost:12008;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # SSE-specific optimizations for MCP connections
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400s;  # 24 hours for long-lived SSE connections
+        proxy_send_timeout 86400s;
+        
+        # HTTP/1.1 with proper connection handling for SSE
+        proxy_set_header Connection '';
+        proxy_http_version 1.1;
+        
+        # Additional headers for better SSE support
+        proxy_set_header Cache-Control 'no-cache';
+        proxy_set_header X-Accel-Buffering 'no';
+    }
+
+    # Optional: Increase client max body size for file uploads
+    client_max_body_size 100M;
+}
+```
+
+### 4.2 Enable the Site
+
+```bash
+# Enable the site
+sudo ln -s /etc/nginx/sites-available/metamcp /etc/nginx/sites-enabled/
+
+# Remove default site
+sudo rm /etc/nginx/sites-enabled/default
+
+# Test nginx configuration
+sudo nginx -t
+
+# Start nginx
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+## Step 5: SSL Certificate with Let's Encrypt
+
+### 5.1 Obtain SSL Certificate
+
+First, temporarily use HTTP only configuration for initial certificate:
+
+```bash
+# Create temporary HTTP-only config
+sudo nano /etc/nginx/sites-available/metamcp-temp
+```
+
+Add this temporary configuration:
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:12008;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Enable temporary config:
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/metamcp-temp /etc/nginx/sites-enabled/metamcp
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Obtain the certificate:
+
+```bash
+sudo certbot --nginx -d yourdomain.com
+```
+
+### 5.2 Restore Full Configuration
+
+After obtaining the certificate, restore the full configuration:
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/metamcp /etc/nginx/sites-enabled/metamcp
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 5.3 Set Up Auto-Renewal
+
+```bash
+# Test auto-renewal
+sudo certbot renew --dry-run
+
+# Add to crontab for automatic renewal
+sudo crontab -e
+```
+
+Add this line to check for renewal twice daily:
+
+```
+0 12 * * * /usr/bin/certbot renew --quiet
+```

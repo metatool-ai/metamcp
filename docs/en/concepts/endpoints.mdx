@@ -1,0 +1,63 @@
+---
+title: "Endpoints"
+description: "Create public endpoints that expose namespaces as accessible MCP servers"
+---
+
+A **MetaMCP Endpoint** is a public interface that exposes a namespace as an accessible MCP server. Endpoints handle authentication and provide URLs that MCP clients can connect to.
+
+## What are Endpoints?
+
+Endpoints serve as the bridge between your internal namespaces and external MCP clients:
+
+- **Expose namespaces** as public MCP servers
+- **Handle authentication** via API keys
+- **Support multiple transports** (SSE, Streamable HTTP, OpenAPI)
+
+<Card title="Example Endpoint URLs" icon="link">
+```
+https://your-metamcp.com/metamcp/my-endpoint/sse
+https://your-metamcp.com/metamcp/my-endpoint/mcp
+https://your-metamcp.com/metamcp/my-endpoint/api
+https://your-metamcp.com/metamcp/my-endpoint/api/openapi.json
+```
+</Card>
+
+## Endpoint Management
+
+### Available Actions
+
+From the endpoints dashboard, you can:
+
+- **Edit** endpoint settings
+- **Copy URLs** for different transport types
+- **View** the associated namespace
+- **Delete** endpoints
+
+### URL Formats
+
+Each endpoint provides multiple URL formats:
+
+- **SSE**: `/metamcp/{name}/sse`
+- **Streamable HTTP**: `/metamcp/{name}/mcp`
+- **OpenAPI**: `/metamcp/{name}/api`
+- **OpenAPI Schema**: `/metamcp/{name}/api/openapi.json`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Keys" icon="key" href="/en/api-keys">
+    Generate API keys for secure endpoint access
+  </Card>
+  
+  <Card title="Namespaces" icon="package" href="/en/namespaces">
+    Learn about organizing MCP servers into namespaces
+  </Card>
+  
+  <Card title="Integration Guides" icon="plug" href="/en/integrations/cursor">
+    Connect your endpoints to MCP clients
+  </Card>
+  
+  <Card title="MCP Servers" icon="server" href="/en/mcp-servers">
+    Manage the MCP servers within your namespaces
+  </Card>
+</CardGroup> 

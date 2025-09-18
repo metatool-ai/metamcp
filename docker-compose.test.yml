@@ -1,7 +1,9 @@
 services:
   app:
     container_name: metamcp
-    image: ghcr.io/metatool-ai/metamcp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     pull_policy: always
     env_file:
       - .env

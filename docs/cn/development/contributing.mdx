@@ -1,0 +1,413 @@
+---
+title: "参与 MetaMCP 贡献"
+description: "了解如何参与 MetaMCP 的开发并帮助改进项目"
+---
+
+我们欢迎对 MetaMCP 的贡献！这份综合指南将帮助您开始为项目做出贡献，无论是修复错误、添加功能还是改进文档。
+
+## 开始使用
+
+### 前置要求
+
+在贡献之前，请确保您具备：
+
+- **Node.js 18+** 和 **pnpm** 已安装
+- **Docker** 用于运行 PostgreSQL 和测试
+- **Git** 用于版本控制
+- 对 TypeScript、React 和 MCP 协议的**基本了解**
+
+### 开发环境设置
+
+<AccordionGroup>
+  <Accordion icon="github" title="Fork 和克隆">
+    1. 在 GitHub 上**Fork 仓库**
+    2. **克隆您的 fork**到本地：
+       ```bash
+       git clone https://github.com/YOUR_USERNAME/metamcp.git
+       cd metamcp
+       ```
+    3. **添加上游远程仓库**：
+       ```bash
+       git remote add upstream https://github.com/metatool-ai/metamcp.git
+       ```
+  </Accordion>
+
+  <Accordion icon="package" title="安装依赖">
+    使用 pnpm 安装项目依赖：
+    
+    ```bash
+    pnpm install
+    ```
+    
+    这将安装 monorepo 中所有工作区的依赖。
+  </Accordion>
+
+  <Accordion icon="cog" title="环境设置">
+    设置您的开发环境：
+    
+    ```bash
+    cp example.env .env
+    ```
+    
+    根据需要修改 `.env` 文件以适配您的开发设置。
+  </Accordion>
+
+  <Accordion icon="database" title="数据库设置">
+    使用 Docker 启动 PostgreSQL：
+    
+    ```bash
+    docker compose up -d postgres
+    # 或启动完整堆栈
+    docker compose up -d
+    ```
+
+    首次迁移（先编辑 `.env.local`）
+    ```bash
+    cd apps/backend
+
+    pnpm db:migrate:dev
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## 开发工作流程
+
+### 创建功能分支（命名不是必需的）
+
+<CodeGroup>
+
+```bash 功能分支
+git checkout -b feature/your-feature-name
+```
+
+```bash 错误修复分支  
+git checkout -b fix/issue-description
+```
+
+```bash 文档分支
+git checkout -b docs/documentation-update
+```
+
+</CodeGroup>
+
+### 进行更改
+
+在进行更改时请遵循以下指南：
+
+<Card title="代码质量标准" icon="code">
+- **遵循 TypeScript 最佳实践**
+- **使用 ESLint 和 Prettier** 保持一致的格式
+- **编写描述性的提交信息**
+- **为复杂函数添加 JSDoc 注释**
+- **确保整个代码库的类型安全**
+- **手动测试您的更改**
+</Card>
+
+### 测试您的更改
+
+<AccordionGroup>
+  <Accordion icon="flask-conical" title="本地测试">
+    运行开发服务器并测试您的更改：
+    
+    ```bash
+    pnpm dev
+    ```
+    
+    这将以开发模式启动前端和后端。
+  </Accordion>
+
+  <Accordion icon="check" title="代码检查和格式化">
+    确保代码质量：
+    
+    ```bash
+    # 运行代码检查
+    pnpm lint
+    
+    # 修复代码检查问题
+    pnpm lint:fix
+    ```
+  </Accordion>
+
+  <Accordion icon="docker" title="Docker 测试">
+    使用 Docker 测试以确保生产环境兼容性：
+    
+    ```bash
+    docker compose build
+    docker compose up
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## 贡献类型
+
+### 错误修复
+
+<AccordionGroup>
+  <Accordion icon="bug" title="报告错误">
+    **在报告错误之前：**
+    
+    1. 检查现有问题以避免重复
+    2. 尝试一致地重现问题
+    3. 收集相关信息（操作系统、浏览器、MetaMCP 版本）
+    4. 包含重现问题的步骤
+    
+    **错误报告模板：**
+    ```markdown
+    ## 错误描述
+    问题的简要描述
+    
+    ## 重现步骤
+    1. 第一步
+    2. 第二步
+    3. 预期行为与实际行为
+    
+    ## 环境
+    - 操作系统：[例如，macOS 14.0]
+    - 浏览器：[例如，Chrome 120]
+    - MetaMCP 版本：[例如，1.0.0]
+    
+    ## 其他上下文
+    截图、日志或其他相关信息
+    ```
+  </Accordion>
+
+  <Accordion icon="wrench" title="修复错误">
+    **修复错误时：**
+    
+    1. 创建分支：`fix/issue-number-description`
+    2. 实现修复
+    3. 手动测试以确保修复有效
+    4. 如有必要，更新文档
+  </Accordion>
+</AccordionGroup>
+
+### 功能开发
+
+<AccordionGroup>
+  <Accordion icon="lightbulb" title="提出功能">
+    **在实现新功能之前：**
+    
+    1. **开启一个 issue** 来讨论该功能
+    2. **提供用例**和理由
+    3. **考虑对现有功能的影响**
+    4. **从维护者那里获得反馈**
+    5. **规划实现**方法
+  </Accordion>
+
+  <Accordion icon="code" title="实现功能">
+    **功能开发过程：**
+    
+    1. **从 main 创建功能分支**
+    2. **逐步实现**并定期提交
+    3. **更新文档**
+    4. **使用真实的 MCP 服务器测试**
+    5. **考虑 UI 更改的 i18n 影响**
+  </Accordion>
+</AccordionGroup>
+
+### 文档
+
+<AccordionGroup>
+  <Accordion icon="book" title="文档指南">
+    **更新文档时：**
+    
+    - 使用清晰、简洁的语言
+    - 在有用时包含代码示例
+    - 为 UI 更改添加截图
+    - 更新 README 和文档网站
+    - 测试所有代码示例
+    - 考虑多个受众（初学者、高级用户）
+  </Accordion>
+
+  <Accordion icon="book-type" title="翻译贡献">
+    **添加新语言支持：**
+    
+    1. 创建新的语言目录：`public/locales/[locale]/`
+    2. 复制英语文件作为模板
+    3. 翻译内容并保持键结构
+    4. 更新 i18n 配置
+    5. 彻底测试新语言
+    6. 提交包含翻译文件的 PR
+  </Accordion>
+</AccordionGroup>
+
+## Pull Request 流程
+
+### 提交之前
+
+<Card title="提交前检查清单" icon="checklist">
+- ✅ **代码遵循项目标准**
+- ✅ **尽可能修复代码检查问题（在快速开发时相对宽容）** (`pnpm lint`)
+- ✅ **没有 TypeScript 错误**
+- ✅ **如需要，文档已更新**
+- ✅ **手动测试了更改**
+- ✅ **如需要，包含数据库迁移**
+- ✅ **提交中没有敏感信息**
+</Card>
+
+## 专业贡献
+
+### OIDC 提供商设置
+
+MetaMCP 支持 OpenID Connect 用于企业 SSO。在处理 OIDC 功能时：
+
+<AccordionGroup>
+  <Accordion icon="shield" title="OIDC 配置">
+    **必需的环境变量：**
+    
+    ```bash
+    # 必需
+    OIDC_CLIENT_ID=your-oidc-client-id
+    OIDC_CLIENT_SECRET=your-oidc-client-secret
+    OIDC_DISCOVERY_URL=https://your-provider.com/.well-known/openid-configuration
+    OIDC_AUTHORIZATION_URL=https://your-provider.com/auth/authorize
+    
+    # 可选
+    OIDC_PROVIDER_ID=oidc
+    OIDC_SCOPES=openid email profile
+    OIDC_PKCE=true
+    ```
+  </Accordion>
+
+  <Accordion icon="flask-conical" title="测试 OIDC">
+    **OIDC 开发：**
+    
+    1. 使用测试提供商（Auth0、Keycloak）
+    2. 配置重定向 URI：`${APP_URL}/api/auth/oauth2/callback/oidc`
+    3. 测试身份验证流程
+    4. 验证数据库中的用户创建
+    5. 启用调试日志进行故障排除
+  </Accordion>
+</AccordionGroup>
+
+### 数据库更改
+
+在进行数据库架构更改时：
+
+<AccordionGroup>
+  <Accordion icon="database" title="架构迁移">
+    **创建迁移：**
+    
+    ```bash
+    # 架构更改后生成迁移
+    cd apps/backend
+    pnpm db:generate
+    
+    # 应用迁移
+    pnpm db:migrate:dev # 使用 env.local 中的 PG 相关环境变量
+    
+    # 重置数据库（仅开发环境）
+    pnpm db:reset
+    ```
+  </Accordion>
+
+  <Accordion icon="table" title="添加新表">
+    **数据库开发工作流程：**
+    
+    1. 在 `apps/backend/src/db/schema.ts` 中更新架构
+    2. 在 `apps/backend/src/db/repositories/` 中创建存储库
+    3. 在 `apps/backend/src/db/serializers/` 中创建序列化器
+    4. 在 `apps/backend/src/trpc/` 中添加 tRPC 过程
+    5. 在 `packages/zod-types/` 中更新前端类型
+    6. 生成并应用迁移
+  </Accordion>
+</AccordionGroup>
+
+### 前端开发
+
+<AccordionGroup>
+  <Accordion icon="component" title="UI 组件">
+    **使用 shadcn/ui 组件：**
+    
+    ```bash
+    # 添加新组件
+    cd apps/frontend
+    npx shadcn-ui@latest add [component-name]
+    ```
+    
+    **组件指南：**
+    - 遵循现有设计模式
+    - 确保无障碍合规性
+    - 添加适当的 TypeScript 类型
+    - 包含加载和错误状态
+  </Accordion>
+
+  <Accordion icon="globe" title="国际化">
+    **对于 UI 更改：**
+    
+    1. 首先添加英语翻译
+    2. 更新其他语言或标记为待翻译
+    3. 使用 `useTranslations()` 钩子
+    4. 使用不同语言测试
+    5. 确保文本扩展不会破坏布局
+  </Accordion>
+</AccordionGroup>
+
+## 社区准则
+
+### 行为准则
+
+我们致力于提供一个欢迎和包容的环境：
+
+<Card title="社区标准" icon="heart">
+- **在所有互动中保持尊重和包容**
+- **提供建设性反馈**并乐于接受反馈
+- **专注于协作**并帮助彼此成功
+- **尊重不同的观点**和经验水平
+- **遵循项目指南**并保持代码质量
+</Card>
+
+### 沟通
+
+<AccordionGroup>
+  <Accordion icon="discord" title="Discord 社区">
+    加入我们的 Discord 服务器：
+    
+    - 开发讨论
+    - 获得贡献帮助
+    - 分享想法和反馈
+    - 社区公告
+    
+    [加入 MetaMCP Discord](https://discord.gg/mNsyat7mFX)
+  </Accordion>
+
+  <Accordion icon="github" title="GitHub 讨论">
+    使用 GitHub Issues 和 Discussions 进行：
+    
+    - 错误报告和功能请求
+    - 技术讨论
+    - 文档反馈
+    - 项目路线图讨论
+  </Accordion>
+</AccordionGroup>
+
+## 获得帮助
+
+### 资源
+
+<CardGroup cols={2}>
+  <Card title="Discord 社区" icon="discord" href="https://discord.gg/mNsyat7mFX">
+    从社区获得帮助
+  </Card>
+  
+  <Card title="GitHub Issues" icon="github" href="https://github.com/metatool-ai/metamcp/issues">
+    浏览现有问题和讨论
+  </Card>
+</CardGroup>
+
+## 认可
+
+我们感谢对 MetaMCP 的所有贡献！贡献者通过以下方式获得认可：
+
+- 仓库上的**GitHub 贡献者列表**
+- **发布说明**中提及重要贡献
+
+感谢您帮助让 MetaMCP 对每个人都更好！🚀
+
+## 下一步
+
+<CardGroup cols={1}>
+  <Card title="开始贡献" icon="rocket" href="https://github.com/metatool-ai/metamcp/issues">
+    浏览开放问题并开始贡献
+  </Card>
+</CardGroup> 
