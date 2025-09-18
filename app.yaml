@@ -1,0 +1,25 @@
+runtime: nodejs20
+command:
+  - node
+  - scripts/databricks-start.mjs
+env:
+  - name: NODE_ENV
+    value: production
+  - name: NPM_CONFIG_PRODUCTION
+    value: "false"
+  - name: FRONTEND_PORT
+    value: "12008"
+  - name: BACKEND_PORT
+    value: "12009"
+  - name: APP_URL
+    value: http://127.0.0.1:12008
+  - name: NEXT_PUBLIC_APP_URL
+    value: http://127.0.0.1:12008
+  - name: DATABASE_URL
+    value: postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
+  - name: BETTER_AUTH_SECRET
+    value: change-me-before-production
+expose:
+  type: public
+  port: 12008
+  url_path: /

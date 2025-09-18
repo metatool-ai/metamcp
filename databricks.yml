@@ -1,0 +1,16 @@
+bundle:
+  name: metamcp-databricks
+
+resources:
+  apps:
+    metamcp_app:
+      name: metamcp-app
+      description: "MetaMCP Databricks App proof of concept"
+      source_code_path: .
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      profile: DEFAULT

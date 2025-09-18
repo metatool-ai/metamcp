@@ -2,7 +2,8 @@
   "name": "metamcp",
   "private": true,
   "scripts": {
-    "build": "turbo run build",
+    "build": "node scripts/databricks-build.mjs",
+    "build:turbo": "turbo run build",
     "dev": "dotenv -e .env.local turbo run dev",
     "dev:docker": "docker compose -f docker-compose.dev.yml up --build",
     "dev:docker:down": "docker compose -f docker-compose.dev.yml down",
@@ -14,6 +15,7 @@
   },
   "devDependencies": {
     "dotenv-cli": "^8.0.0",
+    "pnpm": "^9.15.9",
     "prettier": "^3.5.3",
     "turbo": "^2.5.5",
     "typescript": "5.8.2"

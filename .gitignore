@@ -20,6 +20,8 @@ coverage
 
 # Vercel
 .vercel
+.databricks/
+scripts/pnpm-linuxstatic
 
 # Build Outputs
 .next/
