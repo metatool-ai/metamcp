@@ -184,6 +184,8 @@ We maintain a Databricks bundle (`databricks.yml`) that provisions a Lakebase in
 
 The runtime scripts automatically derive `APP_URL`/`NEXT_PUBLIC_APP_URL` from the Databricks app host and copy Next.js static assets into the standalone server so the UI loads directly from the app domain.
 
+> **uvx support**: Databricks Apps ship with Python 3.11 but not the `uvx` CLI. MetaMCP now vendors `uv==0.8.19` via `requirements.txt`, and the Databricks startup script will install it with `pip` (falling back to Astral's installer if `pip` is unavailable). MCP servers that depend on `uvx` therefore work out of the box—no manual PATH updates or custom layers required.
+
 ## 🔌 MCP Protocol Compatibility
 
 - ✅ **Tools, Resources, and Prompts** supported

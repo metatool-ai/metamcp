@@ -11,6 +11,7 @@ const repoRoot = path.join(
 );
 const PNPM_VERSION = "9.15.9";
 const PNPM_LINUX_URL = `https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linuxstatic-x64`;
+const UV_VERSION = "0.8.19";
 const FRONTEND_STANDALONE_CANDIDATES = [
   ".next/standalone/apps/frontend/server.js",
   ".next/standalone/server.js",
@@ -122,6 +123,87 @@ function ensureEnv() {
     console.log("[MetaMCP][Databricks] Derived DATABASE_URL for host", host);
   } else {
     console.log("[MetaMCP][Databricks] PGHOST not provided; using existing DATABASE_URL");
+  }
+}
+
+function ensureUvCli() {
+  const existing = spawnSync("uvx", ["--version"], {
+    cwd: repoRoot,
+    stdio: "ignore",
+  });
+
+  if (existing.status === 0) {
+    console.log("[MetaMCP][Databricks] uvx already available");
+    return;
+  }
+
+  console.log(`[MetaMCP][Databricks] Installing uv CLI via pip (uv==${UV_VERSION})`);
+
+  const pipInstalled = installUvWithPip();
+
+  if (!pipInstalled) {
+    console.log(
+      "[MetaMCP][Databricks] Pip installation failed; falling back to uv installer script",
+    );
+    installUvWithScript();
+  }
+
+  const verify = spawnSync("uvx", ["--version"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+
+  if (verify.status !== 0) {
+    throw new Error("uvx not available after pip installation");
+  }
+}
+
+function installUvWithPip() {
+  const install = spawnSync(
+    "python3",
+    ["-m", "pip", "install", "--no-cache-dir", `uv==${UV_VERSION}`],
+    {
+      cwd: repoRoot,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        PIP_DISABLE_PIP_VERSION_CHECK: "1",
+      },
+    },
+  );
+
+  return install.status === 0;
+}
+
+function installUvWithScript() {
+  const installDir = "/tmp/metamcp-uv";
+  const script = spawnSync(
+    "bash",
+    [
+      "-lc",
+      "curl -LsSf https://astral.sh/uv/install.sh | sh",
+    ],
+    {
+      cwd: repoRoot,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        UV_INSTALL_DIR: installDir,
+      },
+    },
+  );
+
+  if (script.status !== 0) {
+    throw new Error("Failed to install uv via installer script");
+  }
+
+  if (process.env.PATH && !process.env.PATH.includes(installDir)) {
+    process.env.PATH = `${installDir}:${process.env.PATH}`;
+  }
+
+  const bindir = `${installDir}/bin`;
+  if (process.env.PATH && !process.env.PATH.includes(bindir)) {
+    process.env.PATH = `${bindir}:${process.env.PATH}`;
   }
 }
 
@@ -248,6 +330,7 @@ function runDatabaseMigrations(pnpmCommand, pnpmArgs) {
 async function main() {
   await ensureDatabaseCredential();
   ensureEnv();
+  ensureUvCli();
 
   const { command: pnpmCommand, args: pnpmArgs } = getPnpmCommand();
 

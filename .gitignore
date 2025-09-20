@@ -23,6 +23,9 @@ coverage
 .vercel
 .databricks/
 scripts/pnpm-linuxstatic
+.uv-bin/
+.uv-venv/
+.uv-*/
 
 # Build Outputs
 .next/
