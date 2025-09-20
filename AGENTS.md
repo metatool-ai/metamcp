@@ -24,13 +24,13 @@ Never commit populated `.env` files; rely on `example.env` for safe defaults and
 
 ## Databricks App Workflow
 - Authenticate the CLI once with `databricks auth login --host <workspace-url>`.
-- Copy `.env.template` to `.env`, then populate `DBX_HOST`, `DBX_USER`, and any overrides (`TARGET`, `APP_NAME`). The Makefile auto-loads variables from `.env`.
-- (Optional) export overrides in your shell if you don't want them persisted in `.env`.
+- Copy `.env.template` to `.env`, set `DATABRICKS_CONFIG_PROFILE` (defaults to `DEFAULT`), and adjust `TARGET` / `APP_NAME` if needed. The Makefile auto-loads variables from `.env`.
+- (Optional) export overrides in your shell for one-off runs (`DATABRICKS_CONFIG_PROFILE=staging make app-status`).
 - Build and deploy:
   - `make build`: runs the Databricks build script and prepares the standalone Next.js assets.
   - `make bundle-deploy`: `databricks bundle deploy --target dev` to provision the Lakebase instance/catalog and register the app.
   - `make app-deploy`: snapshot deploy the code to the app with `databricks apps deploy`.
-- Quick status checks live in the CLI: `make app-status` (or `databricks apps list`) and, if needed, `curl -H "Authorization: Bearer $(databricks auth token --output json | jq -r .access_token)" https://<app-host>/logz/stream` for live logs.
+- Quick status checks live in the CLI: `make app-status` (or `databricks apps list`) and `make app-logs` for recent deployment output.
 
 ## Runtime Notes
 - `scripts/databricks-start.mjs` now derives `APP_URL`/`NEXT_PUBLIC_APP_URL` from `DATABRICKS_APP_URL` and copies `apps/frontend/.next/static` plus `public/` into the standalone directory before booting the Next.js server, preventing 404s for bundled assets.
@@ -41,7 +41,7 @@ Never commit populated `.env` files; rely on `example.env` for safe defaults and
 - `make install` — run `npm install` (writes `package-lock.json` for the Databricks build pipeline).
 - `make build` — full pnpm build used by both local and remote deployments.
 - `make bundle-deploy` — apply Terraform resources in `databricks.yml` to the `TARGET` environment (default `dev`).
-- `make app-deploy` — push the latest workspace snapshot to `APP_NAME` (default `metamcp-app`). Requires `DBX_USER`.
+- `make app-deploy` — resolves the workspace file path via `databricks bundle summary` and pushes a snapshot deployment.
 - `make app-status` — dump `databricks apps get` JSON for the active deployment.
-- `make app-logs` — stream recent deployment information and logs (requires `DBX_USER` and CLI auth).
-- `make app-health` — call the `/api/health` endpoint through the Databricks app URL using a fresh workspace token.
+- `make app-logs` — stream recent deployment information and logs using the configured profile.
+- `make app-health` — call the `/api/health` endpoint and print the HTTP status (useful for verifying app availability).
