@@ -42,3 +42,5 @@ Never commit populated `.env` files; rely on `example.env` for safe defaults and
 - `make bundle-deploy` — apply Terraform resources in `databricks.yml` to the `TARGET` environment (default `dev`).
 - `make app-deploy` — push the latest workspace snapshot to `APP_NAME` (default `metamcp-app`). Requires `DBX_USER`.
 - `make app-status` — dump `databricks apps get` JSON for the active deployment.
+- `make app-logs` — stream recent deployment information and logs (requires `DBX_USER` and CLI auth).
+- `make app-health` — call the `/api/health` endpoint through the Databricks app URL using a fresh workspace token.
