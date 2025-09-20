@@ -1,2 +1,0 @@
-ALTER TABLE "mcp_servers" ADD COLUMN "error_status" "mcp_server_error_status" DEFAULT 'NONE' NOT NULL;--> statement-breakpoint
-CREATE INDEX "mcp_servers_error_status_idx" ON "mcp_servers" USING btree ("error_status");

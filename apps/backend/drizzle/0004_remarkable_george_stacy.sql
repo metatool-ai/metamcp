@@ -1,1 +1,0 @@
-ALTER TABLE "endpoints" ADD COLUMN "enable_oauth" boolean DEFAULT false NOT NULL;
