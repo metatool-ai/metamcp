@@ -19,7 +19,7 @@ resources:
     metamcp_app:
       name: metamcp-app
       description: "MetaMCP Databricks App proof of concept"
-      source_code_path: .
+      source_code_path: build/metamcp
       resources:
         - name: lakebase
           database:
