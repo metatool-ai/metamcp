@@ -167,13 +167,20 @@ pnpm dev
 We maintain a Databricks bundle (`databricks.yml`) that provisions a Lakebase instance, Unity Catalog database, and the MetaMCP app. The provided `Makefile` wraps the day-to-day CLI workflow:
 
 1. Authenticate once: `databricks auth login --host <workspace-url>`.
-2. Export your workspace login so Make targets can build the source-code path:
+2. Copy `.env.template` to `.env` and fill in `DBX_HOST`, `DBX_USER`, and any overrides (for example `APP_NAME`/`TARGET`). The Makefile reads this automatically.
+
+   ```bash
+   cp .env.template .env
+   # edit .env to match your workspace
+   ```
+
+3. Export your workspace login so Make targets can build the source-code path (optional if already in `.env`):
 
    ```bash
    export DBX_USER="your.user@databricks.com"
    ```
 
-3. Deploy:
+4. Deploy:
 
    ```bash
    make build

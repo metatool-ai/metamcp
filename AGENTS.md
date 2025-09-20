@@ -24,7 +24,8 @@ Never commit populated `.env` files; rely on `example.env` for safe defaults and
 
 ## Databricks App Workflow
 - Authenticate the CLI once with `databricks auth login --host <workspace-url>`.
-- Export `DBX_USER` to match your Databricks login (for example, `export DBX_USER="user@example.com"`). The Makefile uses it to build the bundle workspace path.
+- Copy `.env.template` to `.env`, then populate `DBX_HOST`, `DBX_USER`, and any overrides (`TARGET`, `APP_NAME`). The Makefile auto-loads variables from `.env`.
+- (Optional) export overrides in your shell if you don't want them persisted in `.env`.
 - Build and deploy:
   - `make build`: runs the Databricks build script and prepares the standalone Next.js assets.
   - `make bundle-deploy`: `databricks bundle deploy --target dev` to provision the Lakebase instance/catalog and register the app.
