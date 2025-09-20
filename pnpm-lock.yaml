@@ -30,10 +30,10 @@ importers:
         specifier: ^1.16.0
         version: 1.16.0
       '@repo/trpc':
-        specifier: workspace:*
+        specifier: file:../../packages/trpc
         version: link:../../packages/trpc
       '@repo/zod-types':
-        specifier: workspace:*
+        specifier: file:../../packages/zod-types
         version: link:../../packages/zod-types
       '@trpc/server':
         specifier: ^11.4.1
@@ -82,7 +82,7 @@ importers:
         version: 3.25.64
     devDependencies:
       '@repo/eslint-config':
-        specifier: workspace:*
+        specifier: file:../../packages/eslint-config
         version: link:../../packages/eslint-config
       '@types/basic-auth':
         specifier: ^1.1.8
@@ -169,10 +169,10 @@ importers:
         specifier: ^1.2.7
         version: 1.2.7(@types/react-dom@19.1.1(@types/react@19.1.0))(@types/react@19.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@repo/trpc':
-        specifier: workspace:*
+        specifier: file:../../packages/trpc
         version: link:../../packages/trpc
       '@repo/zod-types':
-        specifier: workspace:*
+        specifier: file:../../packages/zod-types
         version: link:../../packages/zod-types
       '@tailwindcss/postcss':
         specifier: ^4.1.10
@@ -263,10 +263,10 @@ importers:
         version: 5.0.6(@types/react@19.1.0)(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0))
     devDependencies:
       '@repo/eslint-config':
-        specifier: workspace:*
+        specifier: file:../../packages/eslint-config
         version: link:../../packages/eslint-config
       '@repo/typescript-config':
-        specifier: workspace:*
+        specifier: file:../../packages/typescript-config
         version: link:../../packages/typescript-config
       '@types/node':
         specifier: ^22.15.3
@@ -338,7 +338,7 @@ importers:
   packages/trpc:
     dependencies:
       '@repo/zod-types':
-        specifier: workspace:*
+        specifier: file:../zod-types
         version: link:../zod-types
       '@trpc/server':
         specifier: ^11.4.1
@@ -348,10 +348,10 @@ importers:
         version: 3.25.64
     devDependencies:
       '@repo/eslint-config':
-        specifier: workspace:*
+        specifier: file:../eslint-config
         version: link:../eslint-config
       '@repo/typescript-config':
-        specifier: workspace:*
+        specifier: file:../typescript-config
         version: link:../typescript-config
       eslint:
         specifier: ^9.28.0
@@ -372,10 +372,10 @@ importers:
         version: 3.25.64
     devDependencies:
       '@repo/eslint-config':
-        specifier: workspace:*
+        specifier: file:../eslint-config
         version: link:../eslint-config
       '@repo/typescript-config':
-        specifier: workspace:*
+        specifier: file:../typescript-config
         version: link:../typescript-config
       eslint:
         specifier: ^9.28.0

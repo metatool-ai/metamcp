@@ -162,6 +162,27 @@ pnpm install
 pnpm dev
 ```
 
+### **☁️ Deploy MetaMCP as a Databricks App**
+
+We maintain a Databricks bundle (`databricks.yml`) that provisions a Lakebase instance, Unity Catalog database, and the MetaMCP app. The provided `Makefile` wraps the day-to-day CLI workflow:
+
+1. Authenticate once: `databricks auth login --host <workspace-url>`.
+2. Export your workspace login so Make targets can build the source-code path:
+
+   ```bash
+   export DBX_USER="your.user@databricks.com"
+   ```
+
+3. Deploy:
+
+   ```bash
+   make build
+   make bundle-deploy        # terraform apply (Lakebase + app wiring)
+   make app-deploy           # push latest bundle snapshot to the app
+   ```
+
+The runtime scripts automatically derive `APP_URL`/`NEXT_PUBLIC_APP_URL` from the Databricks app host and copy Next.js static assets into the standalone server so the UI loads directly from the app domain.
+
 ## 🔌 MCP Protocol Compatibility
 
 - ✅ **Tools, Resources, and Prompts** supported

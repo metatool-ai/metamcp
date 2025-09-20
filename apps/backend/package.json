@@ -20,8 +20,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.16.0",
-    "@repo/trpc": "workspace:*",
-    "@repo/zod-types": "workspace:*",
+    "@repo/trpc": "file:../../packages/trpc",
+    "@repo/zod-types": "file:../../packages/zod-types",
     "@trpc/server": "^11.4.1",
     "basic-auth": "^2.0.1",
     "better-auth": "^1.2.9",
@@ -39,7 +39,7 @@
     "zod": "^3.25.64"
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
+    "@repo/eslint-config": "file:../../packages/eslint-config",
     "@types/basic-auth": "^1.1.8",
     "@types/cors": "^2.8.19",
     "@types/cross-spawn": "^6.0.6",

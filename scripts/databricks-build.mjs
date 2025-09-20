@@ -56,6 +56,9 @@ function getPnpmCommand() {
 }
 
 function runPnpm(args) {
+  if (!process.env.PNPM_YES) {
+    process.env.PNPM_YES = "true";
+  }
   const { command, args: baseArgs } = getPnpmCommand();
   run(command, [...baseArgs, ...args]);
 }
@@ -71,9 +74,26 @@ function prepareWorkspace() {
   }
 }
 
+function hydrateAppUrlEnv() {
+  const databricksAppUrl = process.env.DATABRICKS_APP_URL;
+  if (!databricksAppUrl) {
+    return;
+  }
+
+  const resolved = databricksAppUrl.startsWith("http")
+    ? databricksAppUrl
+    : `https://${databricksAppUrl}`;
+
+  process.env.APP_URL = resolved;
+  process.env.NEXT_PUBLIC_APP_URL = resolved;
+}
+
 function main() {
+  hydrateAppUrlEnv();
   prepareWorkspace();
   runPnpm(["install", "--frozen-lockfile"]);
+  runPnpm(["--filter", "@repo/zod-types", "run", "build"]);
+  runPnpm(["--filter", "@repo/trpc", "run", "build"]);
   runPnpm(["run", "build:turbo"]);
 }
 

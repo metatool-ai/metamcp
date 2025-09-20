@@ -2,11 +2,30 @@ bundle:
   name: metamcp-databricks
 
 resources:
+  database_instances:
+    metamcp_lakebase:
+      name: ${bundle.target}-metamcp-lakebase-app
+      capacity: CU_1
+      enable_pg_native_login: true
+
+  database_catalogs:
+    metamcp_catalog:
+      name: ${bundle.target}_metamcp
+      database_instance_name: ${resources.database_instances.metamcp_lakebase.name}
+      database_name: ${bundle.target}_metamcp_app
+      create_database_if_not_exists: true
+
   apps:
     metamcp_app:
       name: metamcp-app
       description: "MetaMCP Databricks App proof of concept"
       source_code_path: .
+      resources:
+        - name: lakebase
+          database:
+            instance_name: ${resources.database_instances.metamcp_lakebase.name}
+            database_name: ${resources.database_catalogs.metamcp_catalog.database_name}
+            permission: CAN_CONNECT_AND_CREATE
 
 targets:
   dev:

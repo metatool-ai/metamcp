@@ -1,0 +1,39 @@
+#!/bin/sh
+set -e
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
+PNPM_BIN="${REPO_ROOT}/pnpm-linuxstatic"
+if [ ! -x "$PNPM_BIN" ] && [ "$(uname)" = "Linux" ]; then
+  curl -sSL "https://github.com/pnpm/pnpm/releases/download/v9.15.9/pnpm-linuxstatic-x64" -o "$PNPM_BIN"
+  chmod +x "$PNPM_BIN"
+fi
+if [ "$1" = "install" ] || [ "$1" = "ci" ]; then
+  shift
+  if [ -z "$PNPM_YES" ]; then
+    export PNPM_YES=true
+  fi
+  if [ -x "$PNPM_BIN" ]; then
+    exec "$PNPM_BIN" install "$@"
+  else
+    exec pnpm install "$@"
+  fi
+fi
+OLD_IFS=$IFS
+IFS=:
+PATH_ENTRIES=
+for entry in $PATH; do
+  if [ "$entry" != "$SCRIPT_DIR" ]; then
+    if [ -z "$PATH_ENTRIES" ]; then
+      PATH_ENTRIES="$entry"
+    else
+      PATH_ENTRIES="$PATH_ENTRIES:$entry"
+    fi
+  fi
+done
+IFS=$OLD_IFS
+REAL_NPM=$(PATH="$PATH_ENTRIES" command -v npm)
+if [ -z "$REAL_NPM" ]; then
+  echo "Real npm binary not found" >&2
+  exit 1
+fi
+exec "$REAL_NPM" "$@"

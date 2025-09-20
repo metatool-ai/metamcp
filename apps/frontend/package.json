@@ -26,8 +26,8 @@
     "@radix-ui/react-switch": "^1.2.5",
     "@radix-ui/react-tabs": "^1.1.12",
     "@radix-ui/react-tooltip": "^1.2.7",
-    "@repo/trpc": "workspace:*",
-    "@repo/zod-types": "workspace:*",
+    "@repo/trpc": "file:../../packages/trpc",
+    "@repo/zod-types": "file:../../packages/zod-types",
     "@tailwindcss/postcss": "^4.1.10",
     "@tanstack/react-query": "^5.80.7",
     "@tanstack/react-query-devtools": "^5.80.7",
@@ -59,8 +59,8 @@
     "zustand": "^5.0.6"
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
+    "@repo/eslint-config": "file:../../packages/eslint-config",
+    "@repo/typescript-config": "file:../../packages/typescript-config",
     "@types/node": "^22.15.3",
     "@types/react": "19.1.0",
     "@types/react-dom": "19.1.1",

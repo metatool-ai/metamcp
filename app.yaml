@@ -1,4 +1,8 @@
-runtime: nodejs20
+runtime: nodejs22
+build:
+  command:
+    - node
+    - scripts/databricks-build.mjs
 command:
   - node
   - scripts/databricks-start.mjs
@@ -7,6 +11,10 @@ env:
     value: production
   - name: NPM_CONFIG_PRODUCTION
     value: "false"
+  - name: NPM_CONFIG_WORKSPACES
+    value: "false"
+  - name: PATH
+    value: /app/python/source_code/scripts/bin:/usr/local/bin:/usr/bin:/bin
   - name: FRONTEND_PORT
     value: "12008"
   - name: BACKEND_PORT
@@ -19,6 +27,10 @@ env:
     value: postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
   - name: BETTER_AUTH_SECRET
     value: change-me-before-production
+  - name: LAKEBASE_INSTANCE_NAME
+    value: dev-metamcp-lakebase-app
+  - name: LAKEBASE_DATABASE_NAME
+    value: dev_metamcp_app
 expose:
   type: public
   port: 12008
