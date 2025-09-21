@@ -106,19 +106,28 @@ export const configService = {
     );
   },
 
-  async getSessionLifetime(): Promise<number> {
+  async getSessionLifetime(): Promise<number | null> {
     const config = await configRepo.getConfig(
       ConfigKeyEnum.Enum.SESSION_LIFETIME,
     );
-    return config?.value ? parseInt(config.value, 10) : 14400000; // Default: 4 hours (14400000ms)
+    if (!config?.value) {
+      return null; // No session lifetime set - infinite sessions
+    }
+    const lifetime = parseInt(config.value, 10);
+    return isNaN(lifetime) ? null : lifetime;
   },
 
-  async setSessionLifetime(lifetime: number): Promise<void> {
-    await configRepo.setConfig(
-      ConfigKeyEnum.Enum.SESSION_LIFETIME,
-      lifetime.toString(),
-      "Session lifetime in milliseconds before automatic cleanup",
-    );
+  async setSessionLifetime(lifetime?: number | null): Promise<void> {
+    if (lifetime === null || lifetime === undefined) {
+      // Remove the config to indicate infinite session lifetime
+      await configRepo.deleteConfig(ConfigKeyEnum.Enum.SESSION_LIFETIME);
+    } else {
+      await configRepo.setConfig(
+        ConfigKeyEnum.Enum.SESSION_LIFETIME,
+        lifetime.toString(),
+        "Session lifetime in milliseconds before automatic cleanup",
+      );
+    }
   },
 
   async getConfig(key: ConfigKey): Promise<string | undefined> {

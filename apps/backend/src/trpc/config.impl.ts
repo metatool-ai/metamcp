@@ -80,12 +80,12 @@ export const configImplementations = {
     return { success: true };
   },
 
-  getSessionLifetime: async (): Promise<number> => {
+  getSessionLifetime: async (): Promise<number | null> => {
     return await configService.getSessionLifetime();
   },
 
   setSessionLifetime: async (input: {
-    lifetime: number;
+    lifetime?: number | null;
   }): Promise<{ success: boolean }> => {
     await configService.setSessionLifetime(input.lifetime);
     return { success: true };

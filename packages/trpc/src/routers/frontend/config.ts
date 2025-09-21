@@ -30,9 +30,9 @@ export const createConfigRouter = (implementations: {
   setMcpMaxAttempts: (input: {
     maxAttempts: number;
   }) => Promise<{ success: boolean }>;
-  getSessionLifetime: () => Promise<number>;
+  getSessionLifetime: () => Promise<number | null>;
   setSessionLifetime: (input: {
-    lifetime: number;
+    lifetime?: number | null;
   }) => Promise<{ success: boolean }>;
   getAllConfigs: () => Promise<
     Array<{ id: string; value: string; description?: string | null }>
@@ -118,7 +118,7 @@ export const createConfigRouter = (implementations: {
     }),
 
     setSessionLifetime: protectedProcedure
-      .input(z.object({ lifetime: z.number().min(300000).max(86400000) }))
+      .input(z.object({ lifetime: z.number().min(300000).max(86400000).nullable().optional() }))
       .mutation(async ({ input }) => {
         return await implementations.setSessionLifetime(input);
       }),

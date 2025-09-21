@@ -82,7 +82,7 @@ export const SettingsFormSchema = z.object({
   mcpTimeout: z.number().int(),
   mcpMaxTotalTimeout: z.number().int(),
   mcpMaxAttempts: z.number().int(),
-  sessionLifetime: z.number().int(),
+  sessionLifetime: z.number().int().min(5).max(1440).nullable().optional(),
 });
 
 export type SettingsFormData = z.infer<typeof SettingsFormSchema>;

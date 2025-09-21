@@ -558,6 +558,12 @@ export class MetaMcpServerPool {
   private async cleanupExpiredSessions(): Promise<void> {
     try {
       const sessionLifetime = await configService.getSessionLifetime();
+      
+      // If session lifetime is null, sessions are infinite - skip cleanup
+      if (sessionLifetime === null) {
+        return;
+      }
+      
       const now = Date.now();
       const expiredSessionIds: string[] = [];
 

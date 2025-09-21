@@ -28,6 +28,8 @@ export default function SettingsPage() {
   const [mcpResetTimeoutOnProgress, setMcpResetTimeoutOnProgress] =
     useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSessionLifetimeEnabled, setIsSessionLifetimeEnabled] =
+    useState(false);
 
   // Form setup
   const form = useForm<SettingsFormData>({
@@ -36,7 +38,7 @@ export default function SettingsPage() {
       mcpTimeout: 60000,
       mcpMaxTotalTimeout: 60000,
       mcpMaxAttempts: 1,
-      sessionLifetime: 14400000, // 4 hours
+      sessionLifetime: null, // Default to infinite (null)
     },
   });
 
@@ -232,7 +234,13 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (sessionLifetimeData !== undefined) {
-      form.setValue("sessionLifetime", sessionLifetimeData);
+      const hasLifetime = sessionLifetimeData !== null;
+      setIsSessionLifetimeEnabled(hasLifetime);
+      // Convert milliseconds to minutes for display
+      const lifetimeInMinutes = sessionLifetimeData
+        ? Math.round(sessionLifetimeData / 60000)
+        : null;
+      form.setValue("sessionLifetime", lifetimeInMinutes);
     }
   }, [sessionLifetimeData, form]);
 
@@ -244,11 +252,15 @@ export default function SettingsPage() {
       mcpMaxAttemptsData !== undefined &&
       sessionLifetimeData !== undefined
     ) {
+      // Convert milliseconds to minutes for session lifetime
+      const lifetimeInMinutes = sessionLifetimeData
+        ? Math.round(sessionLifetimeData / 60000)
+        : null;
       form.reset({
         mcpTimeout: mcpTimeoutData,
         mcpMaxTotalTimeout: mcpMaxTotalTimeoutData,
         mcpMaxAttempts: mcpMaxAttemptsData,
-        sessionLifetime: sessionLifetimeData,
+        sessionLifetime: lifetimeInMinutes,
       });
     }
   }, [
@@ -334,6 +346,20 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSessionLifetimeToggle = (checked: boolean) => {
+    setIsSessionLifetimeEnabled(checked);
+    if (!checked) {
+      // When disabled, set to null for infinite sessions
+      form.setValue("sessionLifetime", null);
+    } else {
+      // When enabled, set to default 240 minutes (4 hours) if not already set
+      const currentValue = form.getValues("sessionLifetime");
+      if (currentValue === null || currentValue === undefined) {
+        form.setValue("sessionLifetime", 240); // 4 hours in minutes
+      }
+    }
+  };
+
   // Handle form submission
   const onSubmit = async (data: SettingsFormData) => {
     try {
@@ -346,7 +372,10 @@ export default function SettingsPage() {
           maxAttempts: data.mcpMaxAttempts,
         }),
         setSessionLifetimeMutation.mutateAsync({
-          lifetime: data.sessionLifetime,
+          lifetime:
+            isSessionLifetimeEnabled && data.sessionLifetime
+              ? data.sessionLifetime * 60000
+              : null,
         }),
       ]);
       reset(data); // Reset form state to match current values
@@ -576,34 +605,60 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="session-lifetime" className="text-base">
-                {t("settings:sessionLifetime")}
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                {t("settings:sessionLifetimeDescription")}
-              </p>
-              <div className="flex items-center space-x-2">
-                <Controller
-                  name="sessionLifetime"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Input
-                      {...field}
-                      id="session-lifetime"
-                      type="number"
-                      min="300000"
-                      max="86400000"
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value, 10);
-                        field.onChange(isNaN(value) ? 14400000 : value);
-                      }}
-                      className="w-32"
-                    />
-                  )}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="enable-session-lifetime"
+                    className="text-base"
+                  >
+                    {t("settings:enableSessionLifetime")}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("settings:enableSessionLifetimeDescription")}
+                  </p>
+                </div>
+                <Switch
+                  id="enable-session-lifetime"
+                  checked={isSessionLifetimeEnabled}
+                  onCheckedChange={handleSessionLifetimeToggle}
                 />
-                <span className="text-sm text-muted-foreground">ms</span>
               </div>
+
+              {isSessionLifetimeEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="session-lifetime" className="text-base">
+                    {t("settings:sessionLifetime")}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("settings:sessionLifetimeDescription")}
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <Controller
+                      name="sessionLifetime"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          id="session-lifetime"
+                          type="number"
+                          min="5"
+                          max="1440"
+                          value={field.value || 240}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value, 10);
+                            field.onChange(isNaN(value) ? 240 : value);
+                          }}
+                          className="w-32"
+                        />
+                      )}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      minutes
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Apply Changes Button - only show when there are unsaved changes */}
