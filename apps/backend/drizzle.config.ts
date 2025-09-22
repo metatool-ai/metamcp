@@ -5,7 +5,7 @@ import { defineConfig } from "drizzle-kit";
 const { DATABASE_TYPE, DATABASE_URL } = process.env;
 
 export default defineConfig({
-  out: `./drizzle-${DATABASE_TYPE}`,
+  out: DATABASE_TYPE === "sqlite" ? `./drizzle-${DATABASE_TYPE}` : 'drizzle',
   schema: "./src/db/schema.ts",
   dialect: DATABASE_TYPE === "sqlite" ? "sqlite" : "postgresql",
   dbCredentials: {

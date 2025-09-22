@@ -13,15 +13,14 @@
     "clean": "rm -rf dist",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
-    "db:generate:dev": "dotenv -e ../../.env.local -- drizzle-kit generate",
+    "db:generate": "DATABASE_TYPE=postgresql dotenv -e ../../.env -- drizzle-kit generate",
+    "db:generate:dev": "DATABASE_TYPE=postgresql dotenv -e ../../.env.local -- drizzle-kit generate",
     "db:generate:sqlite": "DATABASE_TYPE=sqlite dotenv -e ../../.env -- drizzle-kit generate",
     "db:generate:sqlite:dev": "DATABASE_TYPE=sqlite dotenv -e ../../.env.local -- drizzle-kit generate",
-    "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate",
-    "db:migrate:dev": "dotenv -e ../../.env.local -- drizzle-kit migrate",
+    "db:migrate": "DATABASE_TYPE=postgresql dotenv -e ../../.env -- drizzle-kit migrate",
+    "db:migrate:dev": "DATABASE_TYPE=postgresql dotenv -e ../../.env.local -- drizzle-kit migrate",
     "db:migrate:sqlite": "DATABASE_TYPE=sqlite dotenv -e ../../.env -- drizzle-kit migrate",
-    "db:migrate:sqlite:dev": "DATABASE_TYPE=sqlite dotenv -e ../../.env.local -- drizzle-kit migrate",
-    "setup:sqlite": "node scripts/setup-sqlite.js"
+    "db:migrate:sqlite:dev": "DATABASE_TYPE=sqlite dotenv -e ../../.env.local -- drizzle-kit migrate"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
