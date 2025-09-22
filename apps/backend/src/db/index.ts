@@ -11,8 +11,6 @@ if (!DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
 }
 
-console.log(DATABASE_URL, POSTGRES_CA_CERT, DATABASE_TYPE)
-
 if (!DATABASE_TYPE || !['postgresql', 'sqlite'].includes(DATABASE_TYPE)) {
   throw new Error("DATABASE_TYPE must be either 'postgresql' or 'sqlite'");
 }
