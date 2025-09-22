@@ -33,6 +33,21 @@ export const configService = {
     );
   },
 
+  async isBasicAuthDisabled(): Promise<boolean> {
+    const config = await configRepo.getConfig(
+      ConfigKeyEnum.Enum.DISABLE_BASIC_AUTH,
+    );
+    return config?.value === "true";
+  },
+
+  async setBasicAuthDisabled(disabled: boolean): Promise<void> {
+    await configRepo.setConfig(
+      ConfigKeyEnum.Enum.DISABLE_BASIC_AUTH,
+      disabled.toString(),
+      "Whether basic email/password authentication is disabled",
+    );
+  },
+
   async getMcpResetTimeoutOnProgress(): Promise<boolean> {
     const config = await configRepo.getConfig(
       ConfigKeyEnum.Enum.MCP_RESET_TIMEOUT_ON_PROGRESS,
@@ -89,6 +104,30 @@ export const configService = {
       maxAttempts.toString(),
       "Maximum number of crash attempts before marking MCP server as ERROR",
     );
+  },
+
+  async getSessionLifetime(): Promise<number | null> {
+    const config = await configRepo.getConfig(
+      ConfigKeyEnum.Enum.SESSION_LIFETIME,
+    );
+    if (!config?.value) {
+      return null; // No session lifetime set - infinite sessions
+    }
+    const lifetime = parseInt(config.value, 10);
+    return isNaN(lifetime) ? null : lifetime;
+  },
+
+  async setSessionLifetime(lifetime?: number | null): Promise<void> {
+    if (lifetime === null || lifetime === undefined) {
+      // Remove the config to indicate infinite session lifetime
+      await configRepo.deleteConfig(ConfigKeyEnum.Enum.SESSION_LIFETIME);
+    } else {
+      await configRepo.setConfig(
+        ConfigKeyEnum.Enum.SESSION_LIFETIME,
+        lifetime.toString(),
+        "Session lifetime in milliseconds before automatic cleanup",
+      );
+    }
   },
 
   async getConfig(key: ConfigKey): Promise<string | undefined> {

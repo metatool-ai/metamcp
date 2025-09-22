@@ -53,6 +53,8 @@ export const NamespaceToolSchema = ToolSchema.extend({
   serverName: z.string(),
   serverUuid: z.string(),
   status: ToolStatusEnum, // Status from namespace tool mapping
+  overrideName: z.string().nullable().optional(),
+  overrideDescription: z.string().nullable().optional(),
 });
 
 export const NamespaceWithServersSchema = NamespaceSchema.extend({
@@ -136,6 +138,20 @@ export const UpdateNamespaceToolStatusResponseSchema = z.object({
   message: z.string(),
 });
 
+// Namespace tool overrides management schemas
+export const UpdateNamespaceToolOverridesRequestSchema = z.object({
+  namespaceUuid: z.string().uuid(),
+  toolUuid: z.string().uuid(),
+  serverUuid: z.string().uuid(),
+  overrideName: z.string().nullable().optional(),
+  overrideDescription: z.string().nullable().optional(),
+});
+
+export const UpdateNamespaceToolOverridesResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+
 // Refresh tools from MetaMCP connection
 export const RefreshNamespaceToolsRequestSchema = z.object({
   namespaceUuid: z.string().uuid(),
@@ -201,6 +217,12 @@ export type UpdateNamespaceToolStatusRequest = z.infer<
 export type UpdateNamespaceToolStatusResponse = z.infer<
   typeof UpdateNamespaceToolStatusResponseSchema
 >;
+export type UpdateNamespaceToolOverridesRequest = z.infer<
+  typeof UpdateNamespaceToolOverridesRequestSchema
+>;
+export type UpdateNamespaceToolOverridesResponse = z.infer<
+  typeof UpdateNamespaceToolOverridesResponseSchema
+>;
 
 // Repository-specific schemas
 export const NamespaceCreateInputSchema = z.object({
@@ -231,6 +253,14 @@ export const NamespaceToolStatusUpdateSchema = z.object({
   status: ToolStatusEnum,
 });
 
+export const NamespaceToolOverridesUpdateSchema = z.object({
+  namespaceUuid: z.string(),
+  toolUuid: z.string(),
+  serverUuid: z.string(),
+  overrideName: z.string().nullable().optional(),
+  overrideDescription: z.string().nullable().optional(),
+});
+
 export type NamespaceCreateInput = z.infer<typeof NamespaceCreateInputSchema>;
 export type NamespaceUpdateInput = z.infer<typeof NamespaceUpdateInputSchema>;
 export type NamespaceServerStatusUpdate = z.infer<
@@ -238,6 +268,9 @@ export type NamespaceServerStatusUpdate = z.infer<
 >;
 export type NamespaceToolStatusUpdate = z.infer<
   typeof NamespaceToolStatusUpdateSchema
+>;
+export type NamespaceToolOverridesUpdate = z.infer<
+  typeof NamespaceToolOverridesUpdateSchema
 >;
 
 // Database-specific schemas (raw database results with Date objects)
@@ -284,6 +317,8 @@ export const DatabaseNamespaceToolSchema = z.object({
   status: ToolStatusEnum,
   serverName: z.string(),
   serverUuid: z.string(),
+  overrideName: z.string().nullable().optional(),
+  overrideDescription: z.string().nullable().optional(),
 });
 
 export type DatabaseNamespace = z.infer<typeof DatabaseNamespaceSchema>;

@@ -111,7 +111,7 @@ export function NamespaceServersTable({
             };
           },
         );
-        
+
         // Trigger connection refresh callback
         if (onServerStatusChange) {
           onServerStatusChange();
@@ -134,7 +134,7 @@ export function NamespaceServersTable({
 
     const now = Date.now();
     const timeSinceLastToggle = now - lastToggleTimeRef.current;
-    
+
     // Prevent rapid successive toggles (minimum 1 second between toggles)
     if (timeSinceLastToggle < 1000) {
       toast.warning(t("namespaces:serversTable.toggleTooFast"), {
@@ -142,7 +142,7 @@ export function NamespaceServersTable({
       });
       return;
     }
-    
+
     lastToggleTimeRef.current = now;
 
     const newStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
@@ -241,7 +241,8 @@ export function NamespaceServersTable({
       cell: ({ row }) => {
         const server = row.original;
         const isActive = server.status === "ACTIVE";
-        const isDisabled = sessionInitializing || updateServerStatusMutation.isPending;
+        const isDisabled =
+          sessionInitializing || updateServerStatusMutation.isPending;
 
         return (
           <div className="px-3 py-2">

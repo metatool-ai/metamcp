@@ -12,6 +12,8 @@ import {
   UpdateNamespaceResponseSchema,
   UpdateNamespaceServerStatusRequestSchema,
   UpdateNamespaceServerStatusResponseSchema,
+  UpdateNamespaceToolOverridesRequestSchema,
+  UpdateNamespaceToolOverridesResponseSchema,
   UpdateNamespaceToolStatusRequestSchema,
   UpdateNamespaceToolStatusResponseSchema,
 } from "@repo/zod-types";
@@ -59,6 +61,10 @@ export const createNamespacesRouter = (
       input: z.infer<typeof UpdateNamespaceToolStatusRequestSchema>,
       userId: string,
     ) => Promise<z.infer<typeof UpdateNamespaceToolStatusResponseSchema>>;
+    updateToolOverrides: (
+      input: z.infer<typeof UpdateNamespaceToolOverridesRequestSchema>,
+      userId: string,
+    ) => Promise<z.infer<typeof UpdateNamespaceToolOverridesResponseSchema>>;
     refreshTools: (
       input: z.infer<typeof RefreshNamespaceToolsRequestSchema>,
       userId: string,
@@ -127,6 +133,14 @@ export const createNamespacesRouter = (
       .output(UpdateNamespaceToolStatusResponseSchema)
       .mutation(async ({ input, ctx }) => {
         return await implementations.updateToolStatus(input, ctx.user.id);
+      }),
+
+    // Protected: Update tool overrides within namespace
+    updateToolOverrides: protectedProcedure
+      .input(UpdateNamespaceToolOverridesRequestSchema)
+      .output(UpdateNamespaceToolOverridesResponseSchema)
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.updateToolOverrides(input, ctx.user.id);
       }),
 
     // Protected: Refresh tools from MetaMCP connection

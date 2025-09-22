@@ -25,6 +25,17 @@ export const configImplementations = {
     return { success: true };
   },
 
+  getBasicAuthDisabled: async (): Promise<boolean> => {
+    return await configService.isBasicAuthDisabled();
+  },
+
+  setBasicAuthDisabled: async (input: {
+    disabled: boolean;
+  }): Promise<{ success: boolean }> => {
+    await configService.setBasicAuthDisabled(input.disabled);
+    return { success: true };
+  },
+
   getMcpResetTimeoutOnProgress: async (): Promise<boolean> => {
     return await configService.getMcpResetTimeoutOnProgress();
   },
@@ -66,6 +77,17 @@ export const configImplementations = {
     maxAttempts: number;
   }): Promise<{ success: boolean }> => {
     await configService.setMcpMaxAttempts(input.maxAttempts);
+    return { success: true };
+  },
+
+  getSessionLifetime: async (): Promise<number | null> => {
+    return await configService.getSessionLifetime();
+  },
+
+  setSessionLifetime: async (input: {
+    lifetime?: number | null;
+  }): Promise<{ success: boolean }> => {
+    await configService.setSessionLifetime(input.lifetime);
     return { success: true };
   },
 

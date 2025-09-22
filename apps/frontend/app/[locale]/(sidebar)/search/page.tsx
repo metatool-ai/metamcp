@@ -17,7 +17,7 @@ const PAGE_SIZE = 6;
 function SearchContent() {
   const { t } = useTranslations();
   const searchParams = useSearchParams();
-  
+
   // Initialize search query from URL on mount (for direct links)
   const initialQuery = searchParams.get("query") || "";
   const [searchQuery, setSearchQuery] = useState(initialQuery);
@@ -90,14 +90,16 @@ function SearchContent() {
             " | You may need a proxy server to access Cloudflare."}
         </div>
       )}
-      
+
       {/* Results area - show skeleton only here, not the entire component */}
       {isLoading ? (
         <SearchSkeleton />
       ) : (
         <>
-          {data?.results && Object.keys(data.results).length > 0 && <CardGrid items={data.results} />}
-          
+          {data?.results && Object.keys(data.results).length > 0 && (
+            <CardGrid items={data.results} />
+          )}
+
           {data?.results && Object.keys(data.results).length === 0 && (
             <div className="text-center text-muted-foreground">
               {t("search:noResults")}

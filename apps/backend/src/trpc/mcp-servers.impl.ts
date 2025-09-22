@@ -18,6 +18,7 @@ import {
 } from "../db/repositories";
 import { McpServersSerializer } from "../db/serializers";
 import { mcpServerPool } from "../lib/metamcp/mcp-server-pool";
+import { clearOverrideCache } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
 import { serverErrorTracker } from "../lib/metamcp/server-error-tracker";
 import { convertDbServerToParams } from "../lib/metamcp/utils";
@@ -307,6 +308,14 @@ export const mcpServersImplementations = {
               error,
             );
           });
+
+        // Clear tool overrides cache for affected namespaces since server deletion affects tool availability
+        affectedNamespaceUuids.forEach((namespaceUuid) => {
+          clearOverrideCache(namespaceUuid);
+        });
+        console.log(
+          `Cleared tool overrides cache for ${affectedNamespaceUuids.length} namespaces after deleting server: ${deletedServer.name} (${deletedServer.uuid})`,
+        );
       }
 
       return {
@@ -430,6 +439,14 @@ export const mcpServersImplementations = {
               error,
             );
           });
+
+        // Clear tool overrides cache for affected namespaces since server update may affect tool availability
+        affectedNamespaceUuids.forEach((namespaceUuid) => {
+          clearOverrideCache(namespaceUuid);
+        });
+        console.log(
+          `Cleared tool overrides cache for ${affectedNamespaceUuids.length} namespaces after updating server: ${updatedServer.name} (${updatedServer.uuid})`,
+        );
       }
 
       return {

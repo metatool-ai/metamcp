@@ -361,19 +361,19 @@ export function NamespaceToolManagement({
         </div>
 
         <div className="flex items-center gap-2">
-                      <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefreshAllTools}
-              disabled={loading || isToolsLoading || sessionInitializing}
-            >
-              <RefreshCw
-                className={`h-4 w-4 mr-2 ${loading || isToolsLoading || sessionInitializing ? "animate-spin" : ""}`}
-              />
-              {sessionInitializing
-                ? t("namespaces:toolManagement.initializing")
-                : t("namespaces:toolManagement.refreshTools")}
-            </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefreshAllTools}
+            disabled={loading || isToolsLoading || sessionInitializing}
+          >
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${loading || isToolsLoading || sessionInitializing ? "animate-spin" : ""}`}
+            />
+            {sessionInitializing
+              ? t("namespaces:toolManagement.initializing")
+              : t("namespaces:toolManagement.refreshTools")}
+          </Button>
         </div>
       </div>
 

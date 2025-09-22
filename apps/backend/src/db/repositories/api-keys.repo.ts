@@ -206,11 +206,8 @@ export class ApiKeysRepository {
       .where(
         and(
           eq(apiKeysTable.uuid, uuid),
-          or(
-            eq(apiKeysTable.user_id, userId),
-            isNull(apiKeysTable.user_id)
-          )
-        )
+          or(eq(apiKeysTable.user_id, userId), isNull(apiKeysTable.user_id)),
+        ),
       )
       .returning({
         uuid: apiKeysTable.uuid,
@@ -233,11 +230,8 @@ export class ApiKeysRepository {
       .where(
         and(
           eq(apiKeysTable.uuid, uuid),
-          or(
-            eq(apiKeysTable.user_id, userId),
-            isNull(apiKeysTable.user_id)
-          )
-        )
+          or(eq(apiKeysTable.user_id, userId), isNull(apiKeysTable.user_id)),
+        ),
       )
       .returning({
         uuid: apiKeysTable.uuid,
