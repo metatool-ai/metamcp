@@ -5,6 +5,7 @@
     "PORT",
     "APP_URL",
     "DATABASE_URL",
+    "DATABASE_TYPE",
     "BETTER_AUTH_SECRET",
     "NEXT_PUBLIC_APP_URL",
     "OIDC_CLIENT_ID",
