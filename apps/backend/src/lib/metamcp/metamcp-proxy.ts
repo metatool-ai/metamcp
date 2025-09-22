@@ -197,21 +197,39 @@ export const createServer = async (
           params.name || session.client.getServerVersion()?.name || "";
 
         try {
-          const result = await session.client.request(
-            {
-              method: "tools/list",
-              params: { _meta: request.params?._meta },
-            },
-            ListToolsResultSchema,
-          );
+          // Paginated tool discovery - load all pages automatically
+          const allServerTools: Tool[] = [];
+          let cursor: string | undefined = undefined;
+          let hasMore = true;
+
+          while (hasMore) {
+            const result: z.infer<typeof ListToolsResultSchema> =
+              await session.client.request(
+                {
+                  method: "tools/list",
+                  params: {
+                    cursor: cursor,
+                    _meta: request.params?._meta,
+                  },
+                },
+                ListToolsResultSchema,
+              );
+
+            if (result.tools && result.tools.length > 0) {
+              allServerTools.push(...result.tools);
+            }
+
+            cursor = result.nextCursor;
+            hasMore = !!result.nextCursor;
+          }
 
           // Save original tools to database (before middleware processing)
           // This ensures we only save the actual tool names, not override names
           // Filter out tools that are overrides of existing tools to prevent duplicates
-          if (result.tools && result.tools.length > 0) {
+          if (allServerTools.length > 0) {
             try {
               const toolsToSave = await filterOutOverrideTools(
-                result.tools,
+                allServerTools,
                 namespaceUuid,
                 serverName,
               );
@@ -231,8 +249,7 @@ export const createServer = async (
           }
 
           // Use original tools for client response (middleware will be applied later)
-          const toolsForClient = result.tools || [];
-          const toolsWithSource = toolsForClient.map((tool) => {
+          const toolsWithSource = allServerTools.map((tool) => {
             const toolName = `${sanitizeName(serverName)}__${tool.name}`;
             toolToClient[toolName] = session;
             toolToServerUuid[toolName] = mcpServerUuid;
@@ -300,24 +317,41 @@ export const createServer = async (
               params.name || session.client.getServerVersion()?.name || "";
 
             if (sanitizeName(serverName) === serverPrefix) {
-              // Found the server, now check if it has this tool
+              // Found the server, now check if it has this tool with pagination
               try {
-                const result = await session.client.request(
-                  {
-                    method: "tools/list",
-                    params: {},
-                  },
-                  ListToolsResultSchema,
-                );
+                let foundTool = false;
+                let cursor: string | undefined = undefined;
+                let hasMore = true;
 
-                if (
-                  result.tools?.some((tool) => tool.name === originalToolName)
-                ) {
-                  // Tool exists, populate mappings for future use and use it
-                  clientForTool = session;
-                  serverUuid = mcpServerUuid;
-                  toolToClient[name] = session;
-                  toolToServerUuid[name] = mcpServerUuid;
+                while (hasMore && !foundTool) {
+                  const result: z.infer<typeof ListToolsResultSchema> =
+                    await session.client.request(
+                      {
+                        method: "tools/list",
+                        params: { cursor: cursor },
+                      },
+                      ListToolsResultSchema,
+                    );
+
+                  if (
+                    result.tools?.some(
+                      (tool: Tool) => tool.name === originalToolName,
+                    )
+                  ) {
+                    foundTool = true;
+                    // Tool exists, populate mappings for future use and use it
+                    clientForTool = session;
+                    serverUuid = mcpServerUuid;
+                    toolToClient[name] = session;
+                    toolToServerUuid[name] = mcpServerUuid;
+                    break;
+                  }
+
+                  cursor = result.nextCursor;
+                  hasMore = !!result.nextCursor;
+                }
+
+                if (foundTool) {
                   break;
                 }
               } catch (error) {
