@@ -107,6 +107,9 @@
     "cannotToggleStatus": "无法切换未保存到命名空间的工具状态",
     "toolStatusUpdated": "工具状态更新成功",
     "toolStatusUpdateFailed": "更新工具状态失败",
+    "cannotUpdateOverrides": "无法更新未保存到命名空间的工具覆盖",
+    "toolOverridesUpdated": "工具覆盖更新成功",
+    "toolOverridesUpdateFailed": "更新工具覆盖失败",
     "sources": {
       "metamcp": "MetaMCP",
       "saved": "已保存",
@@ -121,7 +124,7 @@
       "source": "来源",
       "status": "状态"
     },
-    "toolDescription": "工具描述",
+    "toolDescription": "工具描述 (原始)",
     "toolSchema": "工具架构",
     "type": "类型",
     "parameters": "参数",
@@ -129,7 +132,8 @@
     "showFullSchemaJson": "显示完整架构 JSON",
     "autoSaving": "自动保存中...",
     "active": "活跃",
-    "inactive": "非活跃"
+    "inactive": "非活跃",
+    "editOverrides": "编辑覆盖"
   },
   "serversTable": {
     "noServers": "无 MCP 服务器",

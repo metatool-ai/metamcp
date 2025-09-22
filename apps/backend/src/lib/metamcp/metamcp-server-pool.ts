@@ -1,5 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
+import { configService } from "../config.service";
 import { mcpServerPool } from "./mcp-server-pool";
 import { createServer } from "./metamcp-proxy";
 
@@ -28,14 +29,21 @@ export class MetaMcpServerPool {
   // Mapping: sessionId -> namespaceUuid for cleanup tracking
   private sessionToNamespace: Record<string, string> = {};
 
+  // Session creation timestamps: sessionId -> timestamp
+  private sessionTimestamps: Record<string, number> = {};
+
   // Track ongoing idle server creation to prevent duplicates
   private creatingIdleServers: Set<string> = new Set();
+
+  // Session cleanup timer
+  private cleanupTimer: NodeJS.Timeout | null = null;
 
   // Default number of idle servers per namespace UUID
   private readonly defaultIdleCount: number;
 
   private constructor(defaultIdleCount: number = 1) {
     this.defaultIdleCount = defaultIdleCount;
+    this.startCleanupTimer();
   }
 
   /**
@@ -68,6 +76,7 @@ export class MetaMcpServerPool {
       delete this.idleServers[namespaceUuid];
       this.activeServers[sessionId] = idleServer;
       this.sessionToNamespace[sessionId] = namespaceUuid;
+      this.sessionTimestamps[sessionId] = Date.now();
 
       console.log(
         `Converted idle MetaMCP server to active for namespace ${namespaceUuid}, session ${sessionId}`,
@@ -91,6 +100,7 @@ export class MetaMcpServerPool {
 
     this.activeServers[sessionId] = newServer;
     this.sessionToNamespace[sessionId] = namespaceUuid;
+    this.sessionTimestamps[sessionId] = Date.now();
 
     console.log(
       `Created new active MetaMCP server for namespace ${namespaceUuid}, session ${sessionId}`,
@@ -248,6 +258,9 @@ export class MetaMcpServerPool {
     // Remove from active servers
     delete this.activeServers[sessionId];
 
+    // Clean up session timestamp
+    delete this.sessionTimestamps[sessionId];
+
     // Get the namespace UUID and create a new idle server if needed
     const namespaceUuid = this.sessionToNamespace[sessionId];
     if (namespaceUuid) {
@@ -283,7 +296,14 @@ export class MetaMcpServerPool {
     this.idleServers = {};
     this.activeServers = {};
     this.sessionToNamespace = {};
+    this.sessionTimestamps = {};
     this.creatingIdleServers.clear();
+
+    // Clear cleanup timer
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
 
     console.log("Cleaned up all MetaMCP server pool sessions");
   }
@@ -442,6 +462,7 @@ export class MetaMcpServerPool {
       delete this.idleServers[namespaceUuid];
       this.activeServers[sessionId] = idleServer;
       this.sessionToNamespace[sessionId] = namespaceUuid;
+      this.sessionTimestamps[sessionId] = Date.now();
 
       console.log(
         `Converted idle MetaMCP server to OpenAPI server for namespace ${namespaceUuid}, session ${sessionId}`,
@@ -465,6 +486,7 @@ export class MetaMcpServerPool {
 
     this.activeServers[sessionId] = newServer;
     this.sessionToNamespace[sessionId] = namespaceUuid;
+    this.sessionTimestamps[sessionId] = Date.now();
 
     console.log(
       `Created new OpenAPI MetaMCP server for namespace ${namespaceUuid}, session ${sessionId}`,
@@ -507,6 +529,7 @@ export class MetaMcpServerPool {
         }
         delete this.activeServers[sessionId];
         delete this.sessionToNamespace[sessionId];
+        delete this.sessionTimestamps[sessionId];
       }
 
       // Create a new OpenAPI session with updated configuration
@@ -514,6 +537,77 @@ export class MetaMcpServerPool {
     });
 
     await Promise.allSettled(promises);
+  }
+
+  /**
+   * Start the automatic cleanup timer for expired sessions
+   */
+  private startCleanupTimer(): void {
+    // Check for expired sessions every 5 minutes
+    this.cleanupTimer = setInterval(
+      async () => {
+        await this.cleanupExpiredSessions();
+      },
+      5 * 60 * 1000,
+    ); // 5 minutes
+  }
+
+  /**
+   * Clean up expired sessions based on session lifetime setting
+   */
+  private async cleanupExpiredSessions(): Promise<void> {
+    try {
+      const sessionLifetime = await configService.getSessionLifetime();
+      
+      // If session lifetime is null, sessions are infinite - skip cleanup
+      if (sessionLifetime === null) {
+        return;
+      }
+      
+      const now = Date.now();
+      const expiredSessionIds: string[] = [];
+
+      // Find expired sessions
+      for (const [sessionId, timestamp] of Object.entries(
+        this.sessionTimestamps,
+      )) {
+        if (now - timestamp > sessionLifetime) {
+          expiredSessionIds.push(sessionId);
+        }
+      }
+
+      // Clean up expired sessions
+      if (expiredSessionIds.length > 0) {
+        console.log(
+          `Cleaning up ${expiredSessionIds.length} expired MetaMCP server pool sessions: ${expiredSessionIds.join(", ")}`,
+        );
+
+        await Promise.allSettled(
+          expiredSessionIds.map((sessionId) => this.cleanupSession(sessionId)),
+        );
+      }
+    } catch (error) {
+      console.error("Error during automatic MetaMCP session cleanup:", error);
+    }
+  }
+
+  /**
+   * Get session age in milliseconds
+   */
+  getSessionAge(sessionId: string): number | undefined {
+    const timestamp = this.sessionTimestamps[sessionId];
+    return timestamp ? Date.now() - timestamp : undefined;
+  }
+
+  /**
+   * Check if a session is expired
+   */
+  async isSessionExpired(sessionId: string): Promise<boolean> {
+    const age = this.getSessionAge(sessionId);
+    if (age === undefined) return false;
+
+    const sessionLifetime = await configService.getSessionLifetime();
+    return age > sessionLifetime;
   }
 }
 

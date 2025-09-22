@@ -24,9 +24,12 @@ export default function SettingsPage() {
   const { t } = useTranslations();
   const [isSignupDisabled, setIsSignupDisabled] = useState(false);
   const [isSsoSignupDisabled, setIsSsoSignupDisabled] = useState(false);
+  const [isBasicAuthDisabled, setIsBasicAuthDisabled] = useState(false);
   const [mcpResetTimeoutOnProgress, setMcpResetTimeoutOnProgress] =
     useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSessionLifetimeEnabled, setIsSessionLifetimeEnabled] =
+    useState(false);
 
   // Form setup
   const form = useForm<SettingsFormData>({
@@ -35,6 +38,7 @@ export default function SettingsPage() {
       mcpTimeout: 60000,
       mcpMaxTotalTimeout: 60000,
       mcpMaxAttempts: 1,
+      sessionLifetime: null, // Default to infinite (null)
     },
   });
 
@@ -56,6 +60,12 @@ export default function SettingsPage() {
     isLoading: ssoSignupLoading,
     refetch: refetchSsoSignup,
   } = trpc.frontend.config.getSsoSignupDisabled.useQuery();
+
+  const {
+    data: basicAuthDisabled,
+    isLoading: basicAuthLoading,
+    refetch: refetchBasicAuth,
+  } = trpc.frontend.config.getBasicAuthDisabled.useQuery();
 
   const {
     data: mcpResetTimeoutOnProgressData,
@@ -81,6 +91,12 @@ export default function SettingsPage() {
     refetch: refetchMcpMaxAttempts,
   } = trpc.frontend.config.getMcpMaxAttempts.useQuery();
 
+  const {
+    data: sessionLifetimeData,
+    isLoading: sessionLifetimeLoading,
+    refetch: refetchSessionLifetime,
+  } = trpc.frontend.config.getSessionLifetime.useQuery();
+
   // Mutations
   const setSignupDisabledMutation =
     trpc.frontend.config.setSignupDisabled.useMutation({
@@ -100,6 +116,17 @@ export default function SettingsPage() {
           refetchSsoSignup();
         } else {
           console.error("Failed to update SSO signup setting");
+        }
+      },
+    });
+
+  const setBasicAuthDisabledMutation =
+    trpc.frontend.config.setBasicAuthDisabled.useMutation({
+      onSuccess: (data) => {
+        if (data.success) {
+          refetchBasicAuth();
+        } else {
+          console.error("Failed to update basic auth setting");
         }
       },
     });
@@ -150,6 +177,18 @@ export default function SettingsPage() {
       },
     });
 
+  const setSessionLifetimeMutation =
+    trpc.frontend.config.setSessionLifetime.useMutation({
+      onSuccess: (data) => {
+        if (data.success) {
+          refetchSessionLifetime();
+          setHasUnsavedChanges(false);
+        } else {
+          console.error("Failed to update session lifetime setting");
+        }
+      },
+    });
+
   // Update local state when data is loaded
   useEffect(() => {
     if (signupDisabled !== undefined) {
@@ -162,6 +201,12 @@ export default function SettingsPage() {
       setIsSsoSignupDisabled(ssoSignupDisabled);
     }
   }, [ssoSignupDisabled]);
+
+  useEffect(() => {
+    if (basicAuthDisabled !== undefined) {
+      setIsBasicAuthDisabled(basicAuthDisabled);
+    }
+  }, [basicAuthDisabled]);
 
   useEffect(() => {
     if (mcpResetTimeoutOnProgressData !== undefined) {
@@ -187,20 +232,44 @@ export default function SettingsPage() {
     }
   }, [mcpMaxAttemptsData, form]);
 
+  useEffect(() => {
+    if (sessionLifetimeData !== undefined) {
+      const hasLifetime = sessionLifetimeData !== null;
+      setIsSessionLifetimeEnabled(hasLifetime);
+      // Convert milliseconds to minutes for display
+      const lifetimeInMinutes = sessionLifetimeData
+        ? Math.round(sessionLifetimeData / 60000)
+        : null;
+      form.setValue("sessionLifetime", lifetimeInMinutes);
+    }
+  }, [sessionLifetimeData, form]);
+
   // Reset form with loaded data to establish proper baseline for change detection
   useEffect(() => {
     if (
       mcpTimeoutData !== undefined &&
       mcpMaxTotalTimeoutData !== undefined &&
-      mcpMaxAttemptsData !== undefined
+      mcpMaxAttemptsData !== undefined &&
+      sessionLifetimeData !== undefined
     ) {
+      // Convert milliseconds to minutes for session lifetime
+      const lifetimeInMinutes = sessionLifetimeData
+        ? Math.round(sessionLifetimeData / 60000)
+        : null;
       form.reset({
         mcpTimeout: mcpTimeoutData,
         mcpMaxTotalTimeout: mcpMaxTotalTimeoutData,
         mcpMaxAttempts: mcpMaxAttemptsData,
+        sessionLifetime: lifetimeInMinutes,
       });
     }
-  }, [mcpTimeoutData, mcpMaxTotalTimeoutData, mcpMaxAttemptsData, form]);
+  }, [
+    mcpTimeoutData,
+    mcpMaxTotalTimeoutData,
+    mcpMaxAttemptsData,
+    sessionLifetimeData,
+    form,
+  ]);
 
   // Handle immediate switch updates
   const handleSignupToggle = async (checked: boolean) => {
@@ -239,6 +308,24 @@ export default function SettingsPage() {
     }
   };
 
+  const handleBasicAuthToggle = async (checked: boolean) => {
+    setIsBasicAuthDisabled(checked);
+    try {
+      await setBasicAuthDisabledMutation.mutateAsync({ disabled: checked });
+      toast.success(
+        checked
+          ? t("settings:basicAuthDisabledSuccess")
+          : t("settings:basicAuthEnabledSuccess"),
+      );
+    } catch (error) {
+      setIsBasicAuthDisabled(!checked);
+      console.error("Failed to update basic auth setting:", error);
+      toast.error(t("settings:basicAuthToggleError"), {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const handleMcpResetTimeoutToggle = async (checked: boolean) => {
     setMcpResetTimeoutOnProgress(checked);
     try {
@@ -259,6 +346,20 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSessionLifetimeToggle = (checked: boolean) => {
+    setIsSessionLifetimeEnabled(checked);
+    if (!checked) {
+      // When disabled, set to null for infinite sessions
+      form.setValue("sessionLifetime", null);
+    } else {
+      // When enabled, set to default 240 minutes (4 hours) if not already set
+      const currentValue = form.getValues("sessionLifetime");
+      if (currentValue === null || currentValue === undefined) {
+        form.setValue("sessionLifetime", 240); // 4 hours in minutes
+      }
+    }
+  };
+
   // Handle form submission
   const onSubmit = async (data: SettingsFormData) => {
     try {
@@ -269,6 +370,12 @@ export default function SettingsPage() {
         }),
         setMcpMaxAttemptsMutation.mutateAsync({
           maxAttempts: data.mcpMaxAttempts,
+        }),
+        setSessionLifetimeMutation.mutateAsync({
+          lifetime:
+            isSessionLifetimeEnabled && data.sessionLifetime
+              ? data.sessionLifetime * 60000
+              : null,
         }),
       ]);
       reset(data); // Reset form state to match current values
@@ -289,10 +396,12 @@ export default function SettingsPage() {
   const isLoading =
     signupLoading ||
     ssoSignupLoading ||
+    basicAuthLoading ||
     mcpResetLoading ||
     mcpTimeoutLoading ||
     mcpMaxTotalLoading ||
-    mcpMaxAttemptsLoading;
+    mcpMaxAttemptsLoading ||
+    sessionLifetimeLoading;
 
   if (isLoading) {
     return (
@@ -359,6 +468,23 @@ export default function SettingsPage() {
                 disabled={setSsoSignupDisabledMutation.isPending}
               />
             </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="disable-basic-auth" className="text-base">
+                  {t("settings:disableBasicAuth")}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {t("settings:disableBasicAuthDescription")}
+                </p>
+              </div>
+              <Switch
+                id="disable-basic-auth"
+                checked={isBasicAuthDisabled}
+                onCheckedChange={handleBasicAuthToggle}
+                disabled={setBasicAuthDisabledMutation.isPending}
+              />
+            </div>
           </CardContent>
         </Card>
 
@@ -404,7 +530,7 @@ export default function SettingsPage() {
                       id="mcp-timeout"
                       type="number"
                       min="1000"
-                      max="3000000"
+                      max="86400000"
                       onChange={(e) => {
                         const value = parseInt(e.target.value, 10);
                         field.onChange(isNaN(value) ? 1000 : value);
@@ -434,7 +560,7 @@ export default function SettingsPage() {
                       id="mcp-max-total-timeout"
                       type="number"
                       min="1000"
-                      max="3000000"
+                      max="86400000"
                       onChange={(e) => {
                         const value = parseInt(e.target.value, 10);
                         field.onChange(isNaN(value) ? 1000 : value);
@@ -477,6 +603,62 @@ export default function SettingsPage() {
                   {t("settings:attempts")}
                 </span>
               </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="enable-session-lifetime"
+                    className="text-base"
+                  >
+                    {t("settings:enableSessionLifetime")}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("settings:enableSessionLifetimeDescription")}
+                  </p>
+                </div>
+                <Switch
+                  id="enable-session-lifetime"
+                  checked={isSessionLifetimeEnabled}
+                  onCheckedChange={handleSessionLifetimeToggle}
+                />
+              </div>
+
+              {isSessionLifetimeEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="session-lifetime" className="text-base">
+                    {t("settings:sessionLifetime")}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("settings:sessionLifetimeDescription")}
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <Controller
+                      name="sessionLifetime"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          id="session-lifetime"
+                          type="number"
+                          min="5"
+                          max="1440"
+                          value={field.value || 240}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value, 10);
+                            field.onChange(isNaN(value) ? 240 : value);
+                          }}
+                          className="w-32"
+                        />
+                      )}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      minutes
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Apply Changes Button - only show when there are unsaved changes */}

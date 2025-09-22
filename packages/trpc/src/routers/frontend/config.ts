@@ -12,6 +12,10 @@ export const createConfigRouter = (implementations: {
   setSsoSignupDisabled: (input: {
     disabled: boolean;
   }) => Promise<{ success: boolean }>;
+  getBasicAuthDisabled: () => Promise<boolean>;
+  setBasicAuthDisabled: (input: {
+    disabled: boolean;
+  }) => Promise<{ success: boolean }>;
   getMcpResetTimeoutOnProgress: () => Promise<boolean>;
   setMcpResetTimeoutOnProgress: (input: {
     enabled: boolean;
@@ -25,6 +29,10 @@ export const createConfigRouter = (implementations: {
   getMcpMaxAttempts: () => Promise<number>;
   setMcpMaxAttempts: (input: {
     maxAttempts: number;
+  }) => Promise<{ success: boolean }>;
+  getSessionLifetime: () => Promise<number | null>;
+  setSessionLifetime: (input: {
+    lifetime?: number | null;
   }) => Promise<{ success: boolean }>;
   getAllConfigs: () => Promise<
     Array<{ id: string; value: string; description?: string | null }>
@@ -55,6 +63,16 @@ export const createConfigRouter = (implementations: {
         return await implementations.setSsoSignupDisabled(input);
       }),
 
+    getBasicAuthDisabled: publicProcedure.query(async () => {
+      return await implementations.getBasicAuthDisabled();
+    }),
+
+    setBasicAuthDisabled: protectedProcedure
+      .input(z.object({ disabled: z.boolean() }))
+      .mutation(async ({ input }) => {
+        return await implementations.setBasicAuthDisabled(input);
+      }),
+
     getMcpResetTimeoutOnProgress: publicProcedure.query(async () => {
       return await implementations.getMcpResetTimeoutOnProgress();
     }),
@@ -70,7 +88,7 @@ export const createConfigRouter = (implementations: {
     }),
 
     setMcpTimeout: protectedProcedure
-      .input(z.object({ timeout: z.number().min(1000).max(3000000) }))
+      .input(z.object({ timeout: z.number().min(1000).max(86400000) }))
       .mutation(async ({ input }) => {
         return await implementations.setMcpTimeout(input);
       }),
@@ -80,7 +98,7 @@ export const createConfigRouter = (implementations: {
     }),
 
     setMcpMaxTotalTimeout: protectedProcedure
-      .input(z.object({ timeout: z.number().min(1000).max(3000000) }))
+      .input(z.object({ timeout: z.number().min(1000).max(86400000) }))
       .mutation(async ({ input }) => {
         return await implementations.setMcpMaxTotalTimeout(input);
       }),
@@ -93,6 +111,16 @@ export const createConfigRouter = (implementations: {
       .input(z.object({ maxAttempts: z.number().min(1).max(10) }))
       .mutation(async ({ input }) => {
         return await implementations.setMcpMaxAttempts(input);
+      }),
+
+    getSessionLifetime: publicProcedure.query(async () => {
+      return await implementations.getSessionLifetime();
+    }),
+
+    setSessionLifetime: protectedProcedure
+      .input(z.object({ lifetime: z.number().min(300000).max(86400000).nullable().optional() }))
+      .mutation(async ({ input }) => {
+        return await implementations.setSessionLifetime(input);
       }),
 
     getAllConfigs: protectedProcedure.query(async () => {

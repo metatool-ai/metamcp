@@ -20,6 +20,7 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [isSignupDisabled, setIsSignupDisabled] = useState(false);
+  const [isBasicAuthDisabled, setIsBasicAuthDisabled] = useState(false);
   const [isOidcLoading, setIsOidcLoading] = useState(false);
   const [isOidcEnabled, setIsOidcEnabled] = useState(false);
   const [authProvidersLoading, setAuthProvidersLoading] = useState(true);
@@ -41,6 +42,21 @@ function LoginForm() {
     };
 
     checkSignupStatus();
+  }, []);
+
+  // Check if basic auth is disabled
+  useEffect(() => {
+    const checkBasicAuthStatus = async () => {
+      try {
+        const isDisabled =
+          await vanillaTrpcClient.frontend.config.getBasicAuthDisabled.query();
+        setIsBasicAuthDisabled(isDisabled);
+      } catch (error) {
+        console.error("Failed to fetch basic auth config:", error);
+      }
+    };
+
+    checkBasicAuthStatus();
   }, []);
 
   // Check if OIDC is enabled
@@ -119,54 +135,64 @@ function LoginForm() {
         </div>
       )}
 
-      <form onSubmit={handleSignIn} className="space-y-4">
-        <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium">
-            {t("auth:email")}
-          </label>
-          <Input
-            id="email"
-            type="email"
-            placeholder={t("auth:emailPlaceholder")}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            disabled={isLoading}
-          />
-        </div>
+      {!isBasicAuthDisabled && (
+        <form onSubmit={handleSignIn} className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="email" className="text-sm font-medium">
+              {t("auth:email")}
+            </label>
+            <Input
+              id="email"
+              type="email"
+              placeholder={t("auth:emailPlaceholder")}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </div>
 
-        <div className="space-y-2">
-          <label htmlFor="password" className="text-sm font-medium">
-            {t("auth:password")}
-          </label>
-          <Input
-            id="password"
-            type="password"
-            placeholder={t("auth:passwordPlaceholder")}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={isLoading}
-          />
-        </div>
+          <div className="space-y-2">
+            <label htmlFor="password" className="text-sm font-medium">
+              {t("auth:password")}
+            </label>
+            <Input
+              id="password"
+              type="password"
+              placeholder={t("auth:passwordPlaceholder")}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? t("auth:signingIn") : t("auth:signIn")}
-        </Button>
-      </form>
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? t("auth:signingIn") : t("auth:signIn")}
+          </Button>
+        </form>
+      )}
+
+      {isBasicAuthDisabled && !isOidcEnabled && (
+        <div className="rounded-md bg-muted/50 p-4 text-center text-sm text-muted-foreground">
+          {t("auth:basicAuthDisabledMessage")}
+        </div>
+      )}
 
       {!authProvidersLoading && isOidcEnabled && (
         <>
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
+          {!isBasicAuthDisabled && (
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  {t("auth:orContinueWith")}
+                </span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                {t("auth:orContinueWith")}
-              </span>
-            </div>
-          </div>
+          )}
 
           <Button
             variant="outline"

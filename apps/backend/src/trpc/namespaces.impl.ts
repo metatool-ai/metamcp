@@ -12,6 +12,8 @@ import {
   UpdateNamespaceResponseSchema,
   UpdateNamespaceServerStatusRequestSchema,
   UpdateNamespaceServerStatusResponseSchema,
+  UpdateNamespaceToolOverridesRequestSchema,
+  UpdateNamespaceToolOverridesResponseSchema,
   UpdateNamespaceToolStatusRequestSchema,
   UpdateNamespaceToolStatusResponseSchema,
 } from "@repo/zod-types";
@@ -24,6 +26,10 @@ import {
   toolsRepository,
 } from "../db/repositories";
 import { NamespacesSerializer } from "../db/serializers";
+import {
+  clearOverrideCache,
+  mapOverrideNameToOriginal,
+} from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
 
 export const namespacesImplementations = {
@@ -282,6 +288,12 @@ export const namespacesImplementations = {
         // Don't fail the entire delete operation if idle server cleanup fails
       }
 
+      // Clear the tool overrides cache for the deleted namespace
+      clearOverrideCache(input.uuid);
+      console.log(
+        `Cleared tool overrides cache for deleted namespace ${input.uuid}`,
+      );
+
       return {
         success: true as const,
         message: "Namespace deleted successfully",
@@ -405,6 +417,12 @@ export const namespacesImplementations = {
           );
           // Don't fail the entire update operation if OpenAPI session invalidation fails
         });
+
+      // Clear tool overrides cache for this namespace since MCP servers list may have changed
+      clearOverrideCache(input.uuid);
+      console.log(
+        `Cleared tool overrides cache for updated namespace ${input.uuid}`,
+      );
 
       return {
         success: true as const,
@@ -564,6 +582,68 @@ export const namespacesImplementations = {
     }
   },
 
+  updateToolOverrides: async (
+    input: z.infer<typeof UpdateNamespaceToolOverridesRequestSchema>,
+    userId: string,
+  ): Promise<z.infer<typeof UpdateNamespaceToolOverridesResponseSchema>> => {
+    try {
+      // First, check if user has permission to update this namespace
+      const namespace = await namespacesRepository.findByUuid(
+        input.namespaceUuid,
+      );
+
+      if (!namespace) {
+        return {
+          success: false as const,
+          message: "Namespace not found",
+        };
+      }
+
+      // Check if user owns this namespace (only owners can update tool overrides)
+      if (namespace.user_id && namespace.user_id !== userId) {
+        return {
+          success: false as const,
+          message:
+            "Access denied: You can only update tool overrides for namespaces you own",
+        };
+      }
+
+      const updatedMapping =
+        await namespaceMappingsRepository.updateToolOverrides({
+          namespaceUuid: input.namespaceUuid,
+          toolUuid: input.toolUuid,
+          serverUuid: input.serverUuid,
+          overrideName: input.overrideName,
+          overrideDescription: input.overrideDescription,
+        });
+
+      if (!updatedMapping) {
+        return {
+          success: false as const,
+          message: "Tool not found in namespace",
+        };
+      }
+
+      // Clear the tool overrides cache for this namespace to ensure fresh data is loaded
+      clearOverrideCache(input.namespaceUuid);
+      console.log(
+        `Cleared tool overrides cache for namespace ${input.namespaceUuid} after updating tool overrides`,
+      );
+
+      return {
+        success: true as const,
+        message: "Tool overrides updated successfully",
+      };
+    } catch (error) {
+      console.error("Error updating tool overrides:", error);
+      return {
+        success: false as const,
+        message:
+          error instanceof Error ? error.message : "Internal server error",
+      };
+    }
+  },
+
   refreshTools: async (
     input: z.infer<typeof RefreshNamespaceToolsRequestSchema>,
     userId: string,
@@ -600,6 +680,8 @@ export const namespacesImplementations = {
       }
 
       // Parse tool names to extract server names and actual tool names
+      // Important: The input tools may have overridden names applied by MetaMCP middleware
+      // We need to map them back to original names to avoid overwriting original names in the database
       const parsedTools: Array<{
         serverName: string;
         toolName: string;
@@ -620,6 +702,31 @@ export const namespacesImplementations = {
 
         const serverName = tool.name.substring(0, lastDoubleUnderscoreIndex);
         const toolName = tool.name.substring(lastDoubleUnderscoreIndex + 2);
+
+        // Check if this tool name might be an override name by looking up the original name
+        // If it is an override name, skip this tool entirely to avoid duplicates
+        try {
+          const fullToolName = `${serverName}__${toolName}`;
+          const originalToolName = await mapOverrideNameToOriginal(
+            fullToolName,
+            input.namespaceUuid,
+          );
+
+          // If we found an original name mapping, this means the current toolName is an override
+          // Skip this tool to avoid creating duplicates
+          if (originalToolName !== fullToolName) {
+            console.log(
+              `Skipping override tool "${fullToolName}" as it maps to original "${originalToolName}"`,
+            );
+            continue;
+          }
+        } catch (error) {
+          // If mapping fails, continue with the parsed name (it's likely an original tool)
+          console.warn(
+            `Failed to map override name for tool "${toolName}":`,
+            error,
+          );
+        }
 
         if (!serverName || !toolName) {
           console.warn(`Invalid tool name format "${tool.name}", skipping`);
