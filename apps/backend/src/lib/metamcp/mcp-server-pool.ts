@@ -1,5 +1,6 @@
 import { ServerParameters } from "@repo/zod-types";
 
+import { configService } from "../config.service";
 import { ConnectedClient, connectMetaMcpClient } from "./client";
 import { serverErrorTracker } from "./server-error-tracker";
 
@@ -23,17 +24,24 @@ export class McpServerPool {
   // Mapping: sessionId -> Set<serverUuid> for cleanup tracking
   private sessionToServers: Record<string, Set<string>> = {};
 
+  // Session creation timestamps: sessionId -> timestamp
+  private sessionTimestamps: Record<string, number> = {};
+
   // Server parameters cache: serverUuid -> ServerParameters
   private serverParamsCache: Record<string, ServerParameters> = {};
 
   // Track ongoing idle session creation to prevent duplicates
   private creatingIdleSessions: Set<string> = new Set();
 
+  // Session cleanup timer
+  private cleanupTimer: NodeJS.Timeout | null = null;
+
   // Default number of idle sessions per server UUID
   private readonly defaultIdleCount: number;
 
   private constructor(defaultIdleCount: number = 1) {
     this.defaultIdleCount = defaultIdleCount;
+    this.startCleanupTimer();
   }
 
   /**
@@ -67,6 +75,7 @@ export class McpServerPool {
     if (!this.activeSessions[sessionId]) {
       this.activeSessions[sessionId] = {};
       this.sessionToServers[sessionId] = new Set();
+      this.sessionTimestamps[sessionId] = Date.now();
     }
 
     // Check if we have an idle session for this server that we can convert
@@ -266,6 +275,9 @@ export class McpServerPool {
     // Remove from active sessions
     delete this.activeSessions[sessionId];
 
+    // Clean up session timestamp
+    delete this.sessionTimestamps[sessionId];
+
     // Clean up session to servers mapping
     const serverUuids = this.sessionToServers[sessionId];
     if (serverUuids) {
@@ -306,8 +318,15 @@ export class McpServerPool {
     this.idleSessions = {};
     this.activeSessions = {};
     this.sessionToServers = {};
+    this.sessionTimestamps = {};
     this.serverParamsCache = {};
     this.creatingIdleSessions.clear();
+
+    // Clear cleanup timer
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
 
     console.log("Cleaned up all MCP server pool sessions");
   }
@@ -551,6 +570,77 @@ export class McpServerPool {
     await serverErrorTracker.resetServerErrorState(serverUuid);
 
     console.log(`Reset error state for server ${serverUuid}`);
+  }
+
+  /**
+   * Start the automatic cleanup timer for expired sessions
+   */
+  private startCleanupTimer(): void {
+    // Check for expired sessions every 5 minutes
+    this.cleanupTimer = setInterval(
+      async () => {
+        await this.cleanupExpiredSessions();
+      },
+      5 * 60 * 1000,
+    ); // 5 minutes
+  }
+
+  /**
+   * Clean up expired sessions based on session lifetime setting
+   */
+  private async cleanupExpiredSessions(): Promise<void> {
+    try {
+      const sessionLifetime = await configService.getSessionLifetime();
+      
+      // If session lifetime is null, sessions are infinite - skip cleanup
+      if (sessionLifetime === null) {
+        return;
+      }
+      
+      const now = Date.now();
+      const expiredSessionIds: string[] = [];
+
+      // Find expired sessions
+      for (const [sessionId, timestamp] of Object.entries(
+        this.sessionTimestamps,
+      )) {
+        if (now - timestamp > sessionLifetime) {
+          expiredSessionIds.push(sessionId);
+        }
+      }
+
+      // Clean up expired sessions
+      if (expiredSessionIds.length > 0) {
+        console.log(
+          `Cleaning up ${expiredSessionIds.length} expired MCP server pool sessions: ${expiredSessionIds.join(", ")}`,
+        );
+
+        await Promise.allSettled(
+          expiredSessionIds.map((sessionId) => this.cleanupSession(sessionId)),
+        );
+      }
+    } catch (error) {
+      console.error("Error during automatic session cleanup:", error);
+    }
+  }
+
+  /**
+   * Get session age in milliseconds
+   */
+  getSessionAge(sessionId: string): number | undefined {
+    const timestamp = this.sessionTimestamps[sessionId];
+    return timestamp ? Date.now() - timestamp : undefined;
+  }
+
+  /**
+   * Check if a session is expired
+   */
+  async isSessionExpired(sessionId: string): Promise<boolean> {
+    const age = this.getSessionAge(sessionId);
+    if (age === undefined) return false;
+
+    const sessionLifetime = await configService.getSessionLifetime();
+    return age > sessionLifetime;
   }
 }
 

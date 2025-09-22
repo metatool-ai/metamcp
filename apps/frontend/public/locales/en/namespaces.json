@@ -114,6 +114,9 @@
     "cannotToggleStatus": "Cannot toggle status for tools not saved to namespace",
     "toolStatusUpdated": "Tool status updated successfully",
     "toolStatusUpdateFailed": "Failed to update tool status",
+    "cannotUpdateOverrides": "Cannot update overrides for tools not saved to namespace",
+    "toolOverridesUpdated": "Tool overrides updated successfully",
+    "toolOverridesUpdateFailed": "Failed to update tool overrides",
     "sources": {
       "metamcp": "MetaMCP",
       "saved": "Saved",
@@ -128,7 +131,7 @@
       "source": "Source",
       "status": "Status"
     },
-    "toolDescription": "Tool Description",
+    "toolDescription": "Tool Description (Original)",
     "toolSchema": "Tool Schema",
     "type": "Type",
     "parameters": "Parameters",
@@ -136,7 +139,8 @@
     "showFullSchemaJson": "Show full schema JSON",
     "autoSaving": "Auto-saving...",
     "active": "ACTIVE",
-    "inactive": "INACTIVE"
+    "inactive": "INACTIVE",
+    "editOverrides": "Edit Overrides"
   },
   "serversTable": {
     "noServers": "No MCP Servers",

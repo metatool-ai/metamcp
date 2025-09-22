@@ -20,6 +20,10 @@ import {
   ListToolsHandler,
   MetaMCPHandlerContext,
 } from "../../../lib/metamcp/metamcp-middleware/functional-middleware";
+import {
+  createToolOverridesCallToolMiddleware,
+  createToolOverridesListToolsMiddleware,
+} from "../../../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { sanitizeName } from "../../../lib/metamcp/utils";
 
 // Original List Tools Handler (adapted from metamcp-proxy.ts)
@@ -201,6 +205,7 @@ export const createMiddlewareEnabledHandlers = (
 
   // Compose middleware with handlers
   const listToolsWithMiddleware = compose(
+    createToolOverridesListToolsMiddleware({ cacheEnabled: true }),
     createFilterListToolsMiddleware({ cacheEnabled: true }),
     // Add more middleware here as needed
     // createLoggingMiddleware(),
@@ -213,6 +218,7 @@ export const createMiddlewareEnabledHandlers = (
       customErrorMessage: (toolName, reason) =>
         `Access denied to tool "${toolName}": ${reason}`,
     }),
+    createToolOverridesCallToolMiddleware({ cacheEnabled: true }),
     // Add more middleware here as needed
     // createAuditingMiddleware(),
     // createAuthorizationMiddleware(),

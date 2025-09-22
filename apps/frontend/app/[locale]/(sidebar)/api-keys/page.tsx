@@ -377,7 +377,12 @@ export default function ApiKeysPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleDeleteClick({ uuid: apiKey.uuid, name: apiKey.name })}
+                      onClick={() =>
+                        handleDeleteClick({
+                          uuid: apiKey.uuid,
+                          name: apiKey.name,
+                        })
+                      }
                       disabled={deleteMutation.isPending}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -408,7 +413,9 @@ export default function ApiKeysPage() {
               disabled={deleteMutation.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? t("common:deleting") : t("api-keys:delete")}
+              {deleteMutation.isPending
+                ? t("common:deleting")
+                : t("api-keys:delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

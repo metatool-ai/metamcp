@@ -10,26 +10,37 @@ import {
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
+import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
 
 const streamableHttpRouter = express.Router();
 
-const transports: Record<string, StreamableHTTPServerTransport> = {}; // Web app transports by sessionId
+// Session lifetime manager for StreamableHTTP sessions
+const sessionManager =
+  new SessionLifetimeManagerImpl<StreamableHTTPServerTransport>(
+    "StreamableHTTP",
+  );
 
 // Cleanup function for a specific session
-const cleanupSession = async (sessionId: string) => {
+const cleanupSession = async (
+  sessionId: string,
+  transport?: StreamableHTTPServerTransport,
+) => {
   console.log(`Cleaning up StreamableHTTP session ${sessionId}`);
 
   try {
-    // Clean up transport
-    const transport = transports[sessionId];
-    if (transport) {
+    // Use provided transport or get from session manager
+    const sessionTransport = transport || sessionManager.getSession(sessionId);
+
+    if (sessionTransport) {
       console.log(`Closing transport for session ${sessionId}`);
-      await transport.close();
-      delete transports[sessionId];
+      await sessionTransport.close();
       console.log(`Transport cleaned up for session ${sessionId}`);
     } else {
       console.log(`No transport found for session ${sessionId}`);
     }
+
+    // Remove from session manager
+    sessionManager.removeSession(sessionId);
 
     // Clean up MetaMCP server pool session
     await metaMcpServerPool.cleanupSession(sessionId);
@@ -37,20 +48,16 @@ const cleanupSession = async (sessionId: string) => {
     console.log(`Session ${sessionId} cleanup completed successfully`);
   } catch (error) {
     console.error(`Error during cleanup of session ${sessionId}:`, error);
-    // Even if cleanup fails, remove the transport from our map to prevent memory leaks
-    if (transports[sessionId]) {
-      delete transports[sessionId];
-      console.log(
-        `Removed orphaned transport for session ${sessionId} due to cleanup error`,
-      );
-    }
+    // Even if cleanup fails, remove the session from manager to prevent memory leaks
+    sessionManager.removeSession(sessionId);
+    console.log(`Removed orphaned session ${sessionId} due to cleanup error`);
     throw error;
   }
 };
 
 // Health check endpoint to monitor sessions
 streamableHttpRouter.get("/health/sessions", (req, res) => {
-  const sessionIds = Object.keys(transports);
+  const sessionIds = sessionManager.getSessionIds();
   const poolStatus = metaMcpServerPool.getPoolStatus();
 
   res.json({
@@ -79,11 +86,11 @@ streamableHttpRouter.get(
 
     try {
       console.log(`Looking up existing session: ${sessionId}`);
-      console.log(`Available sessions:`, Object.keys(transports));
+      console.log(`Available sessions:`, sessionManager.getSessionIds());
 
-      const transport = transports[sessionId];
+      const transport = sessionManager.getSession(sessionId);
       if (!transport) {
-        console.log(`Session ${sessionId} not found in transports`);
+        console.log(`Session ${sessionId} not found in session manager`);
         res.status(404).end("Session not found");
         return;
       } else {
@@ -159,14 +166,16 @@ streamableHttpRouter.post(
         );
 
         // Store transport reference
-        transports[newSessionId] = transport;
+        sessionManager.addSession(newSessionId, transport);
 
         console.log(
           `Public Endpoint Client <-> Proxy sessionId: ${newSessionId} for endpoint ${endpointName} -> namespace ${namespaceUuid}`,
         );
         console.log(`Stored transport for sessionId: ${newSessionId}`);
-        console.log(`Current stored sessions:`, Object.keys(transports));
-        console.log(`Total active sessions: ${Object.keys(transports).length}`);
+        console.log(`Current stored sessions:`, sessionManager.getSessionIds());
+        console.log(
+          `Total active sessions: ${sessionManager.getSessionCount()}`,
+        );
 
         // Connect the server to the transport before handling the request
         await mcpServerInstance.server.connect(transport);
@@ -190,22 +199,22 @@ streamableHttpRouter.post(
       // console.log(
       //   `Received POST message for public endpoint ${endpointName} -> namespace ${namespaceUuid} sessionId ${sessionId}`,
       // );
-      console.log(`Available session IDs:`, Object.keys(transports));
+      console.log(`Available session IDs:`, sessionManager.getSessionIds());
       console.log(`Looking for sessionId: ${sessionId}`);
       try {
         console.log(`Looking up existing session: ${sessionId}`);
-        console.log(`Available sessions:`, Object.keys(transports));
+        console.log(`Available sessions:`, sessionManager.getSessionIds());
 
-        const transport = transports[sessionId];
+        const transport = sessionManager.getSession(sessionId);
         if (!transport) {
           console.error(
             `Transport not found for sessionId ${sessionId}. Available sessions:`,
-            Object.keys(transports),
+            sessionManager.getSessionIds(),
           );
           res.status(404).json({
             error: "Session not found",
             message: `Transport not found for sessionId ${sessionId}`,
-            available_sessions: Object.keys(transports),
+            available_sessions: sessionManager.getSessionIds(),
             timestamp: new Date().toISOString(),
           });
         } else {
@@ -247,7 +256,7 @@ streamableHttpRouter.delete(
         console.log(`Starting cleanup for session ${sessionId}`);
         console.log(
           `Available sessions before cleanup:`,
-          Object.keys(transports),
+          sessionManager.getSessionIds(),
         );
 
         await cleanupSession(sessionId);
@@ -257,13 +266,13 @@ streamableHttpRouter.delete(
         );
         console.log(
           `Available sessions after cleanup:`,
-          Object.keys(transports),
+          sessionManager.getSessionIds(),
         );
 
         res.status(200).json({
           message: "Session cleaned up successfully",
           sessionId: sessionId,
-          remainingSessions: Object.keys(transports),
+          remainingSessions: sessionManager.getSessionIds(),
         });
       } catch (error) {
         console.error("Error in public endpoint /mcp DELETE route:", error);
@@ -281,5 +290,10 @@ streamableHttpRouter.delete(
     }
   },
 );
+
+// Initialize automatic cleanup timer using session manager
+sessionManager.startCleanupTimer(async (sessionId, transport) => {
+  await cleanupSession(sessionId, transport);
+});
 
 export default streamableHttpRouter;

@@ -7,6 +7,7 @@ import {
   namespaceToolMappingsTable,
   toolsTable,
 } from "../../../db/schema";
+import { parseToolName } from "../tool-name-parser";
 import {
   CallToolMiddleware,
   ListToolsMiddleware,
@@ -140,22 +141,7 @@ async function getToolStatus(
   }
 }
 
-/**
- * Extract server info from tool name
- */
-function parseToolName(
-  toolName: string,
-): { serverName: string; originalToolName: string } | null {
-  const firstDoubleUnderscoreIndex = toolName.indexOf("__");
-  if (firstDoubleUnderscoreIndex === -1) {
-    return null;
-  }
-
-  return {
-    serverName: toolName.substring(0, firstDoubleUnderscoreIndex),
-    originalToolName: toolName.substring(firstDoubleUnderscoreIndex + 2),
-  };
-}
+// parseToolName is now imported from shared utility
 
 /**
  * Get server UUID by name

@@ -112,7 +112,7 @@
     "errorLoadingDescription": "Failed to load MCP servers",
     "retry": "Retry",
     "noServersTitle": "No MCP Servers",
-    "noServersDescription": "You haven't configured any MCP servers yet. Click \"Create MCP Server\" to get started.",
+    "noServersDescription": "You haven't configured any MCP servers yet. Click \"Add Server\" to get started.",
     "createMcpServer": "Create MCP Server",
     "deleteConfirmTitle": "Delete MCP Server",
     "deleteConfirmDescription": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",

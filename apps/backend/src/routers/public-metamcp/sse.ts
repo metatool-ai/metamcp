@@ -9,26 +9,31 @@ import {
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
+import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
 
 const sseRouter = express.Router();
 
-const webAppTransports: Map<string, Transport> = new Map<string, Transport>(); // Web app transports by sessionId
+// Session lifetime manager for SSE sessions
+const sessionManager = new SessionLifetimeManagerImpl<Transport>("SSE");
 
 // Cleanup function for a specific session
-const cleanupSession = async (sessionId: string) => {
+const cleanupSession = async (sessionId: string, transport?: Transport) => {
   console.log(`Cleaning up SSE session ${sessionId}`);
 
   try {
-    // Clean up transport
-    const transport = webAppTransports.get(sessionId);
-    if (transport) {
+    // Use provided transport or get from session manager
+    const sessionTransport = transport || sessionManager.getSession(sessionId);
+
+    if (sessionTransport) {
       console.log(`Closing transport for session ${sessionId}`);
-      await transport.close();
-      webAppTransports.delete(sessionId);
+      await sessionTransport.close();
       console.log(`Transport cleaned up for session ${sessionId}`);
     } else {
       console.log(`No transport found for session ${sessionId}`);
     }
+
+    // Remove from session manager
+    sessionManager.removeSession(sessionId);
 
     // Clean up MetaMCP server pool session
     await metaMcpServerPool.cleanupSession(sessionId);
@@ -36,13 +41,9 @@ const cleanupSession = async (sessionId: string) => {
     console.log(`Session ${sessionId} cleanup completed successfully`);
   } catch (error) {
     console.error(`Error during cleanup of session ${sessionId}:`, error);
-    // Even if cleanup fails, remove the transport from our map to prevent memory leaks
-    if (webAppTransports.has(sessionId)) {
-      webAppTransports.delete(sessionId);
-      console.log(
-        `Removed orphaned transport for session ${sessionId} due to cleanup error`,
-      );
-    }
+    // Even if cleanup fails, remove the session from manager to prevent memory leaks
+    sessionManager.removeSession(sessionId);
+    console.log(`Removed orphaned session ${sessionId} due to cleanup error`);
     throw error;
   }
 };
@@ -81,7 +82,7 @@ sseRouter.get(
         `Using MetaMCP server instance for public endpoint session ${sessionId}`,
       );
 
-      webAppTransports.set(sessionId, webAppTransport);
+      sessionManager.addSession(sessionId, webAppTransport);
 
       // Handle cleanup when connection closes
       res.on("close", async () => {
@@ -113,7 +114,7 @@ sseRouter.post(
       //   `Received POST message for public endpoint ${endpointName} -> namespace ${namespaceUuid} sessionId ${sessionId}`,
       // );
 
-      const transport = webAppTransports.get(
+      const transport = sessionManager.getSession(
         sessionId as string,
       ) as SSEServerTransport;
       if (!transport) {
@@ -127,5 +128,10 @@ sseRouter.post(
     }
   },
 );
+
+// Initialize automatic cleanup timer using session manager
+sessionManager.startCleanupTimer(async (sessionId, transport) => {
+  await cleanupSession(sessionId, transport);
+});
 
 export default sseRouter;
