@@ -50,9 +50,11 @@ if (DATABASE_TYPE === "postgresql") {
 }
 
 // Create the appropriate Drizzle instance
-export const db = DATABASE_TYPE === "sqlite" 
+export const typedDb = DATABASE_TYPE === "sqlite" 
   ? drizzleSqlite(sqliteDb!, { schema })
   : drizzle(pool!, { schema });
+
+export const db = typedDb as any;
 
 // Graceful shutdown function
 export const closeDatabase = async () => {

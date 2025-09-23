@@ -19,9 +19,8 @@ import { namespaceMappingsRepository } from "./namespace-mappings.repo";
 
 export class NamespacesRepository {
   async create(input: NamespaceCreateInput): Promise<DatabaseNamespace> {
-    return await db.transaction(async (tx) => {
       // Create the namespace
-      const [createdNamespace] = await tx
+      const [createdNamespace] = await db
         .insert(namespacesTable)
         .values({
           name: input.name,
@@ -33,7 +32,6 @@ export class NamespacesRepository {
       if (!createdNamespace) {
         throw new Error("Failed to create namespace");
       }
-
       // If mcp server UUIDs are provided, create the mappings with default ACTIVE status
       if (input.mcpServerUuids && input.mcpServerUuids.length > 0) {
         const mappings = input.mcpServerUuids.map((serverUuid) => ({
@@ -42,10 +40,10 @@ export class NamespacesRepository {
           status: "ACTIVE" as const,
         }));
 
-        await tx.insert(namespaceServerMappingsTable).values(mappings);
+        await db.insert(namespaceServerMappingsTable).values(mappings);
 
         // Also create namespace-tool mappings for all tools of the selected servers
-        const serverTools = await tx
+        const serverTools = await db
           .select({
             uuid: toolsTable.uuid,
             mcp_server_uuid: toolsTable.mcp_server_uuid,
@@ -61,12 +59,11 @@ export class NamespacesRepository {
             status: "ACTIVE" as const,
           }));
 
-          await tx.insert(namespaceToolMappingsTable).values(toolMappings);
+          await db.insert(namespaceToolMappingsTable).values(toolMappings);
         }
       }
 
       return createdNamespace;
-    });
   }
 
   async findAll(): Promise<DatabaseNamespace[]> {
@@ -283,9 +280,8 @@ export class NamespacesRepository {
   }
 
   async update(input: NamespaceUpdateInput): Promise<DatabaseNamespace> {
-    return await db.transaction(async (tx) => {
       // Update the namespace
-      const [updatedNamespace] = await tx
+      const [updatedNamespace] = await db
         .update(namespacesTable)
         .set({
           name: input.name,
@@ -315,12 +311,12 @@ export class NamespacesRepository {
         });
 
         // Delete existing server mappings
-        await tx
+        await db
           .delete(namespaceServerMappingsTable)
           .where(eq(namespaceServerMappingsTable.namespace_uuid, input.uuid));
 
         // Delete existing tool mappings
-        await tx
+        await db
           .delete(namespaceToolMappingsTable)
           .where(eq(namespaceToolMappingsTable.namespace_uuid, input.uuid));
 
@@ -332,10 +328,10 @@ export class NamespacesRepository {
             status: "ACTIVE" as const,
           }));
 
-          await tx.insert(namespaceServerMappingsTable).values(serverMappings);
+          await db.insert(namespaceServerMappingsTable).values(serverMappings);
 
           // Also create namespace-tool mappings for all tools of the selected servers
-          const serverTools = await tx
+          const serverTools = await db
             .select({
               uuid: toolsTable.uuid,
               mcp_server_uuid: toolsTable.mcp_server_uuid,
@@ -353,13 +349,11 @@ export class NamespacesRepository {
                 existingToolStatusMap.get(tool.uuid) || ("ACTIVE" as const),
             }));
 
-            await tx.insert(namespaceToolMappingsTable).values(toolMappings);
+            await db.insert(namespaceToolMappingsTable).values(toolMappings);
           }
         }
       }
-
       return updatedNamespace;
-    });
   }
 }
 

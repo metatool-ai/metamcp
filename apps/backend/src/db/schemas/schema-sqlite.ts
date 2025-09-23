@@ -291,6 +291,8 @@ export const namespaceToolMappingsTable = sqliteTable(
     created_at: integer("created_at", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),
+    override_name: text("override_name"),
+    override_description: text("override_description"),
   },
   (table) => [
     index("namespace_tool_mappings_namespace_uuid_idx").on(
