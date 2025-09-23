@@ -1,23 +1,22 @@
 "use client";
 
-// import { useEffect, useState } from "react";
-
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useLogsStore } from "@/lib/stores/logs-store";
 
 export function LogsStatusIndicator() {
   const { totalCount, isAutoRefreshing } = useLogsStore();
-  // const [recentErrorCount, setRecentErrorCount] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
-  // Count recent errors (last 5 minutes) - REMOVED
-  // useEffect(() => {
-  //   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-  //   const recentErrors = logs.filter(
-  //     (log) =>
-  //       log.level === "error" && new Date(log.timestamp) > fiveMinutesAgo,
-  //   ).length;
-  //   setRecentErrorCount(recentErrors);
-  // }, [logs]);
+  // Only render after component mounts to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Return empty div during SSR to avoid hydration mismatch
+  if (!mounted) {
+    return <div className="flex items-center gap-1" />;
+  }
 
   if (totalCount === 0) {
     return (
@@ -37,12 +36,6 @@ export function LogsStatusIndicator() {
       <Badge variant="outline" className="text-xs px-1.5 py-0.5">
         {totalCount}
       </Badge>
-      {/* Removed red error badge */}
-      {/* {recentErrorCount > 0 && (
-        <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
-          {recentErrorCount}
-        </Badge>
-      )} */}
       {isAutoRefreshing && (
         <div
           className="w-2 h-2 bg-green-500 rounded-full animate-pulse"
