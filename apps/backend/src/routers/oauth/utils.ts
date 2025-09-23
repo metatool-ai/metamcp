@@ -338,3 +338,49 @@ export function securityHeaders(
 
   next();
 }
+
+/**
+ * Validates subject token from external provider (generic interface)
+ * Currently supports Supabase as token provider
+ * @param token JWT access token from external provider
+ * @returns User information if valid, null if invalid
+ */
+export async function validateSubjectToken(
+  token: string,
+): Promise<{ id: string; email?: string } | null> {
+  // Provider-specific validation logic
+  // TODO: Add support for other providers (Auth0, Firebase, etc.)
+  return await validateSupabaseJWT(token);
+}
+
+/**
+ * Validates Supabase JWT using their user validation endpoint
+ * @param token Supabase JWT access token
+ * @returns User information if valid, null if invalid
+ */
+export async function validateSupabaseJWT(
+  token: string,
+): Promise<{ id: string; email?: string } | null> {
+  try {
+    // Use Supabase's documented user validation endpoint
+    const response = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY,
+      },
+    });
+
+    if (response.ok) {
+      const user = await response.json();
+      return { id: user.id, email: user.email };
+    }
+
+    console.warn(
+      `Supabase JWT validation failed: ${response.status} ${response.statusText}`,
+    );
+  } catch (error) {
+    console.error("Supabase JWT validation error:", error);
+  }
+
+  return null;
+}
