@@ -36,6 +36,23 @@ function ensureLinuxPnpm() {
     run("curl", ["-L", PNPM_LINUX_URL, "-o", pnpmPath]);
     chmodSync(pnpmPath, 0o755);
   }
+  const pnpmAlias = path.join(repoRoot, "scripts", "pnpm");
+  if (!existsSync(pnpmAlias)) {
+    try {
+      chmodSync(pnpmPath, 0o755);
+      // create symlink so tools expecting `pnpm` can resolve the binary
+      run("ln", ["-sf", pnpmPath, pnpmAlias]);
+    } catch (error) {
+      // ignore failures; direct path will still work
+    }
+  }
+  const scriptsDir = path.dirname(pnpmPath);
+  if (process.env.PATH && !process.env.PATH.includes(scriptsDir)) {
+    process.env.PATH = `${scriptsDir}:${process.env.PATH}`;
+  }
+  process.env.npm_execpath = pnpmPath;
+  process.env.npm_node_execpath = process.execPath;
+  process.env.npm_config_user_agent = `pnpm/${PNPM_VERSION}`;
   return pnpmPath;
 }
 

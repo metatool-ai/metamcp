@@ -1,0 +1,5 @@
+build/metamcp/node_modules/
+build/metamcp/apps/*/node_modules/
+build/metamcp/packages/*/node_modules/
+build/metamcp/.pnpm-store/
+build/metamcp/.git/

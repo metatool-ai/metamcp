@@ -5,10 +5,12 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const repoRoot = path.join(
+const wrapperRoot = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
+const buildRoot = path.join(wrapperRoot, "build", "metamcp");
+let repoRoot = buildRoot;
 const PNPM_VERSION = "9.15.9";
 const PNPM_LINUX_URL = `https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linuxstatic-x64`;
 const UV_VERSION = "0.8.19";
@@ -16,6 +18,59 @@ const FRONTEND_STANDALONE_CANDIDATES = [
   ".next/standalone/apps/frontend/server.js",
   ".next/standalone/server.js",
 ];
+
+function resolveNodeCommand() {
+  if (process.env.NODE_BINARY && existsSync(process.env.NODE_BINARY)) {
+    return process.env.NODE_BINARY;
+  }
+
+  if (existsSync("/usr/bin/node")) {
+    return "/usr/bin/node";
+  }
+
+  return "node";
+}
+
+function ensureBuildTree(nodeCommand) {
+  const packageJsonPath = path.join(buildRoot, "package.json");
+  if (existsSync(packageJsonPath)) {
+    repoRoot = buildRoot;
+    return;
+  }
+
+  console.log("[MetaMCP][Databricks] Preparing MetaMCP upstream tree");
+  const prepareCmd =
+    "METAMCP_REF=${METAMCP_REF:-} METAMCP_REPO_URL=${METAMCP_REPO_URL:-https://github.com/metatool-ai/metamcp.git} bash ./scripts/prepare-metamcp.sh";
+  const prepareResult = spawnSync(
+    "bash",
+    ["-lc", prepareCmd],
+    {
+      cwd: wrapperRoot,
+      stdio: "inherit",
+      env: process.env,
+    },
+  );
+  if (prepareResult.status !== 0) {
+    throw new Error("Failed to prepare MetaMCP tree");
+  }
+
+  console.log("[MetaMCP][Databricks] Building MetaMCP workspace");
+  const buildResult = spawnSync(
+    nodeCommand,
+    ["build/metamcp/scripts/databricks-build.mjs"],
+    {
+      cwd: wrapperRoot,
+      stdio: "inherit",
+      env: process.env,
+    },
+  );
+
+  if (buildResult.status !== 0) {
+    throw new Error("Failed to build MetaMCP workspace");
+  }
+
+  repoRoot = buildRoot;
+}
 
 function spawnService(name, command, args, options) {
   const child = spawn(command, args, {
@@ -208,35 +263,57 @@ function installUvWithScript() {
 }
 
 function ensureLinuxPnpm() {
+  if (process.platform !== "linux") {
+    return null;
+  }
+
   const pnpmPath = path.join(repoRoot, "scripts", "pnpm-linuxstatic");
   if (!existsSync(pnpmPath)) {
-    const download = spawnSync("curl", ["-L", PNPM_LINUX_URL, "-o", pnpmPath], {
-      cwd: repoRoot,
-      encoding: "utf-8",
-    });
-    if (download.stdout) process.stdout.write(download.stdout);
-    if (download.stderr) process.stderr.write(download.stderr);
+    console.log(
+      `[MetaMCP][Databricks] Downloading pnpm ${PNPM_VERSION} static binary`,
+    );
+    const download = spawnSync(
+      "curl",
+      ["-L", PNPM_LINUX_URL, "-o", pnpmPath],
+      {
+        cwd: repoRoot,
+        stdio: "inherit",
+      },
+    );
+
     if (download.status !== 0) {
-      throw new Error("Failed to download pnpm static binary");
+      throw new Error("Failed to download pnpm-linuxstatic");
     }
+
     chmodSync(pnpmPath, 0o755);
   }
+
   return pnpmPath;
 }
 
 function getPnpmCommand() {
-  if (process.platform === "linux") {
-    return { command: ensureLinuxPnpm(), args: [] };
+  const pnpmStatic = ensureLinuxPnpm();
+  if (pnpmStatic) {
+    return { command: pnpmStatic, args: [] };
   }
 
-  const local = spawnSync("pnpm", ["--version"], {
+  const pnpmLocal = spawnSync("pnpm", ["--version"], {
     cwd: repoRoot,
     stdio: "ignore",
   });
-  if (local.status === 0) {
+  if (pnpmLocal.status === 0) {
     return { command: "pnpm", args: [] };
   }
 
+  const corepack = spawnSync("corepack", ["prepare", `pnpm@${PNPM_VERSION}`, "--activate"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  if (corepack.status === 0) {
+    return { command: "pnpm", args: [] };
+  }
+
+  console.warn("[MetaMCP][Databricks] Falling back to npx pnpm; consider enabling corepack");
   return { command: "npx", args: [`pnpm@${PNPM_VERSION}`] };
 }
 
@@ -312,6 +389,7 @@ function prepareStandaloneAssets(frontendDir, standaloneEntrypoint) {
 
 function runDatabaseMigrations(pnpmCommand, pnpmArgs) {
   console.log("[MetaMCP][Databricks] Applying database migrations");
+
   const result = spawnSync(
     pnpmCommand,
     [...pnpmArgs, "--filter", "backend", "exec", "drizzle-kit", "migrate"],
@@ -328,6 +406,8 @@ function runDatabaseMigrations(pnpmCommand, pnpmArgs) {
 }
 
 async function main() {
+  const nodeCommand = resolveNodeCommand();
+  ensureBuildTree(nodeCommand);
   await ensureDatabaseCredential();
   ensureEnv();
   ensureUvCli();
@@ -343,7 +423,7 @@ async function main() {
 
   backend = spawnService(
     "backend",
-    "node",
+    nodeCommand,
     ["dist/index.js"],
     {
       cwd: path.join(repoRoot, "apps", "backend"),
@@ -360,16 +440,34 @@ async function main() {
 
   const standaloneEntrypoint = findStandaloneEntrypoint(frontendDir);
 
-  let frontendCommand = pnpmCommand;
-  let frontendArgs = [...pnpmArgs, "start"];
+  let frontendCommand = nodeCommand;
+  let frontendArgs = [];
 
   if (standaloneEntrypoint) {
     prepareStandaloneAssets(frontendDir, standaloneEntrypoint);
-    frontendCommand = "node";
     frontendArgs = [standaloneEntrypoint];
+  } else {
+    const nextBin = path.join(
+      frontendDir,
+      "node_modules",
+      "next",
+      "dist",
+      "bin",
+      "next",
+    );
+
+    if (existsSync(nextBin)) {
+      frontendArgs = [nextBin, "start"];
+    } else {
+      console.warn(
+        "[MetaMCP][Databricks] next binary missing; falling back to pnpm start",
+      );
+      frontendCommand = pnpmCommand;
+      frontendArgs = [...pnpmArgs, "start"];
+    }
   }
 
-  if (frontendCommand === "node") {
+  if (frontendCommand === nodeCommand) {
     console.log(`[MetaMCP][Databricks] Starting frontend via ${frontendArgs[0]}`);
   } else {
     console.log("[MetaMCP][Databricks] Starting frontend via pnpm start");
