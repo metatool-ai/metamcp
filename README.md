@@ -155,12 +155,32 @@ volumes:
 
 ### **💻 Local Development**
 
+**Option 1: PostgreSQL (Recommended)**
 Still recommend running postgres through docker for easy setup:
 
 ```bash
 pnpm install
 pnpm dev
 ```
+
+**Option 2: SQLite (Simpler Setup)**
+For local development, you can also use SQLite instead of PostgreSQL:
+
+```bash
+# Copy the SQLite example environment
+cp example.env.sqlite .env.local
+
+# Set up SQLite database
+cd apps/backend
+npm run setup:sqlite
+npm run db:generate:sqlite:dev
+npm run db:migrate:sqlite:dev
+
+# Start the application
+pnpm dev
+```
+
+See [SQLITE_SETUP.md](./SQLITE_SETUP.md) for detailed SQLite configuration.
 
 ## 🔌 MCP Protocol Compatibility
 

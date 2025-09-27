@@ -13,12 +13,17 @@
     "clean": "rm -rf dist",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
-    "db:generate:dev": "dotenv -e ../../.env.local -- drizzle-kit generate",
-    "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate",
-    "db:migrate:dev": "dotenv -e ../../.env.local -- drizzle-kit migrate"
+    "db:generate": "DATABASE_TYPE=postgresql dotenv -e ../../.env -- drizzle-kit generate",
+    "db:generate:dev": "DATABASE_TYPE=postgresql dotenv -e ../../.env.local -- drizzle-kit generate",
+    "db:generate:sqlite": "DATABASE_TYPE=sqlite dotenv -e ../../.env -- drizzle-kit generate",
+    "db:generate:sqlite:dev": "DATABASE_TYPE=sqlite dotenv -e ../../.env.local -- drizzle-kit generate",
+    "db:migrate": "DATABASE_TYPE=postgresql dotenv -e ../../.env -- drizzle-kit migrate",
+    "db:migrate:dev": "DATABASE_TYPE=postgresql dotenv -e ../../.env.local -- drizzle-kit migrate",
+    "db:migrate:sqlite": "DATABASE_TYPE=sqlite dotenv -e ../../.env -- drizzle-kit migrate",
+    "db:migrate:sqlite:dev": "DATABASE_TYPE=sqlite dotenv -e ../../.env.local -- drizzle-kit migrate"
   },
   "dependencies": {
+    "@libsql/client": "^0.15.15",
     "@modelcontextprotocol/sdk": "^1.16.0",
     "@repo/trpc": "workspace:*",
     "@repo/zod-types": "workspace:*",
@@ -36,6 +41,7 @@
     "pg": "^8.16.0",
     "shell-quote": "^1.8.3",
     "spawn-rx": "^5.1.2",
+    "better-sqlite3": "^11.6.0",
     "zod": "^3.25.64"
   },
   "devDependencies": {
@@ -47,6 +53,7 @@
     "@types/node": "^20.0.0",
     "@types/pg": "^8.15.4",
     "@types/shell-quote": "^1.7.5",
+    "@types/better-sqlite3": "^7.6.11",
     "dotenv-cli": "^8.0.0",
     "drizzle-kit": "^0.31.1",
     "eslint": "^9.28.0",
