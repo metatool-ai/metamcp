@@ -60,7 +60,8 @@ MetaMCP 中的**命名空间**是 MCP 服务器的逻辑分组，允许您将多
 
 ### 工具命名约定
 
-工具遵循模式：`{ServerName}__{originalToolName}`
+工具遵循模式：`{ServerName}__{originalToolName}`。在串联 MetaMCP 网关时，
+`originalToolName` 本身可能包含嵌套前缀（例如 `OuterServer__InnerServer__my_tool`）。
 
 示例：来自 "WebSearch" 服务器的 `search` 工具变成 `WebSearch__search`
 

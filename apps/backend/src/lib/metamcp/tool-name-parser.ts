@@ -3,7 +3,7 @@
  *
  * Tool names follow the format: {ServerPrefix}__{toolName}
  * Where ServerPrefix can be nested: Parent__Child__GrandChild
- * The last __ is always the separator between server prefix and actual tool name
+ * The first __ is always the separator between the top-level server prefix and the forwarded tool name
  */
 
 export interface ParsedToolName {
@@ -23,19 +23,19 @@ export interface ParsedToolName {
  *
  * @example
  * parseToolName("Parent__Child__my_tool")
- * // → { serverName: "Parent__Child", originalToolName: "my_tool" }
+ * // → { serverName: "Parent", originalToolName: "Child__my_tool" }
  */
 export function parseToolName(toolName: string): ParsedToolName | null {
-  const lastDoubleUnderscoreIndex = toolName.lastIndexOf("__");
-  if (lastDoubleUnderscoreIndex === -1) {
+  const firstDoubleUnderscoreIndex = toolName.indexOf("__");
+  if (firstDoubleUnderscoreIndex === -1) {
     return null;
   }
 
-  // The last __ is always the separator between the full server prefix and the actual tool name
-  // Everything before the last __ is the server prefix (which may contain nested servers)
-  // Everything after the last __ is the actual tool name
-  const serverName = toolName.substring(0, lastDoubleUnderscoreIndex);
-  const originalToolName = toolName.substring(lastDoubleUnderscoreIndex + 2);
+  // The first __ is always the separator between the top-level server prefix and the forwarded tool name
+  // Everything before the first __ is the server prefix (which may contain nested servers)
+  // Everything after the first __ is the forwarded tool name (which may itself include additional prefixes)
+  const serverName = toolName.substring(0, firstDoubleUnderscoreIndex);
+  const originalToolName = toolName.substring(firstDoubleUnderscoreIndex + 2);
 
   return {
     serverName,
