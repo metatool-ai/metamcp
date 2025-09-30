@@ -60,7 +60,9 @@ When you create a namespace:
 
 ### Tool Naming Convention
 
-Tools follow the pattern: `{ServerName}__{originalToolName}`
+Tools follow the pattern: `{ServerName}__{originalToolName}`. When chaining
+MetaMCP gateways, `originalToolName` can itself contain nested prefixes (for
+example, `OuterServer__InnerServer__my_tool`).
 
 Example: A `search` tool from "WebSearch" server becomes `WebSearch__search`
 
