@@ -8,12 +8,12 @@ resources:
       capacity: ${var.db_capacity}
       enable_pg_native_login: true
 
-  database_catalogs:
-    metamcp_catalog:
-      name: ${var.lakebase_database_name}
-      database_instance_name: ${resources.database_instances.metamcp_lakebase.name}
-      database_name: ${var.lakebase_database_name}
-      create_database_if_not_exists: true
+  # database_catalogs:
+  #   metamcp_catalog:
+  #     name: ${var.lakebase_database_name}
+  #     database_instance_name: ${resources.database_instances.metamcp_lakebase.name}
+  #     database_name: ${var.lakebase_database_name}
+  #     create_database_if_not_exists: true
 
   apps:
     metamcp_app:
@@ -39,7 +39,7 @@ variables:
     default: metamcp-lakebase
   lakebase_database_name:
     description: "Lakehouse database used by MetaMCP"
-    default: metamcp_app
+    default: postgres
 
 targets:
   # Development environment

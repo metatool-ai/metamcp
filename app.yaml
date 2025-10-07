@@ -32,7 +32,7 @@ env:
   - name: LAKEBASE_INSTANCE_NAME
     value: metamcp
   - name: LAKEBASE_DATABASE_NAME
-    value: metamcp_app
+    value: postgres
   - name: METAMCP_REPO_URL
     value: ${METAMCP_REPO_URL}
   - name: METAMCP_REF
