@@ -390,8 +390,11 @@ function prepareStandaloneAssets(frontendDir, standaloneEntrypoint) {
 async function ensureCustomSchema() {
   console.log("[MetaMCP][Databricks] Ensuring custom schema exists");
 
-  const pgPath = path.join(repoRoot, "node_modules", "pg", "lib", "index.js");
-  const { default: pg } = await import(pgPath);
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const pgPath = path.join(repoRoot, "apps", "backend", "node_modules", "pg");
+  const pg = require(pgPath);
+
   const client = new pg.Client({
     connectionString: process.env.DATABASE_URL,
   });
