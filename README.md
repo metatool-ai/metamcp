@@ -167,25 +167,55 @@ make test     # Rebuild and run local preflight checks
 make help     # Show all commands
 ```
 
-## Lakehouse Provisioning
-- The bundle now creates both the Lakebase instance and the backing database (`metamcp_app` by default) via the `database_catalogs` resource, preventing `Database <name> does not exist` failures during `databricks bundle deploy`.
-- After pulling this change, re-run `make bundle-deploy TARGET=<env>` once per workspace so the database is created before the next app snapshot.
-- `make test` (or `databricks bundle validate`) catches missing Lakehouse resources locally before you deploy.
+## Lakehouse Provisioning & Custom Schema
+
+### Database Setup
+
+- The bundle creates a Lakebase PostgreSQL instance (`metamcp-lakebase`) with the default `postgres` database
+- All MetaMCP tables and types are created in a custom schema called `metamcp_app`
+- This custom schema approach is **required** for Lakebase compatibility—see below
+
+### Why Custom Schema?
+
+When using Lakebase with `CAN_CONNECT_AND_CREATE` permission, the service principal **cannot create objects in the public schema** (permission denied). This is a Lakebase security model limitation.
+
+**Solution**: All database objects (tables, ENUMs, indexes) are automatically created in the `metamcp_app` schema where the service principal has full ownership.
+
+### How Schema Patching Works
+
+The build process (`scripts/prepare-metamcp.sh`) automatically applies patches that:
+
+1. Replace `pgEnum()` with `metamcpSchema.enum()` in schema definitions
+2. Replace `pgTable()` with `metamcpSchema.table()` in all table definitions
+3. Add `schemaFilter: ["metamcp_app"]` to Drizzle config
+4. Patch migration SQL files to use `"metamcp_app"` instead of `"public"`
+5. Set `PGOPTIONS="-c search_path=metamcp_app,public"` at runtime
+
+**These patches run automatically during every build** via `prepare-metamcp.sh`, so upgrading MetaMCP versions will continue to work—the patches are reapplied fresh each time.
+
+### Troubleshooting
+
+- `make test` (or `databricks bundle validate`) catches missing Lakehouse resources locally before you deploy
+- If you see "permission denied for schema public" errors, the schema patches may not have been applied—rebuild with `make prepare && make build`
 
 ## Upgrading MetaMCP
+
 1. Update `METAMCP_REF` in `.env` to the new version
 2. Deploy to dev first: `make dev`
 3. Verify with `make health`
 4. Deploy to production: `make`
 
 ## Common Issues
+
 - **Not authenticated?** Run `databricks auth login --profile <PROFILE>`
 - **Health check fails?** The app may still be starting—wait 30 seconds
 - **Build errors?** Ensure workspace has outbound network access
 - **App not found?** Check the app name matches your configuration
 
 ## CI/CD
+
 For automated deployments:
+
 - Store `.env` contents in your secret manager
 - Pin `METAMCP_REF` for reproducible builds
 - Run health checks as deployment gates

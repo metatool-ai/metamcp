@@ -18,6 +18,49 @@ This repository wraps the upstream MetaMCP release so we can ship a Databricks A
 
 Understanding these scripts is critical: any local edits under `build/metamcp` are lost on the next prepare, so permanent changes must live in our wrapper repo or an upstream fork.
 
+## Lakebase Schema Patching (CRITICAL)
+
+### The Problem
+When using Lakebase PostgreSQL with `CAN_CONNECT_AND_CREATE` permission, **service principals cannot create objects in the public schema**. This is a Lakebase security model restriction, not a PostgreSQL limitation.
+
+Attempting to run migrations without patching results in:
+```
+permission denied for schema public
+```
+
+### The Solution
+`scripts/prepare-metamcp.sh` automatically applies build-time patches that redirect ALL database objects to a custom `metamcp_app` schema where the service principal has ownership:
+
+1. **Schema Definition Patches** (lines 114-132):
+   - Imports `pgSchema` from drizzle-orm/pg-core
+   - Creates `metamcpSchema = pgSchema("metamcp_app")`
+   - Replaces all `pgEnum()` calls with `metamcpSchema.enum()`
+   - Replaces all `pgTable()` calls with `metamcpSchema.table()`
+
+2. **Migration File Patches** (line 139):
+   - Rewrites pre-generated SQL migration files
+   - Changes `"public"."mcp_server_status"` → `"metamcp_app"."mcp_server_status"`
+   - Changes `REFERENCES "public"."users"` → `REFERENCES "metamcp_app"."users"`
+
+3. **Drizzle Config Patch** (lines 116-118):
+   - Adds `schemaFilter: ["metamcp_app"]` to drizzle.config.ts
+   - Ensures future drizzle-kit commands target the correct schema
+
+4. **Runtime Configuration**:
+   - `databricks-start.mjs` creates the schema via `CREATE SCHEMA IF NOT EXISTS metamcp_app`
+   - Sets `PGOPTIONS="-c search_path=metamcp_app,public"` for migrations and backend runtime
+
+### Why This Approach
+- **Automatic**: Patches apply on every build, survives MetaMCP version upgrades
+- **Maintainable**: All patches in one place (`scripts/prepare-metamcp.sh`)
+- **Version-safe**: Works across MetaMCP releases as long as code structure stays similar
+- **Alternative rejected**: Forking MetaMCP would create maintenance burden
+
+### Troubleshooting Schema Issues
+- **"permission denied for schema public"** → Rebuild with `make prepare && make build`
+- **"relation does not exist"** → Check `search_path` is set correctly in databricks-start.mjs
+- **After MetaMCP upgrade** → Patches are automatically reapplied, but verify with `grep metamcpSchema build/metamcp/apps/backend/src/db/schema.ts`
+
 ## Observability & Operations
 - **Health checks** – Always target `/metamcp/health`. The Databricks Apps reverse proxy injects `/metamcp` as the base path.
 - **Logs** – `make app-logs` streams application logs through the Databricks Apps log endpoint. If you need deeper history, open the App in the Databricks UI and inspect the Log Analytics integration.

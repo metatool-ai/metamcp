@@ -111,6 +111,33 @@ mkdir -p "${BUILD_DIR}"
 info "Cloning ${REPO_URL}#${REF}"
 GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch "${REF}" "${REPO_URL}" "${BUILD_DIR}"
 
+info "Applying custom schema patches"
+# Patch drizzle config to use custom schema
+sed -i.bak 's/url: process\.env\.DATABASE_URL!,$/url: process.env.DATABASE_URL!,/' "${BUILD_DIR}/apps/backend/drizzle.config.ts"
+sed -i.bak '/},$/a\
+  schemaFilter: ["metamcp_app"],' "${BUILD_DIR}/apps/backend/drizzle.config.ts" && rm "${BUILD_DIR}/apps/backend/drizzle.config.ts.bak"
+
+# Patch schema.ts to use custom schema
+cd "${BUILD_DIR}/apps/backend/src/db"
+sed -i.bak '/^  pgEnum,$/a\
+  pgSchema,' schema.ts
+
+sed -i.bak '/^} from "drizzle-orm\/pg-core";$/a\
+\
+// Define the custom schema\
+export const metamcpSchema = pgSchema("metamcp_app");' schema.ts
+
+sed -i.bak 's/export const mcpServerTypeEnum = pgEnum(/export const mcpServerTypeEnum = metamcpSchema.enum(/' schema.ts
+sed -i.bak 's/export const mcpServerStatusEnum = pgEnum(/export const mcpServerStatusEnum = metamcpSchema.enum(/' schema.ts
+sed -i.bak 's/= pgTable(/= metamcpSchema.table(/' schema.ts
+
+rm schema.ts.bak
+cd "${REPO_ROOT}"
+
+# Patch existing migrations to use custom schema
+info "Patching migration files to use custom schema"
+find "${BUILD_DIR}/apps/backend/drizzle" -name "*.sql" -type f -exec sed -i.bak 's/"public"\./"metamcp_app"./g' {} \; -exec rm {}.bak \;
+
 info "Applying Databricks overrides"
 node "${REPO_ROOT}/scripts/apply-databricks-overrides.mjs" "${BUILD_DIR}"
 
