@@ -1,7 +1,11 @@
 import express from "express";
 
-import { oauthRepository } from "../../db/repositories";
-import { generateSecureAccessToken, rateLimitToken } from "./utils";
+import { oauthRepository, usersRepository } from "../../db/repositories";
+import {
+  generateSecureAccessToken,
+  rateLimitToken,
+  validateSubjectToken,
+} from "./utils";
 
 const tokenRouter = express.Router();
 
@@ -31,10 +35,90 @@ tokenRouter.post("/oauth/token", rateLimitToken, async (req, res) => {
       req.body;
 
     // Validate grant type
-    if (grant_type !== "authorization_code") {
+    if (grant_type === "authorization_code") {
+      // Existing authorization code flow continues below
+    } else if (
+      grant_type === "urn:ietf:params:oauth:grant-type:token-exchange"
+    ) {
+      // OAuth 2.0 Token Exchange (RFC 8693) flow
+      const {
+        subject_token,
+        resource: _resource,
+        subject_token_type,
+        client_id: exchangeClientId,
+      } = req.body;
+
+      // Validate required parameters per RFC 8693
+      if (
+        !subject_token ||
+        subject_token_type !== "urn:ietf:params:oauth:token-type:access_token"
+      ) {
+        return res.status(400).json({
+          error: "invalid_request",
+          error_description: "Invalid token exchange parameters",
+        });
+      }
+
+      // Validate subject token (provider-specific validation)
+      const validatedUser = await validateSubjectToken(subject_token);
+      if (!validatedUser) {
+        return res.status(400).json({
+          error: "invalid_grant",
+          error_description: "Invalid subject token",
+        });
+      }
+
+      // Ensure user exists in local database (handles account linking)
+      const localUser = await usersRepository.upsert({
+        id: validatedUser.id,
+        name: validatedUser.email?.split('@')[0] || 'OAuth User', // Use email prefix as name fallback
+        email: validatedUser.email || `${validatedUser.id}@oauth.local`, // Ensure we have an email
+        emailVerified: true, // External provider already verified this
+      });
+
+      // Generate MCP access token using existing infrastructure
+      const newAccessToken = generateSecureAccessToken();
+      const tokenExpiresIn = 3600; // 1 hour
+
+      // Determine client_id and ensure it exists
+      const clientId = exchangeClientId || "mcp_default";
+
+      // Ensure the default client exists if using fallback
+      if (clientId === "mcp_default") {
+        const existingClient = await oauthRepository.getClient("mcp_default");
+        if (!existingClient) {
+          await oauthRepository.upsertClient({
+            client_id: "mcp_default",
+            client_name: "MetaMCP Default Client",
+            redirect_uris: [],
+            grant_types: ["urn:ietf:params:oauth:grant-type:token-exchange"],
+            response_types: [],
+            token_endpoint_auth_method: "none",
+            scope: "admin",
+          });
+        }
+      }
+
+      // Store access token using existing repository
+      await oauthRepository.setAccessToken(newAccessToken, {
+        client_id: clientId,
+        user_id: localUser.id, // Use the local user ID (handles account linking)
+        scope: "admin",
+        expires_at: Date.now() + tokenExpiresIn * 1000,
+      });
+
+      // Return RFC 8693 compliant response
+      return res.json({
+        access_token: newAccessToken,
+        token_type: "Bearer",
+        expires_in: tokenExpiresIn,
+        scope: "admin",
+      });
+    } else {
       return res.status(400).json({
         error: "unsupported_grant_type",
-        error_description: "Only 'authorization_code' grant type is supported",
+        error_description:
+          "Only 'authorization_code' and 'token-exchange' grant types are supported",
       });
     }
 

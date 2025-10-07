@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 
 import { endpointsRepository } from "../db/repositories/endpoints.repo";
+import namespaceOauthRouter from "./oauth/namespace-oauth";
 import { openApiRouter } from "./public-metamcp/openapi";
 import sseRouter from "./public-metamcp/sse";
 import streamableHttpRouter from "./public-metamcp/streamable-http";
@@ -23,11 +24,20 @@ publicEndpointsRouter.use(
   }),
 );
 
-// JSON parsing middleware specifically for OpenAPI routes that need it
+// JSON parsing middleware for OpenAPI and OAuth routes that need it
 publicEndpointsRouter.use((req, res, next) => {
-  // Only apply JSON parsing for OpenAPI tool execution endpoints
-  if (req.path.includes("/api/tools/") && req.method === "POST") {
+  // Apply JSON parsing for OpenAPI tool execution endpoints and OAuth endpoints
+  if ((req.path.includes("/api/tools/") || req.path.includes("/oauth/")) && req.method === "POST") {
     return express.json({ limit: "50mb" })(req, res, next);
+  }
+  next();
+});
+
+// URL-encoded parsing middleware for OAuth endpoints
+publicEndpointsRouter.use((req, res, next) => {
+  // Apply URL-encoded parsing for OAuth endpoints
+  if (req.path.includes("/oauth/") && req.method === "POST") {
+    return express.urlencoded({ extended: true, limit: "50mb" })(req, res, next);
   }
   next();
 });
@@ -40,6 +50,10 @@ publicEndpointsRouter.use(sseRouter);
 
 // Use OpenAPI router for /api and /openapi.json routes
 publicEndpointsRouter.use(openApiRouter);
+
+// Mount OAuth endpoints for namespace-specific access
+// This allows clients to use /metamcp/{endpoint}/oauth/token for token exchange
+publicEndpointsRouter.use("/:endpointName/oauth", namespaceOauthRouter);
 
 // Health check endpoint
 publicEndpointsRouter.get("/health", (req, res) => {
@@ -62,6 +76,7 @@ publicEndpointsRouter.get("/", async (req, res) => {
         sse: `/metamcp/${endpoint.name}/sse`,
         api: `/metamcp/${endpoint.name}/api`,
         openapi: `/metamcp/${endpoint.name}/api/openapi.json`,
+        oauth: `/metamcp/${endpoint.name}/oauth`,
       },
     }));
 
