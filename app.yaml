@@ -30,7 +30,7 @@ env:
     value: ${BETTER_AUTH_SECRET}
   # Instance name must match databricks.yml database_instances.*.name
   - name: LAKEBASE_INSTANCE_NAME
-    value: metamcp
+    value: metamcp-lakebase
   - name: LAKEBASE_DATABASE_NAME
     value: postgres
   - name: METAMCP_REPO_URL
