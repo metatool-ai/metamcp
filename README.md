@@ -1,97 +1,194 @@
 # MetaMCP on Databricks
 
-MetaMCP lets you orchestrate every Model Context Protocol (MCP) server through a single control plane. This wrapper repo packages the upstream MetaMCP release so Databricks teams can deploy it as a governed Databricks App with Databricks-native storage, security, and CI/CD.
+MetaMCP orchestrates Model Context Protocol (MCP) servers through a single control plane. This repo wraps the upstream MetaMCP release for easy deployment as a governed Databricks App, using Lakehouse storage and Databricks CI/CD.
+
+## Architecture Overview
+MetaMCP provides a unified control plane for managing and accessing multiple MCP servers. In this Databricks deployment, it runs as a serverless Databricks App with enterprise-grade authentication, governance, and persistence via Lakehouse tables.
+
+```mermaid
+flowchart TB
+    subgraph Clients ["Client Access"]
+        H["Human Users<br/>(Web Browser)"]
+        M["MCP Clients<br/>(Claude, Cursor, etc.)"]
+    end
+    
+    subgraph DatabricksLayer ["Databricks Platform"]
+        subgraph DatabricksApps ["Databricks Apps"]
+            P["App Proxy<br/>(/metamcp)"]
+            A["Authentication &<br/>Authorization"]
+        end
+        
+        subgraph MetaMCPCore ["MetaMCP Application"]
+            W["Web UI<br/>(Frontend)"]
+            API["MetaMCP API<br/>(Backend)"]
+            S["Server Manager"]
+            PR["MCP Proxy"]
+        end
+        
+        subgraph Lakehouse ["Databricks Lakehouse"]
+            UC["Unity Catalog Tables<br/>• mcp_servers<br/>• mcp_endpoints<br/>• sessions<br/>• logs"]
+        end
+    end
+    
+    subgraph External ["External MCP Servers"]
+        MCP1["MCP Server 1<br/>(e.g., filesystem)"]
+        MCP2["MCP Server 2<br/>(e.g., github)"]
+        MCP3["MCP Server N<br/>(e.g., custom)"]
+    end
+    
+    H --> P
+    M --> P
+    P --> A
+    A --> W
+    A --> API
+    W <--> API
+    API <--> S
+    API <--> UC
+    S <--> PR
+    PR <--> MCP1
+    PR <--> MCP2
+    PR <--> MCP3
+    
+    style P fill:#f9f,stroke:#333,stroke-width:2px
+    style API fill:#bbf,stroke:#333,stroke-width:2px
+    style UC fill:#9f9,stroke:#333,stroke-width:2px
+```
+
+### How It Works
+
+1. **Client Access**: 
+   - **Human users** access MetaMCP through a web browser to configure servers, view logs, and manage endpoints
+   - **MCP clients** (like Claude, Cursor) connect via the MCP protocol to use configured servers
+
+2. **Databricks Apps Layer**:
+   - Provides enterprise authentication and authorization
+   - Exposes MetaMCP at `/metamcp` path with built-in SSL/TLS
+   - Handles scaling, monitoring, and governance
+
+3. **MetaMCP Core**:
+   - **Web UI**: React-based interface for server management
+   - **API Backend**: Handles configuration, orchestration, and proxying
+   - **Server Manager**: Manages lifecycle of MCP server connections
+   - **MCP Proxy**: Routes requests between clients and appropriate MCP servers
+
+4. **Persistence Layer**:
+   - Unity Catalog tables store server configurations, endpoints, sessions, and logs
+   - Provides audit trail and state management across restarts
+
+5. **External MCP Servers**:
+   - MetaMCP connects to any MCP-compliant server (filesystem, GitHub, databases, custom)
+   - Supports dynamic server registration and health monitoring
+
+Learn more: [MetaMCP Docs](https://docs.metamcp.com) | [Databricks Apps](https://www.databricks.com/product/databricks-apps)
+
+## Quickstart
+**Prerequisites**:
+- Databricks CLI v0.229.0+ installed
+- Authenticate: `databricks auth login --profile <PROFILE>`
+- Create `.env` file with your configuration (see Configuration below)
+- Seed the Postgres connection string as a Databricks secret (see Database Credentials)
+
+**Deploy to production:**
+```bash
+make
+```
+
+That's it! The deployment will:
+- ✅ Check authentication
+- 📦 Download and prepare MetaMCP
+- 🔨 Build the application
+- 🧪 Run local preflight validation (bundle + config checks)
+- 🚀 Deploy to Databricks
+- 🏥 Verify health
+
+**Other environments:**
+```bash
+make dev        # Deploy to development
+make dev-delete # Remove dev app and bundle
+make test       # Run local preflight checks without deploying
+```
+
+**Tip**: The build directory is automatically managed—no manual cleanup needed.
+
+## Development Flow
+The process starts locally and ends with a deployed app in your Databricks workspace.
 
 ```mermaid
 flowchart LR
-    subgraph Local Dev
-        A[Wrapper Repo] --> B[make prepare]
-        B --> C[make build]
+    subgraph LocalDev ["Local Dev"]
+        A["Wrapper Repo"] --> B["make prepare"]
+        B --> C["make build"]
     end
-    C --> D[make bundle-deploy]
-    subgraph Workspace
-        D --> E[Databricks Asset Bundle]
-        E --> F[Databricks App Snapshot]
-        F --> G[MetaMCP Runtime (/metamcp/health)]
+    subgraph DatabricksWS ["Databricks Workspace"]
+        D["make bundle-deploy"] --> E["Databricks Asset Bundle"]
+        E --> F["Databricks App Snapshot"]
+        F --> G["MetaMCP Runtime"]
     end
-    G --> H[Lakehouse Tables]
-    G --> I[MCP Clients & Users]
+    C --> D
+    G --> H["Health Check (/metamcp/health)"]
 ```
 
-## Quickstart
-All commands run from the repo root.
+- **Key Steps**: The simplified workflow handles everything automatically—just run `make` for production.
 
-1. **Authenticate once**
-   ```bash
-   databricks auth login --profile <PROFILE>
-   ```
-2. **Clone upstream & apply overrides**
-   ```bash
-   make prepare METAMCP_REF=v2.0.0
-   ```
-3. **Build inside the generated tree**
-   ```bash
-   make build
-   ```
-4. **Publish an Asset Bundle**
-   ```bash
-   make bundle-deploy TARGET=dev DATABRICKS_CONFIG_PROFILE=<PROFILE>
-   ```
-5. **Deploy the Databricks App**
-   ```bash
-   make app-deploy APP_NAME=metamcp TARGET=dev DATABRICKS_CONFIG_PROFILE=<PROFILE>
-   ```
-6. **Smoke test the runtime**
-   ```bash
-   make app-health APP_NAME=metamcp TARGET=dev DATABRICKS_CONFIG_PROFILE=<PROFILE>
-   ```
+## Configuration
+Create a `.env` file in the project root:
 
-## Preflight Checklist
-- Databricks CLI v0.229.0+ is installed and logged in for the profile you plan to pass to `make`.
-- Workspace has access to the Unity Catalog catalog/schema referenced in `.env`.
-- Your `.env` (copied from `.env.template`) contains Lakehouse connection details and any upstream MetaMCP secrets.
-- Outbound network access is permitted so the Databricks App can download `pnpm` and NPM packages during bootstrap.
-- You are ready to re-clone: `build/metamcp` is disposable and regenerated on every `make prepare`.
+```bash
+# Required
+DATABRICKS_CONFIG_PROFILE=DEFAULT
 
-## How This Project Works
-- **MetaMCP upstream** – We always start from the official [MetaMCP repo](https://github.com/metatool-ai/metamcp) and documentation at [docs.metamcp.com](https://docs.metamcp.com). MetaMCP aggregates and proxies multiple MCP servers so you can expose a single MCP endpoint.
-- **Databricks Asset Bundles** – `make bundle-deploy` packages this repo plus generated overrides into a Databricks Asset Bundle, providing infrastructure-as-code style deployment to workspaces. Learn more in [Databricks Asset Bundles docs](https://docs.databricks.com/aws/en/dev-tools/bundles).
-- **Databricks Apps** – `make app-deploy` snapshots the bundle into a managed Databricks App that runs on serverless infrastructure with built-in auth and governance. See [What is Databricks Apps?](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/what-is).
-- **Lakehouse integration** – MetaMCP persists configuration and session data to the Databricks Lakehouse (Unity Catalog tables). Ensure those schemas exist before the app starts so migrations succeed.
-- **Bootstrap scripts** – `scripts/prepare-metamcp.sh` wipes and clones upstream, `scripts/databricks-build.mjs` installs dependencies and compiles, and `scripts/databricks-start.mjs` runs migrations before launching the server. Any permanent customization lives in this repo or an upstream fork referenced by `METAMCP_REPO_URL`.
+# Optional (with defaults)
+METAMCP_REPO_URL=https://github.com/metatool-ai/metamcp.git  # Upstream repo fork or mirror
+METAMCP_REF=v2.0.0              # MetaMCP version
+APP_NAME=metamcp                # App name
+BETTER_AUTH_SECRET=<generate>   # Run: openssl rand -base64 32
 
-## Deployment Environments & Upgrades
-- Set `TARGET=<stage>` to map to the environments defined in `databricks.yml` (e.g., `dev`, `prod`). Each stage maintains its own bundle state in Databricks.
-- Use descriptive app names (`APP_NAME=metamcp-prod`) so `app-status`, `app-logs`, and `app-health` target the correct deployment.
-- Pin precise upstream versions by exporting `METAMCP_REF=<tag-or-commit>` in CI/CD. This guarantees reproducible bundles and makes rollbacks trivial.
-- To upgrade MetaMCP:
-  1. Update `METAMCP_REF` to the desired tag.
-  2. Run `make prepare && make build` locally to confirm the build still succeeds.
-  3. Deploy to a non-production target, validate `/metamcp/health`, then promote to production.
-- When hotfixing an upstream issue, consider pointing `METAMCP_REPO_URL` to your fork. Once upstream releases the fix, revert back to `https://github.com/metatool-ai/metamcp.git` with a pinned tag.
+# Enterprise SSO (optional)
+# OIDC_CLIENT_ID=your-client-id
+# OIDC_CLIENT_SECRET=your-secret
+# OIDC_DISCOVERY_URL=https://provider/.well-known/openid-configuration
 
-## Operations Toolkit
-- `make app-status APP_NAME=<name>` – Inspect the current Databricks App (returns JSON with URL, state, and bundle version).
-- `make app-logs APP_NAME=<name>` – Stream live logs via the Databricks Apps log proxy.
-- `make app-health APP_NAME=<name>` – Calls the live `/metamcp/health` endpoint through the app URL and prints the HTTP status.
-- `make clean` – Delete `build/metamcp` to force a fresh `make prepare` run.
+## Database Credentials
+- Create (or reuse) the secret scope declared in `databricks.yml` (defaults to `metamcp-pg`):
+  ```bash
+  databricks secrets put-secret --scope metamcp-pg --key database-url --string-value "$DATABASE_URL"
+  ```
+- The secret value must be a full `postgresql://` URL. The bundle exposes it to the app as the `pg-url` resource, and `app.yaml` maps `DATABASE_URL` via `valueFrom`.
+- When credentials rotate, update the secret and rerun `make bundle-deploy TARGET=<env>` followed by `make app-deploy APP_NAME=<app>` so the app restarts with the new connection string.
+```
 
-## CI/CD Recommendations
-- Run `scripts/prepare-metamcp.sh` in every pipeline to guarantee a clean clone.
-- Export `METAMCP_REF` in pipeline variables and record it in deployment logs for traceability.
-- After `make app-deploy`, capture the Databricks App URL and hit `/metamcp/health` as a gating check.
-- Store `.env` secrets in your secret manager and inject them at runtime; never commit them.
+## Operations
+```bash
+make status   # Show app status and URL
+make logs     # Stream application logs
+make health   # Check health endpoint
+make clean    # Remove build artifacts
+make test     # Rebuild and run local preflight checks
+make help     # Show all commands
+```
 
-## Debug Guide
-- **Health check fails** – Confirm the target URL includes the `/metamcp/health` prefix. The Databricks App proxy rewrites all traffic under `/metamcp`.
-- **Bundle path missing** – Run `make bundle-deploy` immediately before `make app-deploy` for the same `TARGET`; the deploy script aborts early if no bundle summary is available.
-- **Build errors about pnpm** – Ensure the workspace allows outbound download of the pinned pnpm binary. If egress is blocked, pre-stage the binary and adjust `databricks-build.mjs` to point to your mirror.
-- **Database migration warnings** – If logs mention missing tables (for example `docker_sessions`), run the migrations locally or let the Databricks App create them on first boot once the catalog and schema exist.
-- **Stale upstream code** – Re-run `make prepare` any time you change branches or bump `METAMCP_REF`; the script is destructive by design.
+## Lakehouse Provisioning
+- The bundle now creates both the Lakebase instance and the backing database (`metamcp_app` by default) via the `database_catalogs` resource, preventing `Database <name> does not exist` failures during `databricks bundle deploy`.
+- After pulling this change, re-run `make bundle-deploy TARGET=<env>` once per workspace so the database is created before the next app snapshot.
+- `make test` (or `databricks bundle validate`) catches missing Lakehouse resources locally before you deploy.
 
-## Additional Resources
-- MetaMCP landing page: https://metamcp.com/
-- MetaMCP documentation: https://docs.metamcp.com/
-- Databricks Apps product page: https://www.databricks.com/product/databricks-apps
-- Databricks Asset Bundles overview: https://docs.databricks.com/aws/en/dev-tools/bundles
+## Upgrading MetaMCP
+1. Update `METAMCP_REF` in `.env` to the new version
+2. Deploy to dev first: `make dev`
+3. Verify with `make health`
+4. Deploy to production: `make`
 
+## Common Issues
+- **Not authenticated?** Run `databricks auth login --profile <PROFILE>`
+- **Health check fails?** The app may still be starting—wait 30 seconds
+- **Build errors?** Ensure workspace has outbound network access
+- **App not found?** Check the app name matches your configuration
+
+## CI/CD
+For automated deployments:
+- Store `.env` contents in your secret manager
+- Pin `METAMCP_REF` for reproducible builds
+- Run health checks as deployment gates
+- Use different profiles/targets for each environment
+
+Questions? Check [MetaMCP Docs](https://docs.metamcp.com) or open an issue.

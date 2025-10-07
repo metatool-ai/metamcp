@@ -387,6 +387,35 @@ function prepareStandaloneAssets(frontendDir, standaloneEntrypoint) {
   syncDir(publicSource, publicDestination);
 }
 
+async function ensureCustomSchema() {
+  console.log("[MetaMCP][Databricks] Ensuring custom schema exists");
+
+  const pgPath = path.join(repoRoot, "node_modules", "pg", "lib", "index.js");
+  const { default: pg } = await import(pgPath);
+  const client = new pg.Client({
+    connectionString: process.env.DATABASE_URL,
+  });
+
+  try {
+    await client.connect();
+    console.log("[MetaMCP][Databricks] Connected to database for schema setup");
+
+    // Create custom schema if it doesn't exist
+    await client.query(`CREATE SCHEMA IF NOT EXISTS metamcp_app`);
+    console.log("[MetaMCP][Databricks] ✓ Schema 'metamcp_app' created/verified");
+
+    // Set search_path to use custom schema by default
+    await client.query(`SET search_path TO metamcp_app, public`);
+    console.log("[MetaMCP][Databricks] ✓ Search path set to 'metamcp_app, public'");
+
+  } catch (error) {
+    console.error("[MetaMCP][Databricks] ❌ Failed to create schema:", error);
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
 function runDatabaseMigrations(pnpmCommand, pnpmArgs) {
   console.log("[MetaMCP][Databricks] Applying database migrations");
 
@@ -396,7 +425,11 @@ function runDatabaseMigrations(pnpmCommand, pnpmArgs) {
     {
       cwd: repoRoot,
       stdio: "inherit",
-      env: process.env,
+      env: {
+        ...process.env,
+        // Set PGOPTIONS to use custom schema for migrations
+        PGOPTIONS: "-c search_path=metamcp_app,public",
+      },
     },
   );
 
@@ -410,6 +443,7 @@ async function main() {
   ensureBuildTree(nodeCommand);
   await ensureDatabaseCredential();
   ensureEnv();
+  await ensureCustomSchema();
   ensureUvCli();
 
   const { command: pnpmCommand, args: pnpmArgs } = getPnpmCommand();
@@ -419,6 +453,8 @@ async function main() {
   const backendEnv = {
     ...process.env,
     PORT: process.env.BACKEND_PORT,
+    // Ensure backend uses custom schema
+    PGOPTIONS: "-c search_path=metamcp_app,public",
   };
 
   backend = spawnService(
@@ -490,28 +526,32 @@ main().catch((error) => {
 });
 
 async function ensureDatabaseCredential() {
+  console.log("[MetaMCP][Databricks] === Starting database credential fetch ===");
+
   if (!process.env.PGHOST) {
-    console.warn("[MetaMCP][Databricks] PGHOST not set; skipping credential fetch");
-    return;
+    throw new Error("PGHOST environment variable is not set - cannot fetch database credentials");
   }
+  console.log("[MetaMCP][Databricks] ✓ PGHOST is set:", process.env.PGHOST);
 
   const clientId = process.env.DATABRICKS_CLIENT_ID;
   const clientSecret = process.env.DATABRICKS_CLIENT_SECRET;
   const baseUrl = process.env.DATABRICKS_HOST || process.env.DATABRICKS_APP_URL;
 
+  console.log("[MetaMCP][Databricks] Environment check:", {
+    hasClientId: !!clientId,
+    hasClientSecret: !!clientSecret,
+    hasBaseUrl: !!baseUrl,
+    baseUrl: baseUrl || "NOT SET",
+  });
+
   if (!clientId || !clientSecret || !baseUrl) {
-    console.warn("[MetaMCP][Databricks] Missing Databricks client credentials or host; using existing DATABASE_URL if provided", {
-      hasClientId: !!clientId,
-      hasClientSecret: !!clientSecret,
-      baseUrl,
-    });
-    return;
+    throw new Error(`Missing required Databricks credentials: clientId=${!!clientId}, clientSecret=${!!clientSecret}, baseUrl=${!!baseUrl}`);
   }
 
   try {
     const normalizedBase = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
     const tokenEndpoint = `${normalizedBase.replace(/\/$/, "")}/oidc/v1/token`;
-    console.log("[MetaMCP][Databricks] Requesting workspace token", { tokenEndpoint });
+    console.log("[MetaMCP][Databricks] Requesting workspace OAuth token from:", tokenEndpoint);
 
     const tokenResponse = await fetch(tokenEndpoint, {
       method: "POST",
@@ -527,15 +567,14 @@ async function ensureDatabaseCredential() {
 
     if (!tokenResponse.ok) {
       const text = await tokenResponse.text();
-      console.error("[MetaMCP][Databricks] Failed to fetch workspace OAuth token", tokenResponse.status, text);
-      return;
+      throw new Error(`Failed to fetch workspace OAuth token: HTTP ${tokenResponse.status} - ${text}`);
     }
 
     const { access_token: workspaceToken } = await tokenResponse.json();
     if (!workspaceToken) {
-      console.error("[MetaMCP][Databricks] Workspace OAuth response missing access_token");
-      return;
+      throw new Error("Workspace OAuth response missing access_token field");
     }
+    console.log("[MetaMCP][Databricks] ✓ Successfully obtained workspace OAuth token");
 
     const credentialEndpoint = `${normalizedBase.replace(/\/$/, "")}/api/2.0/database/credentials`;
     const instanceName = process.env.LAKEBASE_INSTANCE_NAME || process.env.PGHOST;
@@ -544,14 +583,10 @@ async function ensureDatabaseCredential() {
     const credentialPayload = {
       request_id: crypto.randomUUID(),
       instance_names: instanceName ? [instanceName] : undefined,
-      database_names: databaseName ? [databaseName] : undefined,
     };
 
-    console.log("[MetaMCP][Databricks] Requesting DB credential", {
-      credentialEndpoint,
-      instance: instanceName,
-      database: databaseName,
-    });
+    console.log("[MetaMCP][Databricks] Requesting database credential from:", credentialEndpoint);
+    console.log("[MetaMCP][Databricks] Payload:", JSON.stringify(credentialPayload, null, 2));
 
     const credentialResponse = await fetch(credentialEndpoint, {
       method: "POST",
@@ -564,19 +599,23 @@ async function ensureDatabaseCredential() {
 
     if (!credentialResponse.ok) {
       const text = await credentialResponse.text();
-      console.error("[MetaMCP][Databricks] Failed to generate database credential", credentialResponse.status, text);
-      return;
+      throw new Error(`Failed to generate database credential: HTTP ${credentialResponse.status} - ${text}`);
     }
 
-    const { token } = await credentialResponse.json();
+    const credentialData = await credentialResponse.json();
+    console.log("[MetaMCP][Databricks] Database credential response keys:", Object.keys(credentialData));
+
+    const { token } = credentialData;
     if (!token) {
-      console.error("[MetaMCP][Databricks] Database credential response missing token");
-      return;
+      throw new Error(`Database credential response missing token field. Response: ${JSON.stringify(credentialData)}`);
     }
 
     process.env.PGPASSWORD = token;
-    console.log("[MetaMCP][Databricks] Obtained database credential token (length)", token.length);
+    console.log("[MetaMCP][Databricks] ✓ Successfully set PGPASSWORD (token length:", token.length, ")");
+    console.log("[MetaMCP][Databricks] === Database credential fetch completed successfully ===");
   } catch (err) {
-    console.error("[MetaMCP][Databricks] Error fetching database credential", err);
+    console.error("[MetaMCP][Databricks] ❌ FATAL ERROR in ensureDatabaseCredential:");
+    console.error(err);
+    throw err;
   }
 }

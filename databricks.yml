@@ -1,35 +1,60 @@
 bundle:
-  name: metamcp-databricks
+  name: metamcp
 
 resources:
   database_instances:
     metamcp_lakebase:
-      name: ${bundle.target}-metamcp-lakebase-app
-      capacity: CU_1
+      name: ${var.lakebase_instance_name}
+      capacity: ${var.db_capacity}
       enable_pg_native_login: true
 
   database_catalogs:
     metamcp_catalog:
-      name: ${bundle.target}_metamcp
+      name: ${var.lakebase_database_name}
       database_instance_name: ${resources.database_instances.metamcp_lakebase.name}
-      database_name: ${bundle.target}_metamcp_app
+      database_name: ${var.lakebase_database_name}
       create_database_if_not_exists: true
 
   apps:
     metamcp_app:
-      name: metamcp-app
-      description: "MetaMCP Databricks App proof of concept"
+      name: ${var.app_name}
+      description: "MetaMCP - Model Context Protocol Control Plane"
       source_code_path: build/metamcp
       resources:
         - name: lakebase
           database:
-            instance_name: ${resources.database_instances.metamcp_lakebase.name}
-            database_name: ${resources.database_catalogs.metamcp_catalog.database_name}
+            instance_name: ${var.lakebase_instance_name}
+            database_name: ${var.lakebase_database_name}
             permission: CAN_CONNECT_AND_CREATE
 
+variables:
+  db_capacity:
+    description: "Database capacity"
+    default: CU_1
+  app_name:
+    description: "Databricks App name"
+    default: metamcp
+  lakebase_instance_name:
+    description: "Lakehouse instance used by MetaMCP"
+    default: metamcp-lakebase
+  lakebase_database_name:
+    description: "Lakehouse database used by MetaMCP"
+    default: metamcp_app
+
 targets:
+  # Development environment
   dev:
     mode: development
-    default: true
+    variables:
+      db_capacity: CU_1
     workspace:
-      profile: DEFAULT
+      profile: ${env.DATABRICKS_CONFIG_PROFILE}
+
+  # Production environment
+  prod:
+    mode: production
+    default: true
+    variables:
+      db_capacity: CU_1
+    workspace:
+      profile: ${env.DATABRICKS_CONFIG_PROFILE}

@@ -5,7 +5,9 @@ build:
     - -lc
     - |
         set -euo pipefail
-        METAMCP_REF="${METAMCP_REF:-}" METAMCP_REPO_URL="${METAMCP_REPO_URL:-https://github.com/metatool-ai/metamcp.git}" ./scripts/prepare-metamcp.sh
+        : "${METAMCP_REPO_URL:?Set METAMCP_REPO_URL (see .env.template)}"
+        : "${METAMCP_REF:?Set METAMCP_REF (see .env.template)}"
+        ./scripts/prepare-metamcp.sh
         NODE_ENV= node build/metamcp/scripts/databricks-build.mjs
 command:
   - node
@@ -19,22 +21,22 @@ env:
     value: "false"
   - name: PATH
     value: /app/python/source_code/scripts/bin:/usr/local/bin:/usr/bin:/bin
-  - name: FRONTEND_PORT
-    value: "12008"
-  - name: BACKEND_PORT
-    value: "12009"
-  - name: APP_URL
-    value: http://127.0.0.1:12008
-  - name: NEXT_PUBLIC_APP_URL
-    value: http://127.0.0.1:12008
-  - name: DATABASE_URL
-    value: postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
+  # Databricks injects DATABRICKS_APP_PORT - we use it via databricks-start.mjs
+  # Backend runs on a separate internal port calculated from DATABRICKS_APP_PORT + 1
+  # DATABASE_URL is built dynamically by databricks-start.mjs from:
+  # - PGHOST, PGPORT, PGDATABASE, PGUSER, PGSSLMODE (from Lakebase resource)
+  # - PGPASSWORD (fetched via OAuth using DATABRICKS_CLIENT_ID/SECRET)
   - name: BETTER_AUTH_SECRET
-    value: change-me-before-production
+    value: ${BETTER_AUTH_SECRET}
+  # Instance name must match databricks.yml database_instances.*.name
   - name: LAKEBASE_INSTANCE_NAME
-    value: dev-metamcp-lakebase-app
+    value: metamcp
   - name: LAKEBASE_DATABASE_NAME
-    value: dev_metamcp_app
+    value: metamcp_app
+  - name: METAMCP_REPO_URL
+    value: ${METAMCP_REPO_URL}
+  - name: METAMCP_REF
+    value: ${METAMCP_REF}
 expose:
   type: public
   port: 12008
