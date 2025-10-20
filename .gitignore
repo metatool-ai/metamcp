@@ -39,3 +39,7 @@ yarn-error.log*
 
 .cursor/
 .vscode/
+
+# Environment variables with secrets
+.env
+ga4-credentials.json

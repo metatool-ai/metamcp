@@ -1,8 +1,11 @@
 services:
   app:
     container_name: metamcp
-    image: ghcr.io/metatool-ai/metamcp:latest
-    pull_policy: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: ghcr.io/metatool-ai/metamcp:latest
+    # pull_policy: always
     env_file:
       - .env
     ports:
@@ -27,6 +30,14 @@ services:
       
       # Docker networking fix
       TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL:-true}
+      
+      # Google Analytics 4 Credentials
+      GA4_SERVICE_ACCOUNT_JSON: ${GA4_SERVICE_ACCOUNT_JSON}
+      
+      # PostgreSQL MCP - Azure Access Token (set this in .env file)
+      AZURE_ACCESS_TOKEN: ${AZURE_ACCESS_TOKEN}
+    volumes:
+      - ./ga4-credentials.json:/tmp/ga-credentials.json:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
