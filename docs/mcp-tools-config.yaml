@@ -1,0 +1,134 @@
+# MCP Tools Configuration for MetaMCP-OceanX
+# This file provides quick reference for AI agents
+
+tools:
+  google_analytics_report:
+    function_name: "mcp_metamcp-oceanx_google-analytics-mcp__run_report"
+    purpose: "Website analytics and user behavior analysis"
+    keywords: ["website", "engagement", "traffic", "sessions", "pageviews", "analytics", "ga4"]
+    required_params:
+      property_id: 383528775
+      date_ranges: "Array with start_date and end_date"
+      metrics: "Array of valid GA4 metrics"
+    optional_params:
+      dimensions: "Array of valid GA4 dimensions"
+      limit: "Maximum rows to return"
+      offset: "Row offset for pagination"
+    common_mistakes:
+      - "users" → "newUsers"
+      - "pageviews" → "screenPageViews"
+      - "sourceMedium" → "sessionSource"
+    valid_metrics: ["sessions", "newUsers", "screenPageViews", "engagementRate", "averageSessionDuration", "bounceRate"]
+    valid_dimensions: ["date", "pagePath", "sessionSource", "country", "deviceCategory"]
+
+  google_analytics_realtime:
+    function_name: "mcp_metamcp-oceanx_google-analytics-mcp__run_realtime_report"
+    purpose: "Live website traffic monitoring"
+    keywords: ["realtime", "live", "current", "now", "monitoring"]
+    required_params:
+      property_id: 383528775
+      metrics: "Array of valid GA4 metrics"
+    optional_params:
+      dimensions: "Array of valid GA4 dimensions"
+      limit: "Maximum rows to return"
+    valid_metrics: ["sessions", "newUsers", "screenPageViews", "engagementRate"]
+    valid_dimensions: ["date", "pagePath", "sessionSource", "country"]
+
+  data_warehouse_query:
+    function_name: "mcp_metamcp-oceanx_ox-staging-dwh__query"
+    purpose: "Business intelligence and custom data queries"
+    keywords: ["database", "sql", "query", "data warehouse", "dwh", "business intelligence", "custom data", "post", "social", "content", "performance"]
+    required_params:
+      sql: "Valid SQL query string"
+    common_tables: ["country_codes", "pg_buffercache", "pg_stat_statements", "pg_stat_statements_info", "dbt.social_post_daily_performance"]
+    validation_checks:
+      - "SQL syntax is valid"
+      - "Azure access token is fresh"
+      - "Table names exist in schema"
+    content_analysis_tables:
+      - "dbt.social_post_daily_performance": "Social media and content post performance metrics"
+
+# Tool Selection Rules
+selection_rules:
+  website_analytics:
+    keywords: ["website", "engagement", "traffic", "sessions", "pageviews", "analytics", "ga4", "google analytics"]
+    primary_tool: "google_analytics_report"
+    fallback_tool: "google_analytics_realtime"
+  
+  realtime_monitoring:
+    keywords: ["realtime", "live", "current", "now", "monitoring"]
+    primary_tool: "google_analytics_realtime"
+  
+  data_analysis:
+    keywords: ["database", "sql", "query", "data warehouse", "dwh", "business intelligence", "custom data"]
+    primary_tool: "data_warehouse_query"
+  
+  post_performance:
+    keywords: ["post", "social", "content", "performance", "most reached", "top post", "best post"]
+    primary_tool: "data_warehouse_query"
+    table: "dbt.social_post_daily_performance"
+
+# Request Templates
+templates:
+  website_performance:
+    tool: "google_analytics_report"
+    config:
+      property_id: 383528775
+      date_ranges: [{"start_date": "30daysAgo", "end_date": "today", "name": "Last30Days"}]
+      dimensions: ["date"]
+      metrics: ["sessions", "newUsers", "screenPageViews", "engagementRate"]
+      limit: 30
+  
+  top_pages:
+    tool: "google_analytics_report"
+    config:
+      property_id: 383528775
+      date_ranges: [{"start_date": "30daysAgo", "end_date": "today"}]
+      dimensions: ["pagePath"]
+      metrics: ["sessions", "screenPageViews"]
+      limit: 10
+  
+  traffic_sources:
+    tool: "google_analytics_report"
+    config:
+      property_id: 383528775
+      date_ranges: [{"start_date": "30daysAgo", "end_date": "today"}]
+      dimensions: ["sessionSource"]
+      metrics: ["sessions", "newUsers"]
+      limit: 10
+  
+  database_schema:
+    tool: "data_warehouse_query"
+    config:
+      sql: "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
+  
+  top_posts_this_month:
+    tool: "data_warehouse_query"
+    config:
+      sql: "SELECT * FROM dbt.social_post_daily_performance WHERE date >= '2025-01-01' ORDER BY reach DESC LIMIT 10"
+
+# Error Recovery
+error_recovery:
+  google_analytics_fails:
+    - "Check property ID format (must be numeric: 383528775)"
+    - "Validate metrics/dimensions against valid lists"
+    - "Try with simpler request"
+    - "Check date range format"
+  
+  data_warehouse_fails:
+    - "Check Azure token freshness"
+    - "Validate SQL syntax"
+    - "Try with simpler query"
+    - "Check table/column names"
+
+# Configuration
+config:
+  google_analytics:
+    property_id: 383528775
+    credentials_file: "ga4-credentials.json"
+    endpoint: "metamcp-oceanx unified endpoint"
+  
+  data_warehouse:
+    connection: "Azure PostgreSQL with SSH tunnel"
+    access_token_required: true
+    endpoint: "metamcp-oceanx unified endpoint"

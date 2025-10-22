@@ -21,6 +21,7 @@ POSTGRES_HOST=${POSTGRES_HOST:-localhost}
 POSTGRES_PORT=${POSTGRES_PORT:-5432}
 BASTION_PORT=${BASTION_PORT:-22}
 
+
 # Check if required environment variables are set
 if [ -z "$POSTGRES_USER" ] || [ -z "$POSTGRES_DB" ]; then
     echo "Error: POSTGRES_USER and POSTGRES_DB environment variables are required" >&2

@@ -11,6 +11,7 @@ export POSTGRES_PORT="5432"
 export POSTGRES_USER="stg_dwh_user_reader"
 export POSTGRES_DB="data_warehouse"
 
+
 # Disable SSH tunneling - use local tunnel instead
 # The local machine should run: ssh -L 0.0.0.0:5432:ox-stg-db-2.postgres.database.azure.com:5432 bastion@ox-stg-data-bastion-vm
 

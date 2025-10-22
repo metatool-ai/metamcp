@@ -143,6 +143,82 @@ cp example.env .env
 docker compose up -d
 ```
 
+### **🔧 Environment Variables Setup**
+
+#### **Required Environment Variables**
+
+Create a `.env` file in the project root with the following variables:
+
+```bash
+# === CORE APPLICATION SETTINGS ===
+NODE_ENV=production
+APP_URL=http://localhost:12008
+NEXT_PUBLIC_APP_URL=http://localhost:12008
+BETTER_AUTH_SECRET=your-super-secret-key-change-this-in-production
+
+# === DATABASE CONFIGURATION ===
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_USER=metamcp_user
+POSTGRES_PASSWORD=m3t4mcp
+POSTGRES_DB=metamcp_db
+POSTGRES_EXTERNAL_PORT=9433
+
+# === DOCKER NETWORKING ===
+TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL=true
+```
+
+#### **🌊 OceanX Integration Variables**
+
+For the OceanX-specific setup with Google Analytics and Azure PostgreSQL:
+
+```bash
+# === GOOGLE ANALYTICS 4 INTEGRATION ===
+# Path to your Google Cloud service account credentials JSON file
+GA4_SERVICE_ACCOUNT_JSON=/tmp/ga-credentials.json
+
+# === AZURE POSTGRESQL INTEGRATION ===
+# Azure access token for PostgreSQL authentication
+AZURE_ACCESS_TOKEN=your-azure-access-token-here
+```
+
+#### **🔐 Optional: OIDC Authentication**
+
+For enterprise SSO integration:
+
+```bash
+# === OIDC PROVIDER CONFIGURATION (Optional) ===
+OIDC_CLIENT_ID=your-oidc-client-id
+OIDC_CLIENT_SECRET=your-oidc-client-secret
+OIDC_DISCOVERY_URL=https://your-oidc-provider.com/.well-known/openid-configuration
+OIDC_AUTHORIZATION_URL=https://your-oidc-provider.com/auth
+
+# Optional OIDC settings:
+OIDC_PROVIDER_ID=oidc
+OIDC_SCOPES=openid email profile
+OIDC_PKCE=true
+```
+
+#### **📁 Required Files**
+
+Place these files in your project root:
+
+1. **`ga4-credentials.json`** - Google Cloud service account credentials
+   - Download from Google Cloud Console
+   - Service account needs Google Analytics API access
+   - Property ID: `383528775` (OceanX website)
+
+2. **Azure Access Token** - For PostgreSQL MCP authentication
+   - Get token: `az account get-access-token --resource-type oss-rdbms -o tsv`
+   - Or use the provided script: `./scripts/get-azure-token.sh`
+
+#### **🔒 Security Notes**
+
+- **Never commit** `.env` or `ga4-credentials.json` to version control
+- **Rotate credentials** regularly in production
+- **Use strong secrets** for `BETTER_AUTH_SECRET` in production
+- **Restrict service account permissions** to minimum required
+
 If you modify APP_URL env vars, make sure you only access from the APP_URL, because MetaMCP enforces CORS policy on the URL, so no other URL is accessible.
 
 Note that the pg volume name may collide with your other pg dockers, which is global, consider rename it in `docker-compose.yml`:
@@ -370,6 +446,331 @@ sequenceDiagram
     MetaMCP ->> MCPServers: call_tool to target MCP Server
     MCPServers ->> MetaMCP: Return tool response
     MetaMCP ->> MCPClient: Return tool response
+```
+
+## 🌊 OceanX Integration
+
+This repository is specifically configured for OceanX's MetaMCP deployment, providing unified access to Google Analytics 4 and the OceanX staging data warehouse through a single MCP endpoint.
+
+### **🏗️ Repository Architecture**
+
+#### **MCP Wrappers (`mcp-wrappers/`)**
+The `mcp-wrappers/` directory contains pre-configured MCP server wrappers for OceanX's infrastructure:
+
+- **`postgres/postgres-mcp-wrapper.sh`** - Generic PostgreSQL MCP wrapper with Azure authentication
+- **`postgres/ox-staging-dwh.sh`** - OceanX-specific wrapper for staging data warehouse
+- **`README.md`** - Documentation for MCP wrapper usage
+
+**How MCP Wrappers Work:**
+1. **Azure Authentication**: Automatically handles Azure access token retrieval and refresh
+2. **SSH Tunneling**: Creates secure tunnels through OceanX bastion hosts
+3. **Connection Management**: Handles connection pooling and error recovery
+4. **Environment Configuration**: Pre-configured for OceanX's infrastructure
+
+#### **Docker Compose Configuration**
+The `docker-compose.yml` is configured for OceanX deployment:
+- **MetaMCP Server**: Main application with OceanX-specific environment variables
+- **PostgreSQL Database**: Local database for MetaMCP configuration
+- **Volume Mounts**: Google Analytics credentials and Azure tokens
+- **Network Configuration**: Docker networking for MCP server communication
+
+### **📊 Available MCP Tools**
+
+#### **Google Analytics 4 Integration**
+- **Property ID**: `383528775` (OceanX website)
+- **Tools Available**:
+  - `mcp_metamcp-oceanx_google-analytics-mcp__run_report` - Standard GA4 reports
+  - `mcp_metamcp-oceanx_google-analytics-mcp__run_realtime_report` - Live traffic monitoring
+- **Authentication**: Google Cloud service account with GA4 API access
+- **Data Access**: Website analytics, user behavior, traffic sources, engagement metrics
+
+#### **PostgreSQL Data Warehouse Integration**
+- **Database**: OceanX staging data warehouse
+- **Tools Available**:
+  - `mcp_metamcp-oceanx_ox-staging-dwh__query` - SQL query execution
+- **Authentication**: Azure access token with PostgreSQL permissions
+- **Data Access**: Social media performance, business intelligence, custom analytics
+- **Key Tables**: `dbt.social_post_daily_performance`, `dbt.social_ad_daily_performance`, `dbt.social_metrics_daily`
+
+#### **Unified Endpoint**
+- **SSE Endpoint**: `http://localhost:12008/metamcp/ga4-test-key/sse`
+- **API Key Authentication**: Required for external access
+- **Tool Aggregation**: All MCP tools accessible through single endpoint
+
+### **🔧 Environment Configuration**
+
+#### **Required Environment Variables**
+Create a `.env` file with these OceanX-specific variables:
+
+```bash
+# === CORE APPLICATION ===
+NODE_ENV=production
+APP_URL=http://localhost:12008
+BETTER_AUTH_SECRET=your-super-secret-key-change-this-in-production
+
+# === DATABASE ===
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_USER=metamcp_user
+POSTGRES_PASSWORD=m3t4mcp
+POSTGRES_DB=metamcp_db
+
+# === OCEANX GOOGLE ANALYTICS 4 ===
+GA4_SERVICE_ACCOUNT_JSON=/tmp/ga-credentials.json
+AZURE_ACCESS_TOKEN=your-azure-access-token-here
+
+# === OCEANX DATA WAREHOUSE ===
+POSTGRES_DWH_HOST=host.docker.internal
+POSTGRES_DWH_PORT=5432
+POSTGRES_DWH_USER=stg_dwh_user_reader
+POSTGRES_DWH_DB=data_warehouse
+
+# === DOCKER NETWORKING ===
+TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL=true
+```
+
+#### **Required Files**
+Place these files in the project root:
+
+1. **`ga4-credentials.json`** - Google Cloud service account credentials
+   - Download from Google Cloud Console
+   - Service account needs Google Analytics API access
+   - Property ID: `383528775` (OceanX website)
+
+2. **Azure Access Token** - For PostgreSQL MCP authentication
+   - Get token: `az account get-access-token --resource-type oss-rdbms -o tsv`
+   - Or use: `./scripts/get-azure-token.sh`
+
+### **🚀 Quick Start for OceanX Users**
+
+#### **1. Clone and Setup**
+```bash
+git clone <repository-url>
+cd ox-metamcp
+cp oceanx.env.example .env
+# Update .env with your actual values
+```
+
+#### **2. Configure Credentials**
+```bash
+# Place your Google Cloud service account JSON
+cp /path/to/your/ga4-credentials.json ./ga4-credentials.json
+
+# Get Azure access token
+./scripts/get-azure-token.sh
+```
+
+#### **3. Start Services**
+```bash
+docker compose up -d
+```
+
+#### **4. Verify Setup**
+```bash
+# Check health
+curl http://localhost:12008/health
+
+# Access admin interface
+open http://localhost:12008/admin
+```
+
+### **🤖 AI Agent Integration**
+
+#### **Context Files for AI Agents**
+The `docs/` directory contains files specifically designed to provide context and guidance for AI agents using the MetaMCP system. These files are **manually inserted** into AI agent configurations to improve tool usage:
+
+- **`docs/agent-system-message.md`** - Complete system message for AI agents
+  - Provides comprehensive guidance on tool selection and usage
+  - Includes parameter guidelines and common mistakes to avoid
+  - Contains request templates and error handling strategies
+  - **Usage**: Copy and paste into AI agent system message
+
+- **`docs/mcp-tools-config.yaml`** - Structured configuration for AI agents
+  - Tool definitions with function names and parameters
+  - Selection rules based on keywords and use cases
+  - Request templates for common queries
+  - Error recovery strategies
+  - **Usage**: Reference for AI agents to understand tool capabilities
+
+- **`docs/README.md`** - Quick reference for AI agent integration
+  - Overview of available tools and their purposes
+  - Key points for proper tool usage
+  - Maintenance guidelines for keeping documentation current
+
+#### **How to Use These Files**
+
+1. **For AI Agent System Messages**: Copy content from `docs/agent-system-message.md` into your AI agent's system message
+2. **For Tool Configuration**: Reference `docs/mcp-tools-config.yaml` to understand tool capabilities and parameters
+3. **For Quick Reference**: Use `docs/README.md` as a quick guide for AI agent integration
+
+#### **MCP Client Configuration**
+For Cursor or other MCP clients, use this configuration:
+
+```json
+{
+  "mcpServers": {
+    "metamcp-oceanx": {
+      "url": "http://localhost:12008/metamcp/ga4-test-key/sse",
+      "transport": "sse",
+      "headers": {
+        "X-API-Key": "meta-endpoint-api-key"
+      }
+    }
+  }
+}
+```
+
+### **🔧 MCP Wrapper Architecture**
+
+#### **How MCP Wrappers Work**
+MCP wrappers are shell scripts that act as intermediaries between MetaMCP and external services. They handle:
+
+1. **Authentication**: Azure access tokens, Google Cloud credentials
+2. **Connection Management**: SSH tunnels, connection pooling
+3. **Error Handling**: Token refresh, connection recovery
+4. **Environment Configuration**: Pre-configured for OceanX infrastructure
+
+#### **PostgreSQL MCP Wrapper (`mcp-wrappers/postgres/postgres-mcp-wrapper.sh`)**
+- **Purpose**: Generic PostgreSQL MCP wrapper with Azure authentication
+- **Features**:
+  - **Azure Authentication**: Supports service principal and interactive login
+  - **SSH Tunneling**: Creates secure tunnels through bastion hosts
+  - **Connection Management**: Handles PostgreSQL connection strings and SSL
+  - **Error Recovery**: Automatic retry and token refresh
+- **Environment Variables**:
+  - `AZURE_ACCESS_TOKEN` - Pre-provided Azure token
+  - `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID` - Service principal auth
+  - `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_DB` - Database connection
+  - `BASTION_HOST`, `BASTION_USER`, `BASTION_PORT` - SSH tunnel configuration
+
+#### **OceanX Staging DWH Wrapper (`mcp-wrappers/postgres/ox-staging-dwh.sh`)**
+- **Purpose**: Pre-configured wrapper for OceanX staging environment
+- **Configuration**:
+  - **Database**: `data_warehouse` on OceanX staging PostgreSQL
+  - **User**: `stg_dwh_user_reader` (read-only access)
+  - **Host**: `host.docker.internal` (Docker networking)
+  - **Port**: `5432` (Local tunnel port)
+- **Usage**: Calls the generic PostgreSQL wrapper with OceanX-specific settings
+- **Tables**: Access to `dbt` schema tables for social media analytics
+
+#### **Wrapper Execution Flow**
+```bash
+# 1. Environment setup
+export POSTGRES_HOST="host.docker.internal"
+export POSTGRES_USER="stg_dwh_user_reader"
+export POSTGRES_DB="data_warehouse"
+
+# 2. Azure authentication
+if [ -n "$AZURE_ACCESS_TOKEN" ]; then
+    DB_PASSWORD="$AZURE_ACCESS_TOKEN"
+else
+    # Get token from Azure CLI
+    DB_PASSWORD=$(az account get-access-token --resource-type oss-rdbms -o tsv)
+fi
+
+# 3. SSH tunnel (if configured)
+if [ -n "$BASTION_HOST" ]; then
+    ssh -L 5432:ox-stg-db-2.postgres.database.azure.com:5432 $BASTION_USER@$BASTION_HOST
+fi
+
+# 4. PostgreSQL MCP server
+exec npx -y @modelcontextprotocol/server-postgres "$POSTGRES_URL"
+```
+
+### **📊 Data Access Patterns**
+
+#### **Website Analytics Queries**
+```sql
+-- Use Google Analytics MCP tools for website data
+-- Property ID: 383528775
+-- Metrics: sessions, newUsers, screenPageViews, engagementRate
+-- Dimensions: date, pagePath, hostname, sessionSource
+```
+
+#### **Social Media Performance Queries**
+```sql
+-- Use PostgreSQL MCP for social media data
+-- Table: dbt.social_post_daily_performance
+-- Columns: reach, views, engagements, likes, shares, comments
+-- Date filtering: day >= '2025-10-01' AND day < '2025-11-01'
+```
+
+### **🔒 Security Considerations**
+
+- **Credentials**: Never commit `.env` or `ga4-credentials.json` to version control
+- **API Keys**: Rotate regularly and use least privilege principle
+- **Network**: SSH tunnels provide secure access to OceanX infrastructure
+- **Authentication**: Azure access tokens expire and need refresh
+- **CORS**: Configured for OceanX domains and localhost development
+
+### **🛠️ Troubleshooting**
+
+#### **Common Issues**
+
+1. **Azure Access Token Expired**
+   ```bash
+   # Error: "The access token has expired"
+   # Solution: Refresh the token
+   ./scripts/get-azure-token.sh
+   docker compose restart
+   ```
+
+2. **Google Analytics Authentication Failed**
+   ```bash
+   # Error: "Invalid credentials"
+   # Solution: Check ga4-credentials.json
+   # - Verify service account has GA4 API access
+   # - Check property ID is 383528775
+   # - Ensure JSON file is valid
+   ```
+
+3. **PostgreSQL Connection Failed**
+   ```bash
+   # Error: "Connection refused"
+   # Solution: Check SSH tunnel
+   # - Verify bastion host is accessible
+   # - Check Azure access token is valid
+   # - Ensure local tunnel is running
+   ```
+
+4. **MetaMCP Server Not Starting**
+   ```bash
+   # Check logs
+   docker compose logs -f app
+   
+   # Common fixes:
+   # - Check .env file exists and is valid
+   # - Verify all required environment variables
+   # - Check port 12008 is not in use
+   ```
+
+#### **Health Checks**
+```bash
+# Check MetaMCP health
+curl http://localhost:12008/health
+
+# Check Docker services
+docker compose ps
+
+# Check logs
+docker compose logs -f
+
+# Test MCP connection
+curl -H "X-API-Key: your-api-key" \
+     http://localhost:12008/metamcp/ga4-test-key/sse
+```
+
+#### **Environment Validation**
+```bash
+# Check required files
+ls -la .env ga4-credentials.json
+
+# Check environment variables
+docker compose config
+
+# Test Azure authentication
+az account show
+az account get-access-token --resource-type oss-rdbms -o tsv
 ```
 
 ## 🗺️ Roadmap

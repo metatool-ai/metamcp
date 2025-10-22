@@ -1,44 +1,40 @@
-# Mintlify Starter Kit
+# MetaMCP Documentation
 
-Use the starter kit to get your docs deployed and ready to customize.
+This directory contains documentation for the MetaMCP system and its available tools.
 
-Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
+## Files
 
-- Guide pages
-- Navigation
-- Customizations
-- API reference pages
-- Use of popular components
+- **`mcp-tools-guide.md`** - Comprehensive guide for AI agents on how to use MCP tools
+- **`mcp-tools-config.yaml`** - Quick reference configuration for tool selection and parameters
 
-**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
+## Quick Start for AI Agents
 
-## Development
+1. **Read the guide**: Start with `mcp-tools-guide.md` for detailed information
+2. **Check config**: Use `mcp-tools-config.yaml` for quick parameter reference
+3. **Follow the rules**: Use the tool selection rules to choose the right tool
+4. **Validate first**: Check parameters before making requests
+5. **Use templates**: Start with provided request templates
 
-Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
+## Available MCP Tools
 
-```
-npm i -g mint
-```
+### Google Analytics Tools
+- `mcp_metamcp-oceanx_google-analytics-mcp__run_report` - Standard GA4 reports
+- `mcp_metamcp-oceanx_google-analytics-mcp__run_realtime_report` - Live traffic monitoring
 
-Run the following command at the root of your documentation, where your `docs.json` is located:
+### Data Warehouse Tool
+- `mcp_metamcp-oceanx_ox-staging-dwh__query` - SQL queries on OceanX staging DWH
 
-```
-mint dev
-```
+## Key Points
 
-View your local preview at `http://localhost:3000`.
+- **Property ID**: Always use `383528775` for Google Analytics
+- **Common Mistakes**: `users` → `newUsers`, `pageviews` → `screenPageViews`
+- **Tool Selection**: Use keywords to determine the right tool
+- **Validation**: Always validate parameters before making requests
 
-## Publishing changes
+## Maintenance
 
-Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
-
-## Need help?
-
-### Troubleshooting
-
-- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
-- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
-
-### Resources
-- [Mintlify documentation](https://mintlify.com/docs)
-- [Mintlify community](https://mintlify.com/community)
+Update these files when:
+- New MCP tools are added
+- Tool parameters change
+- New common mistakes are discovered
+- Request templates need updates
