@@ -127,6 +127,7 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
     }
 
     // Create client registration
+    // MCP clients registered via Dynamic Client Registration do not get admin panel access by default
     const clientRegistration = {
       client_id: clientId,
       client_secret: clientSecret,
@@ -136,6 +137,7 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
       response_types: clientResponseTypes,
       token_endpoint_auth_method: clientTokenEndpointAuthMethod,
       scope: scope || "admin",
+      can_access_admin: false, // MCP clients cannot access admin panel
       client_uri: client_uri || null,
       logo_uri: logo_uri || null,
       contacts: contacts && Array.isArray(contacts) ? contacts : null,

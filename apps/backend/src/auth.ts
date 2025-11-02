@@ -30,6 +30,24 @@ const createBasicAuthCheckMiddleware = () => {
   };
 };
 
+// Helper function to create email domain check middleware
+const createEmailDomainCheckMiddleware = () => {
+  return async (request: any) => {
+    const email = request?.body?.email || request?.email;
+
+    if (email) {
+      const isAllowed = await configService.isEmailDomainAllowed(email);
+      if (!isAllowed) {
+        throw new Error(
+          "Registration and login are restricted to specific email domains. Please contact the administrator.",
+        );
+      }
+    }
+
+    return { request };
+  };
+};
+
 // OIDC Provider configuration - optional, only if environment variables are provided
 const oidcProviders: GenericOAuthConfig[] = [];
 
@@ -142,20 +160,36 @@ export const auth = betterAuth({
             }
           }
 
+          // Check email domain whitelist
+          if (user.email) {
+            const isAllowed = await configService.isEmailDomainAllowed(user.email);
+            if (!isAllowed) {
+              throw new Error(
+                "Registration and login are restricted to specific email domains. Please contact the administrator.",
+              );
+            }
+          }
+
           return { data: user };
         },
       },
     },
   },
-  // Add middleware to check basic auth setting
+  // Add middleware to check basic auth setting and email domains
   middleware: [
     {
       path: "/sign-in/email",
-      middleware: createBasicAuthCheckMiddleware(),
+      middleware: [
+        createBasicAuthCheckMiddleware(),
+        createEmailDomainCheckMiddleware(),
+      ],
     },
     {
       path: "/sign-up/email",
-      middleware: createBasicAuthCheckMiddleware(),
+      middleware: [
+        createBasicAuthCheckMiddleware(),
+        createEmailDomainCheckMiddleware(),
+      ],
     },
     {
       path: "/forgot-password",

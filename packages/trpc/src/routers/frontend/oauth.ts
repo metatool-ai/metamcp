@@ -1,6 +1,11 @@
 import {
+  DeleteOAuthClientRequestSchema,
+  DeleteOAuthClientResponseSchema,
+  GetAllOAuthClientsResponseSchema,
   GetOAuthSessionRequestSchema,
   GetOAuthSessionResponseSchema,
+  UpdateOAuthClientAdminAccessRequestSchema,
+  UpdateOAuthClientAdminAccessResponseSchema,
   UpsertOAuthSessionRequestSchema,
   UpsertOAuthSessionResponseSchema,
 } from "@repo/zod-types";
@@ -19,6 +24,13 @@ export const createOAuthRouter = (
     upsert: (
       input: z.infer<typeof UpsertOAuthSessionRequestSchema>,
     ) => Promise<z.infer<typeof UpsertOAuthSessionResponseSchema>>;
+    getAllClients: () => Promise<z.infer<typeof GetAllOAuthClientsResponseSchema>>;
+    updateClientAdminAccess: (
+      input: z.infer<typeof UpdateOAuthClientAdminAccessRequestSchema>,
+    ) => Promise<z.infer<typeof UpdateOAuthClientAdminAccessResponseSchema>>;
+    deleteClient: (
+      input: z.infer<typeof DeleteOAuthClientRequestSchema>,
+    ) => Promise<z.infer<typeof DeleteOAuthClientResponseSchema>>;
   },
 ) => {
   return router({
@@ -36,6 +48,29 @@ export const createOAuthRouter = (
       .output(UpsertOAuthSessionResponseSchema)
       .mutation(async ({ input }) => {
         return await implementations.upsert(input);
+      }),
+
+    // Protected: Get all registered OAuth clients
+    getAllClients: protectedProcedure
+      .output(GetAllOAuthClientsResponseSchema)
+      .query(async () => {
+        return await implementations.getAllClients();
+      }),
+
+    // Protected: Update OAuth client admin access
+    updateClientAdminAccess: protectedProcedure
+      .input(UpdateOAuthClientAdminAccessRequestSchema)
+      .output(UpdateOAuthClientAdminAccessResponseSchema)
+      .mutation(async ({ input }) => {
+        return await implementations.updateClientAdminAccess(input);
+      }),
+
+    // Protected: Delete OAuth client
+    deleteClient: protectedProcedure
+      .input(DeleteOAuthClientRequestSchema)
+      .output(DeleteOAuthClientResponseSchema)
+      .mutation(async ({ input }) => {
+        return await implementations.deleteClient(input);
       }),
   });
 };

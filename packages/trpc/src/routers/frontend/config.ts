@@ -41,6 +41,11 @@ export const createConfigRouter = (implementations: {
   getAuthProviders: () => Promise<
     Array<{ id: string; name: string; enabled: boolean }>
   >;
+  getAuthConfig: () => Promise<{
+    isSignupDisabled: boolean;
+    isBasicAuthDisabled: boolean;
+    isOidcEnabled: boolean;
+  }>;
 }) =>
   router({
     getSignupDisabled: publicProcedure.query(async () => {
@@ -135,5 +140,9 @@ export const createConfigRouter = (implementations: {
 
     getAuthProviders: publicProcedure.query(async () => {
       return await implementations.getAuthProviders();
+    }),
+
+    getAuthConfig: publicProcedure.query(async () => {
+      return await implementations.getAuthConfig();
     }),
   });

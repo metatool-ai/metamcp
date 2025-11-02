@@ -4,6 +4,7 @@ import {
   McpServerErrorStatusEnum,
   McpServerStatusEnum,
   McpServerTypeEnum,
+  ToolAccessTypeEnum,
 } from "@repo/zod-types";
 import { sql } from "drizzle-orm";
 import {
@@ -29,6 +30,10 @@ export const mcpServerStatusEnum = pgEnum(
 export const mcpServerErrorStatusEnum = pgEnum(
   "mcp_server_error_status",
   McpServerErrorStatusEnum.options,
+);
+export const toolAccessTypeEnum = pgEnum(
+  "tool_access_type",
+  ToolAccessTypeEnum.options,
 );
 
 export const mcpServersTable = pgTable(
@@ -118,6 +123,9 @@ export const toolsTable = pgTable(
         required?: string[];
       }>()
       .notNull(),
+    access_type: toolAccessTypeEnum("access_type")
+      .notNull()
+      .default("write"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -130,6 +138,7 @@ export const toolsTable = pgTable(
   },
   (table) => [
     index("tools_mcp_server_uuid_idx").on(table.mcp_server_uuid),
+    index("tools_access_type_idx").on(table.access_type),
     unique("tools_unique_tool_name_per_server_idx").on(
       table.mcp_server_uuid,
       table.name,
@@ -400,6 +409,7 @@ export const oauthClientsTable = pgTable("oauth_clients", {
     .notNull()
     .default("none"),
   scope: text("scope").default("admin"),
+  can_access_admin: boolean("can_access_admin").notNull().default(false),
   client_uri: text("client_uri"),
   logo_uri: text("logo_uri"),
   contacts: text("contacts").array(),

@@ -4,6 +4,10 @@ import { z } from "zod";
 export const ToolStatusEnum = z.enum(["ACTIVE", "INACTIVE"]);
 export type ToolStatus = z.infer<typeof ToolStatusEnum>;
 
+// Define tool access type enum
+export const ToolAccessTypeEnum = z.enum(["read", "write"]);
+export type ToolAccessType = z.infer<typeof ToolAccessTypeEnum>;
+
 // Tool schema
 export const ToolSchema = z.object({
   uuid: z.string().uuid(),
@@ -14,6 +18,7 @@ export const ToolSchema = z.object({
     properties: z.record(z.any()).optional(),
     required: z.array(z.string()).optional(),
   }),
+  access_type: ToolAccessTypeEnum.default("write"),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
   mcp_server_uuid: z.string().uuid(),
@@ -75,6 +80,7 @@ export const ToolCreateInputSchema = z.object({
     properties: z.record(z.any()).optional(),
     required: z.array(z.string()).optional(),
   }),
+  access_type: ToolAccessTypeEnum.default("write"),
   mcp_server_uuid: z.string(),
 });
 
@@ -107,6 +113,7 @@ export const DatabaseToolSchema = z.object({
     properties: z.record(z.any()).optional(),
     required: z.array(z.string()).optional(),
   }),
+  access_type: ToolAccessTypeEnum.default("write"),
   created_at: z.date(),
   updated_at: z.date(),
   mcp_server_uuid: z.string(),

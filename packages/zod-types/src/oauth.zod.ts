@@ -27,6 +27,7 @@ export const OAuthClientSchema = z.object({
   response_types: z.array(z.string()),
   token_endpoint_auth_method: z.string(),
   scope: z.string().nullable(),
+  can_access_admin: z.boolean().default(false),
   client_uri: z.string().nullable(),
   logo_uri: z.string().nullable(),
   contacts: z.array(z.string()).nullable(),
@@ -71,6 +72,7 @@ export const OAuthClientCreateInputSchema = z.object({
   response_types: z.array(z.string()),
   token_endpoint_auth_method: z.string(),
   scope: z.string().nullable(),
+  can_access_admin: z.boolean().default(false),
   client_uri: z.string().nullable().optional(),
   logo_uri: z.string().nullable().optional(),
   contacts: z.array(z.string()).nullable().optional(),
@@ -200,3 +202,40 @@ export type OAuthAccessToken = z.infer<typeof OAuthAccessTokenSchema>;
 export type OAuthAccessTokenCreateInput = z.infer<
   typeof OAuthAccessTokenCreateInputSchema
 >;
+
+// API response schemas
+export const GetAllOAuthClientsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    OAuthClientSchema.extend({
+      created_at: z.string().datetime(),
+      updated_at: z.string().datetime().optional(),
+    }),
+  ),
+  message: z.string().optional(),
+});
+
+export const UpdateOAuthClientAdminAccessRequestSchema = z.object({
+  clientId: z.string(),
+  canAccessAdmin: z.boolean(),
+});
+
+export const UpdateOAuthClientAdminAccessResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+});
+
+export const DeleteOAuthClientRequestSchema = z.object({
+  clientId: z.string(),
+});
+
+export const DeleteOAuthClientResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+});
+
+export type GetAllOAuthClientsResponse = z.infer<typeof GetAllOAuthClientsResponseSchema>;
+export type UpdateOAuthClientAdminAccessRequest = z.infer<typeof UpdateOAuthClientAdminAccessRequestSchema>;
+export type UpdateOAuthClientAdminAccessResponse = z.infer<typeof UpdateOAuthClientAdminAccessResponseSchema>;
+export type DeleteOAuthClientRequest = z.infer<typeof DeleteOAuthClientRequestSchema>;
+export type DeleteOAuthClientResponse = z.infer<typeof DeleteOAuthClientResponseSchema>;

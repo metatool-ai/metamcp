@@ -107,4 +107,27 @@ export const configImplementations = {
   > => {
     return await configService.getAuthProviders();
   },
+
+  getAuthConfig: async (): Promise<{
+    isSignupDisabled: boolean;
+    isBasicAuthDisabled: boolean;
+    isOidcEnabled: boolean;
+  }> => {
+    const [isSignupDisabled, isBasicAuthDisabled, authProviders] =
+      await Promise.all([
+        configService.isSignupDisabled(),
+        configService.isBasicAuthDisabled(),
+        configService.getAuthProviders(),
+      ]);
+
+    const isOidcEnabled = authProviders.some(
+      (provider) => provider.id === "oidc" && provider.enabled,
+    );
+
+    return {
+      isSignupDisabled,
+      isBasicAuthDisabled,
+      isOidcEnabled,
+    };
+  },
 };

@@ -171,4 +171,42 @@ export const configService = {
 
     return providers;
   },
+
+  async getAllowedEmailDomains(): Promise<string[]> {
+    const config = await configRepo.getConfig(
+      ConfigKeyEnum.Enum.ALLOWED_EMAIL_DOMAINS,
+    );
+    if (!config?.value) {
+      return []; // Empty array means all domains are allowed
+    }
+    return config.value.split(",").map((d) => d.trim()).filter(Boolean);
+  },
+
+  async setAllowedEmailDomains(domains: string[]): Promise<void> {
+    await configRepo.setConfig(
+      ConfigKeyEnum.Enum.ALLOWED_EMAIL_DOMAINS,
+      domains.join(","),
+      "Comma-separated list of allowed email domains for registration and login",
+    );
+  },
+
+  async isEmailDomainAllowed(email: string): Promise<boolean> {
+    const allowedDomains = await this.getAllowedEmailDomains();
+
+    // If no domains are configured, allow all
+    if (allowedDomains.length === 0) {
+      return true;
+    }
+
+    // Extract domain from email
+    const emailDomain = email.split("@")[1]?.toLowerCase();
+    if (!emailDomain) {
+      return false;
+    }
+
+    // Check if domain is in the allowed list
+    return allowedDomains.some(
+      (domain) => domain.toLowerCase() === emailDomain,
+    );
+  },
 };

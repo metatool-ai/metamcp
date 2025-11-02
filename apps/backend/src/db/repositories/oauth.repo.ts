@@ -40,6 +40,27 @@ export class OAuthRepository {
       });
   }
 
+  async getAllClients(): Promise<OAuthClient[]> {
+    const result = await db.select().from(oauthClientsTable);
+    return result;
+  }
+
+  async updateClientAdminAccess(
+    clientId: string,
+    canAccessAdmin: boolean,
+  ): Promise<void> {
+    await db
+      .update(oauthClientsTable)
+      .set({ can_access_admin: canAccessAdmin, updated_at: new Date() })
+      .where(eq(oauthClientsTable.client_id, clientId));
+  }
+
+  async deleteClient(clientId: string): Promise<void> {
+    await db
+      .delete(oauthClientsTable)
+      .where(eq(oauthClientsTable.client_id, clientId));
+  }
+
   // ===== Authorization Codes =====
 
   async getAuthCode(code: string): Promise<OAuthAuthorizationCode | null> {
