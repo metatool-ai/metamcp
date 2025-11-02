@@ -9,6 +9,7 @@ import {
   SearchCode,
   Server,
   Settings,
+  Shield,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -69,6 +70,11 @@ const getMenuItems = (t: (key: string) => string, locale: SupportedLocale) => [
     title: t("navigation:apiKeys"),
     url: getLocalizedPath("/api-keys", locale),
     icon: Key,
+  },
+  {
+    title: t("navigation:oauthClients"),
+    url: getLocalizedPath("/oauth-clients", locale),
+    icon: Shield,
   },
   {
     title: t("navigation:settings"),

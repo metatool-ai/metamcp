@@ -206,6 +206,9 @@
     "foundToolsFromMcp": "Found {{count}} tools from MCP server",
     "noToolsFromMcp": "No tools found on MCP server",
     "failedToFetchTools": "Failed to fetch tools from MCP server",
-    "failedToSaveTools": "Failed to save tools"
+    "failedToSaveTools": "Failed to save tools",
+    "accessType": "Access Type",
+    "readOnly": "Read Only",
+    "write": "Write"
   }
 }

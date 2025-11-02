@@ -2,6 +2,7 @@
 
 import { Tool } from "@repo/zod-types";
 import {
+  BookOpen,
   Calendar,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -10,6 +11,7 @@ import {
   EyeOff,
   Hash,
   MoreHorizontal,
+  PencilLine,
   RefreshCw,
   Search,
   Wrench,
@@ -59,6 +61,7 @@ interface EnhancedTool {
   updated_at?: string;
   mcp_server_uuid?: string;
   toolSchema?: Record<string, unknown>;
+  access_type?: "read" | "write";
 
   // MCP-specific fields
   inputSchema?: {
@@ -395,6 +398,7 @@ export function UnifiedToolsTable({
                 </Button>
               </TableHead>
               <TableHead>{t("mcp-servers:tools.source")}</TableHead>
+              <TableHead>{t("mcp-servers:tools.accessType")}</TableHead>
               <TableHead>
                 <Button
                   variant="ghost"
@@ -462,6 +466,29 @@ export function UnifiedToolsTable({
                     <TableCell>{getSourceBadge(tool)}</TableCell>
 
                     <TableCell>
+                      {tool.access_type && (
+                        <Badge
+                          variant={
+                            tool.access_type === "read" ? "info" : "warning"
+                          }
+                          className="gap-1"
+                        >
+                          {tool.access_type === "read" ? (
+                            <>
+                              <BookOpen className="h-3 w-3" />
+                              {t("mcp-servers:tools.readOnly")}
+                            </>
+                          ) : (
+                            <>
+                              <PencilLine className="h-3 w-3" />
+                              {t("mcp-servers:tools.write")}
+                            </>
+                          )}
+                        </Badge>
+                      )}
+                    </TableCell>
+
+                    <TableCell>
                       {tool.updated_at ? (
                         <div className="flex items-center gap-2">
                           <Calendar className="h-3 w-3 text-muted-foreground" />
@@ -507,7 +534,7 @@ export function UnifiedToolsTable({
                   {/* Expanded details row */}
                   {isExpanded && (
                     <TableRow>
-                      <TableCell colSpan={7} className="bg-muted/50">
+                      <TableCell colSpan={8} className="bg-muted/50">
                         <div className="py-4 space-y-4">
                           {/* Tool Info */}
                           <div className="flex items-center gap-4">

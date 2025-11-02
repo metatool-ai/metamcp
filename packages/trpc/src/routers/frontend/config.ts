@@ -46,6 +46,10 @@ export const createConfigRouter = (implementations: {
     isBasicAuthDisabled: boolean;
     isOidcEnabled: boolean;
   }>;
+  getAllowedEmailDomains: () => Promise<string>;
+  setAllowedEmailDomains: (input: {
+    domains: string;
+  }) => Promise<{ success: boolean }>;
 }) =>
   router({
     getSignupDisabled: publicProcedure.query(async () => {
@@ -145,4 +149,14 @@ export const createConfigRouter = (implementations: {
     getAuthConfig: publicProcedure.query(async () => {
       return await implementations.getAuthConfig();
     }),
+
+    getAllowedEmailDomains: protectedProcedure.query(async () => {
+      return await implementations.getAllowedEmailDomains();
+    }),
+
+    setAllowedEmailDomains: protectedProcedure
+      .input(z.object({ domains: z.string() }))
+      .mutation(async ({ input }) => {
+        return await implementations.setAllowedEmailDomains(input);
+      }),
   });

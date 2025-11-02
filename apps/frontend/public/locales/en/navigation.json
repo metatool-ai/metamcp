@@ -5,6 +5,7 @@
   "metamcpEndpoints": "MetaMCP Endpoints",
   "mcpInspector": "MCP Inspector",
   "apiKeys": "API Keys",
+  "oauthClients": "OAuth Clients",
   "settings": "Settings",
   "liveLogs": "Live Logs",
   "application": "Application",

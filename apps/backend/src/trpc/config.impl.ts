@@ -130,4 +130,15 @@ export const configImplementations = {
       isOidcEnabled,
     };
   },
+
+  getAllowedEmailDomains: async (): Promise<string> => {
+    return await configService.getAllowedEmailDomainsString();
+  },
+
+  setAllowedEmailDomains: async (input: {
+    domains: string;
+  }): Promise<{ success: boolean }> => {
+    await configService.setAllowedEmailDomainsString(input.domains);
+    return { success: true };
+  },
 };

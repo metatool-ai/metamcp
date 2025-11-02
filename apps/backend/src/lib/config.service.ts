@@ -209,4 +209,17 @@ export const configService = {
       (domain) => domain.toLowerCase() === emailDomain,
     );
   },
+
+  async getAllowedEmailDomainsString(): Promise<string> {
+    const domains = await this.getAllowedEmailDomains();
+    return domains.join(", ");
+  },
+
+  async setAllowedEmailDomainsString(domainsString: string): Promise<void> {
+    const domains = domainsString
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
+    await this.setAllowedEmailDomains(domains);
+  },
 };

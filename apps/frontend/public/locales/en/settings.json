@@ -51,5 +51,12 @@
   "resetToDefaults": "Reset to Defaults",
   "confirmReset": "Are you sure you want to reset all settings to their default values?",
   "resetConfirmation": "This action cannot be undone. All custom settings will be lost.",
-  "reset": "Reset"
+  "reset": "Reset",
+  "emailDomainWhitelist": "Email Domain Whitelist",
+  "emailDomainWhitelistDescription": "Control which email domains are allowed to register and sign in",
+  "allowedEmailDomains": "Allowed Email Domains",
+  "allowedEmailDomainsDescription": "Enter a comma-separated list of email domains that are allowed to register and sign in. For example: example.com, company.com",
+  "leaveEmptyToAllowAll": "Leave empty to allow all email domains",
+  "emailDomainsUpdated": "Email domain whitelist updated successfully",
+  "emailDomainsUpdateFailed": "Failed to update email domain whitelist"
 }

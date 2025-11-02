@@ -682,6 +682,109 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </form>
+
+      {/* Email Domain Whitelist Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("settings:emailDomainWhitelist")}</CardTitle>
+          <CardDescription>
+            {t("settings:emailDomainWhitelistDescription")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <EmailDomainWhitelist />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Email Domain Whitelist Component
+function EmailDomainWhitelist() {
+  const { t } = useTranslations();
+  const [domains, setDomains] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Get current domains
+  const { data: domainsData, refetch } =
+    trpc.frontend.config.getAllowedEmailDomains.useQuery();
+
+  // Set domains mutation
+  const setDomainsMutation =
+    trpc.frontend.config.setAllowedEmailDomains.useMutation({
+      onSuccess: (data) => {
+        if (data.success) {
+          toast.success(t("settings:emailDomainsUpdated"));
+          refetch();
+          setIsEditing(false);
+        } else {
+          toast.error(t("settings:emailDomainsUpdateFailed"));
+        }
+      },
+      onError: (error) => {
+        toast.error(error.message);
+      },
+    });
+
+  // Update local state when data is loaded
+  useEffect(() => {
+    if (domainsData !== undefined) {
+      setDomains(domainsData);
+    }
+  }, [domainsData]);
+
+  const handleSave = () => {
+    setDomainsMutation.mutate({ domains });
+  };
+
+  const handleCancel = () => {
+    setDomains(domainsData || "");
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="email-domains" className="text-base">
+          {t("settings:allowedEmailDomains")}
+        </Label>
+        <p className="text-sm text-muted-foreground">
+          {t("settings:allowedEmailDomainsDescription")}
+        </p>
+        <Input
+          id="email-domains"
+          value={domains}
+          onChange={(e) => {
+            setDomains(e.target.value);
+            setIsEditing(true);
+          }}
+          placeholder="example.com, company.com, domain.org"
+          disabled={setDomainsMutation.isPending}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("settings:leaveEmptyToAllowAll")}
+        </p>
+      </div>
+
+      {isEditing && (
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleSave}
+            disabled={setDomainsMutation.isPending}
+            size="sm"
+          >
+            {setDomainsMutation.isPending ? t("common:saving") : t("common:save")}
+          </Button>
+          <Button
+            onClick={handleCancel}
+            variant="outline"
+            size="sm"
+            disabled={setDomainsMutation.isPending}
+          >
+            {t("common:cancel")}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
