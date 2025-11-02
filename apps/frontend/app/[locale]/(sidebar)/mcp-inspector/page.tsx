@@ -2,7 +2,7 @@
 
 import { McpServer, McpServerTypeEnum } from "@repo/zod-types";
 import { useMemoizedFn } from "ahooks";
-import { ChevronDown, Edit, SearchCode, Server } from "lucide-react";
+import { ChevronDown, Edit, Eye, SearchCode, Server } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { Suspense, useMemo, useState } from "react";
 
@@ -266,6 +266,16 @@ function McpInspectorContent() {
                 {connection.connectionStatus === "connected"
                   ? t("inspector:reconnectButton")
                   : t("inspector:connectButton")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  router.push(`/mcp-servers/${selectedServerUuid}`)
+                }
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                {t("mcp-servers:list.viewDetails")}
               </Button>
               <Button
                 variant="outline"
