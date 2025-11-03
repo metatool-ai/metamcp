@@ -9,9 +9,10 @@ import { LoginForm } from "./login-form";
 async function getAuthConfig() {
   try {
     const config = await vanillaTrpcClient.frontend.config.getAuthConfig.query();
+    console.log("[Login SSR] Auth config fetched:", config);
     return config;
   } catch (error) {
-    console.error("Failed to fetch auth config:", error);
+    console.error("[Login SSR] Failed to fetch auth config:", error);
     return {
       isSignupDisabled: false,
       isBasicAuthDisabled: false,

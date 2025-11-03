@@ -32,6 +32,13 @@ export function LoginForm({
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
 
+  // Debug logging
+  console.log("[LoginForm] Props received:", {
+    isSignupDisabled,
+    isBasicAuthDisabled,
+    isOidcEnabled,
+  });
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
