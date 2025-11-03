@@ -5,7 +5,7 @@ import {
   McpServerSchema,
   McpServerStatusEnum,
 } from "./mcp-servers.zod";
-import { ToolSchema, ToolStatusEnum } from "./tools.zod";
+import { ToolAnnotationsSchema, ToolSchema, ToolStatusEnum } from "./tools.zod";
 
 // Namespace schema definitions
 export const createNamespaceFormSchema = z.object({
@@ -55,6 +55,7 @@ export const NamespaceToolSchema = ToolSchema.extend({
   status: ToolStatusEnum, // Status from namespace tool mapping
   overrideName: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
+  overrideAnnotations: ToolAnnotationsSchema.nullable().optional(),
 });
 
 export const NamespaceWithServersSchema = NamespaceSchema.extend({
@@ -145,6 +146,7 @@ export const UpdateNamespaceToolOverridesRequestSchema = z.object({
   serverUuid: z.string().uuid(),
   overrideName: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
+  overrideAnnotations: ToolAnnotationsSchema.nullable().optional(),
 });
 
 export const UpdateNamespaceToolOverridesResponseSchema = z.object({
@@ -259,6 +261,7 @@ export const NamespaceToolOverridesUpdateSchema = z.object({
   serverUuid: z.string(),
   overrideName: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
+  overrideAnnotations: ToolAnnotationsSchema.nullable().optional(),
 });
 
 export type NamespaceCreateInput = z.infer<typeof NamespaceCreateInputSchema>;
@@ -311,6 +314,7 @@ export const DatabaseNamespaceToolSchema = z.object({
     type: z.literal("object"),
     properties: z.record(z.any()).optional(),
   }),
+  annotations: ToolAnnotationsSchema,
   created_at: z.date(),
   updated_at: z.date(),
   mcp_server_uuid: z.string(),
@@ -319,6 +323,7 @@ export const DatabaseNamespaceToolSchema = z.object({
   serverUuid: z.string(),
   overrideName: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
+  overrideAnnotations: ToolAnnotationsSchema.nullable().optional(),
 });
 
 export type DatabaseNamespace = z.infer<typeof DatabaseNamespaceSchema>;

@@ -53,6 +53,7 @@ export class NamespaceMappingsRepository {
       .set({
         override_name: input.overrideName,
         override_description: input.overrideDescription,
+        override_annotations: input.overrideAnnotations,
       })
       .where(
         and(
