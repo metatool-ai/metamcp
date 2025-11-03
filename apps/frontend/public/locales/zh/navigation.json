@@ -5,6 +5,7 @@
   "metamcpEndpoints": "MetaMCP 端点",
   "mcpInspector": "MCP 检查器",
   "apiKeys": "API 密钥",
+  "oauthClients": "OAuth 客户端",
   "settings": "设置",
   "liveLogs": "实时日志",
   "application": "应用程序",
