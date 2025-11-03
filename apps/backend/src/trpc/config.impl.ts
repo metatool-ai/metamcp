@@ -141,4 +141,15 @@ export const configImplementations = {
     await configService.setAllowedEmailDomainsString(input.domains);
     return { success: true };
   },
+
+  getAllowedOAuthClientDomains: async (): Promise<string> => {
+    return await configService.getAllowedOAuthClientDomainsString();
+  },
+
+  setAllowedOAuthClientDomains: async (input: {
+    domains: string;
+  }): Promise<{ success: boolean }> => {
+    await configService.setAllowedOAuthClientDomainsString(input.domains);
+    return { success: true };
+  },
 };

@@ -58,5 +58,12 @@
   "allowedEmailDomainsDescription": "Enter a comma-separated list of email domains that are allowed to register and sign in. For example: example.com, company.com",
   "leaveEmptyToAllowAll": "Leave empty to allow all email domains",
   "emailDomainsUpdated": "Email domain whitelist updated successfully",
-  "emailDomainsUpdateFailed": "Failed to update email domain whitelist"
+  "emailDomainsUpdateFailed": "Failed to update email domain whitelist",
+  "oauthClientDomainWhitelist": "OAuth Client Domain Whitelist",
+  "oauthClientDomainWhitelistDescription": "Control which domains are allowed to register OAuth clients via Dynamic Client Registration",
+  "allowedOAuthClientDomains": "Allowed OAuth Client Domains",
+  "allowedOAuthClientDomainsDescription": "Enter a comma-separated list of domains that are allowed to register OAuth clients. For example: example.com, myapp.com. Supports exact match and subdomains.",
+  "leaveEmptyToAllowAllDomains": "Leave empty to allow all domains",
+  "oauthClientDomainsUpdated": "OAuth client domain whitelist updated successfully",
+  "oauthClientDomainsUpdateFailed": "Failed to update OAuth client domain whitelist"
 }

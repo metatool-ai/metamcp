@@ -1,6 +1,7 @@
 import express from "express";
 
 import { oauthRepository } from "../../db/repositories";
+import { configService } from "../../lib/config.service";
 import {
   generateSecureClientId,
   generateSecureClientSecret,
@@ -60,6 +61,17 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
         return res.status(400).json({
           error: "invalid_redirect_uri",
           error_description: `Invalid redirect URI: ${uri}. Must use secure scheme and valid format.`,
+        });
+      }
+    }
+
+    // Check if redirect URI domains are allowed (domain whitelist)
+    for (const uri of redirect_uris) {
+      const isAllowed = await configService.isOAuthClientDomainAllowed(uri);
+      if (!isAllowed) {
+        return res.status(403).json({
+          error: "unauthorized_client",
+          error_description: `Redirect URI domain not allowed: ${uri}. Please contact the administrator to whitelist your domain.`,
         });
       }
     }

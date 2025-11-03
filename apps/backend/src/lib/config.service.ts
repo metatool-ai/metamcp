@@ -222,4 +222,66 @@ export const configService = {
       .filter(Boolean);
     await this.setAllowedEmailDomains(domains);
   },
+
+  // OAuth Client Domain Whitelist
+  async getAllowedOAuthClientDomains(): Promise<string[]> {
+    const config = await configRepo.getConfig(
+      ConfigKeyEnum.Enum.ALLOWED_OAUTH_CLIENT_DOMAINS,
+    );
+    if (!config?.value) {
+      return []; // Empty array means all domains are allowed
+    }
+    return config.value.split(",").map((d) => d.trim()).filter(Boolean);
+  },
+
+  async setAllowedOAuthClientDomains(domains: string[]): Promise<void> {
+    await configRepo.setConfig(
+      ConfigKeyEnum.Enum.ALLOWED_OAUTH_CLIENT_DOMAINS,
+      domains.join(","),
+      "Comma-separated list of allowed OAuth client redirect URI domains",
+    );
+  },
+
+  async isOAuthClientDomainAllowed(redirectUri: string): Promise<boolean> {
+    const allowedDomains = await this.getAllowedOAuthClientDomains();
+
+    // If no domains are configured, allow all
+    if (allowedDomains.length === 0) {
+      return true;
+    }
+
+    try {
+      // Extract domain from redirect URI
+      const url = new URL(redirectUri);
+      const domain = url.hostname.toLowerCase();
+
+      // Check if domain is in the allowed list (exact match or subdomain)
+      return allowedDomains.some((allowedDomain) => {
+        const normalizedAllowed = allowedDomain.toLowerCase();
+        // Exact match or subdomain match
+        return (
+          domain === normalizedAllowed ||
+          domain.endsWith(`.${normalizedAllowed}`)
+        );
+      });
+    } catch (error) {
+      // Invalid URL
+      return false;
+    }
+  },
+
+  async getAllowedOAuthClientDomainsString(): Promise<string> {
+    const domains = await this.getAllowedOAuthClientDomains();
+    return domains.join(", ");
+  },
+
+  async setAllowedOAuthClientDomainsString(
+    domainsString: string,
+  ): Promise<void> {
+    const domains = domainsString
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
+    await this.setAllowedOAuthClientDomains(domains);
+  },
 };

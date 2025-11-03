@@ -50,6 +50,10 @@ export const createConfigRouter = (implementations: {
   setAllowedEmailDomains: (input: {
     domains: string;
   }) => Promise<{ success: boolean }>;
+  getAllowedOAuthClientDomains: () => Promise<string>;
+  setAllowedOAuthClientDomains: (input: {
+    domains: string;
+  }) => Promise<{ success: boolean }>;
 }) =>
   router({
     getSignupDisabled: publicProcedure.query(async () => {
@@ -158,5 +162,15 @@ export const createConfigRouter = (implementations: {
       .input(z.object({ domains: z.string() }))
       .mutation(async ({ input }) => {
         return await implementations.setAllowedEmailDomains(input);
+      }),
+
+    getAllowedOAuthClientDomains: protectedProcedure.query(async () => {
+      return await implementations.getAllowedOAuthClientDomains();
+    }),
+
+    setAllowedOAuthClientDomains: protectedProcedure
+      .input(z.object({ domains: z.string() }))
+      .mutation(async ({ input }) => {
+        return await implementations.setAllowedOAuthClientDomains(input);
       }),
   });

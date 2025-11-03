@@ -695,6 +695,19 @@ export default function SettingsPage() {
           <EmailDomainWhitelist />
         </CardContent>
       </Card>
+
+      {/* OAuth Client Domain Whitelist Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("settings:oauthClientDomainWhitelist")}</CardTitle>
+          <CardDescription>
+            {t("settings:oauthClientDomainWhitelistDescription")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <OAuthClientDomainWhitelist />
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -763,6 +776,96 @@ function EmailDomainWhitelist() {
         />
         <p className="text-xs text-muted-foreground">
           {t("settings:leaveEmptyToAllowAll")}
+        </p>
+      </div>
+
+      {isEditing && (
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleSave}
+            disabled={setDomainsMutation.isPending}
+            size="sm"
+          >
+            {setDomainsMutation.isPending ? t("common:saving") : t("common:save")}
+          </Button>
+          <Button
+            onClick={handleCancel}
+            variant="outline"
+            size="sm"
+            disabled={setDomainsMutation.isPending}
+          >
+            {t("common:cancel")}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// OAuth Client Domain Whitelist Component
+function OAuthClientDomainWhitelist() {
+  const { t } = useTranslations();
+  const [domains, setDomains] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Get current domains
+  const { data: domainsData, refetch } =
+    trpc.frontend.config.getAllowedOAuthClientDomains.useQuery();
+
+  // Set domains mutation
+  const setDomainsMutation =
+    trpc.frontend.config.setAllowedOAuthClientDomains.useMutation({
+      onSuccess: (data) => {
+        if (data.success) {
+          toast.success(t("settings:oauthClientDomainsUpdated"));
+          refetch();
+          setIsEditing(false);
+        } else {
+          toast.error(t("settings:oauthClientDomainsUpdateFailed"));
+        }
+      },
+      onError: (error) => {
+        toast.error(error.message);
+      },
+    });
+
+  // Update local state when data is loaded
+  useEffect(() => {
+    if (domainsData !== undefined) {
+      setDomains(domainsData);
+    }
+  }, [domainsData]);
+
+  const handleSave = () => {
+    setDomainsMutation.mutate({ domains });
+  };
+
+  const handleCancel = () => {
+    setDomains(domainsData || "");
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="oauth-client-domains" className="text-base">
+          {t("settings:allowedOAuthClientDomains")}
+        </Label>
+        <p className="text-sm text-muted-foreground">
+          {t("settings:allowedOAuthClientDomainsDescription")}
+        </p>
+        <Input
+          id="oauth-client-domains"
+          value={domains}
+          onChange={(e) => {
+            setDomains(e.target.value);
+            setIsEditing(true);
+          }}
+          placeholder="example.com, myapp.com, localhost"
+          disabled={setDomainsMutation.isPending}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("settings:leaveEmptyToAllowAllDomains")}
         </p>
       </div>
 
