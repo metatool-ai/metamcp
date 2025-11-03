@@ -3,8 +3,8 @@ import {
   CreateToolResponseSchema,
   GetToolsByMcpServerUuidRequestSchema,
   GetToolsByMcpServerUuidResponseSchema,
-  UpdateToolAccessTypeRequestSchema,
-  UpdateToolAccessTypeResponseSchema,
+  UpdateToolAnnotationsRequestSchema,
+  UpdateToolAnnotationsResponseSchema,
 } from "@repo/zod-types";
 import { z } from "zod";
 
@@ -67,13 +67,13 @@ export const toolsImplementations = {
     }
   },
 
-  updateAccessType: async (
-    input: z.infer<typeof UpdateToolAccessTypeRequestSchema>,
-  ): Promise<z.infer<typeof UpdateToolAccessTypeResponseSchema>> => {
+  updateAnnotations: async (
+    input: z.infer<typeof UpdateToolAnnotationsRequestSchema>,
+  ): Promise<z.infer<typeof UpdateToolAnnotationsResponseSchema>> => {
     try {
-      const updatedTool = await toolsRepository.updateAccessType(
+      const updatedTool = await toolsRepository.updateAnnotations(
         input.toolUuid,
-        input.accessType,
+        input.annotations,
       );
 
       if (!updatedTool) {
@@ -85,14 +85,14 @@ export const toolsImplementations = {
 
       return {
         success: true,
-        message: "Access type updated successfully",
+        message: "Annotations updated successfully",
       };
     } catch (error) {
-      console.error("Error updating tool access type:", error);
+      console.error("Error updating tool annotations:", error);
       return {
         success: false,
         message:
-          error instanceof Error ? error.message : "Failed to update access type",
+          error instanceof Error ? error.message : "Failed to update annotations",
       };
     }
   },

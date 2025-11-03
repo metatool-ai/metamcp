@@ -88,6 +88,28 @@ export class ToolsRepository {
 
     return updatedTool;
   }
+
+  async updateAnnotations(
+    uuid: string,
+    annotations: {
+      title?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    },
+  ): Promise<DatabaseTool | undefined> {
+    const [updatedTool] = await db
+      .update(toolsTable)
+      .set({
+        annotations,
+        updated_at: new Date(),
+      })
+      .where(eq(toolsTable.uuid, uuid))
+      .returning();
+
+    return updatedTool;
+  }
 }
 
 export const toolsRepository = new ToolsRepository();
