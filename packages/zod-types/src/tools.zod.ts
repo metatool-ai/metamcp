@@ -120,3 +120,21 @@ export const DatabaseToolSchema = z.object({
 });
 
 export type DatabaseTool = z.infer<typeof DatabaseToolSchema>;
+
+// Update tool access type
+export const UpdateToolAccessTypeRequestSchema = z.object({
+  toolUuid: z.string().uuid(),
+  accessType: ToolAccessTypeEnum,
+});
+
+export const UpdateToolAccessTypeResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+});
+
+export type UpdateToolAccessTypeRequest = z.infer<
+  typeof UpdateToolAccessTypeRequestSchema
+>;
+export type UpdateToolAccessTypeResponse = z.infer<
+  typeof UpdateToolAccessTypeResponseSchema
+>;

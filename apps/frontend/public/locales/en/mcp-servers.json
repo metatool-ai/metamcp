@@ -209,6 +209,8 @@
     "failedToSaveTools": "Failed to save tools",
     "accessType": "Access Type",
     "readOnly": "Read Only",
-    "write": "Write"
+    "write": "Write",
+    "accessTypeUpdated": "Access type updated successfully",
+    "updateFailed": "Failed to update access type"
   }
 }

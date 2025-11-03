@@ -1,6 +1,8 @@
 import {
   CreateToolRequestSchema,
   GetToolsByMcpServerUuidRequestSchema,
+  UpdateToolAccessTypeRequestSchema,
+  UpdateToolAccessTypeResponseSchema,
 } from "@repo/zod-types";
 
 import { protectedProcedure, router } from "../../trpc";
@@ -9,6 +11,7 @@ export const createToolsRouter = <
   TImplementations extends {
     getByMcpServerUuid: (input: any) => Promise<any>;
     create: (input: any) => Promise<any>;
+    updateAccessType: (input: any) => Promise<any>;
   },
 >(
   implementations: TImplementations,
@@ -26,6 +29,14 @@ export const createToolsRouter = <
       .input(CreateToolRequestSchema)
       .mutation(async ({ input }) => {
         return implementations.create(input);
+      }),
+
+    // Protected: Update tool access type
+    updateAccessType: protectedProcedure
+      .input(UpdateToolAccessTypeRequestSchema)
+      .output(UpdateToolAccessTypeResponseSchema)
+      .mutation(async ({ input }) => {
+        return implementations.updateAccessType(input);
       }),
   });
 };

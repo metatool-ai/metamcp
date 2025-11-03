@@ -204,6 +204,11 @@
     "foundToolsFromMcp": "从 MCP 服务器找到 {{count}} 个工具",
     "noToolsFromMcp": "MCP 服务器上未找到工具",
     "failedToFetchTools": "从 MCP 服务器获取工具失败",
-    "failedToSaveTools": "保存工具失败"
+    "failedToSaveTools": "保存工具失败",
+    "accessType": "访问类型",
+    "readOnly": "只读",
+    "write": "写入",
+    "accessTypeUpdated": "访问类型更新成功",
+    "updateFailed": "更新访问类型失败"
   }
 }

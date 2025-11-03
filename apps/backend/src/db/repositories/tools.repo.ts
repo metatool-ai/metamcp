@@ -72,6 +72,22 @@ export class ToolsRepository {
 
     return deletedTool;
   }
+
+  async updateAccessType(
+    uuid: string,
+    accessType: "read" | "write",
+  ): Promise<DatabaseTool | undefined> {
+    const [updatedTool] = await db
+      .update(toolsTable)
+      .set({
+        access_type: accessType,
+        updated_at: new Date(),
+      })
+      .where(eq(toolsTable.uuid, uuid))
+      .returning();
+
+    return updatedTool;
+  }
 }
 
 export const toolsRepository = new ToolsRepository();

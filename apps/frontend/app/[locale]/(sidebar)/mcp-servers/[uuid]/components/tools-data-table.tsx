@@ -17,6 +17,7 @@ import {
   Wrench,
 } from "lucide-react";
 import React, { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -37,6 +45,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTranslations } from "@/hooks/useTranslations";
+import { trpc } from "@/lib/trpc";
 
 // MCP Tool type from the protocol
 interface MCPTool {
@@ -92,6 +101,7 @@ type SortDirection = "asc" | "desc";
 export function UnifiedToolsTable({
   dbTools,
   mcpTools,
+  mcpServerUuid,
   loading = false,
   onRefreshMcpTools,
 }: UnifiedToolsTableProps) {
@@ -100,6 +110,28 @@ export function UnifiedToolsTable({
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const { t } = useTranslations();
+  const utils = trpc.useUtils();
+
+  // Mutation for updating access type
+  const updateAccessTypeMutation = trpc.frontend.tools.updateAccessType.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(t("mcp-servers:tools.accessTypeUpdated"));
+        // Invalidate and refetch tools
+        utils.frontend.tools.getByMcpServerUuid.invalidate({ mcpServerUuid });
+      } else {
+        toast.error(data.message || t("mcp-servers:tools.updateFailed"));
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // Handle access type change
+  const handleAccessTypeChange = (toolUuid: string, accessType: "read" | "write") => {
+    updateAccessTypeMutation.mutate({ toolUuid, accessType });
+  };
 
   // Combine and enhance tools from both sources
   const enhancedTools: EnhancedTool[] = (() => {
@@ -466,24 +498,36 @@ export function UnifiedToolsTable({
                     <TableCell>{getSourceBadge(tool)}</TableCell>
 
                     <TableCell>
-                      {tool.access_type && (
-                        <Badge
-                          variant={
-                            tool.access_type === "read" ? "info" : "warning"
+                      {tool.uuid ? (
+                        <Select
+                          value={tool.access_type || "write"}
+                          onValueChange={(value: "read" | "write") =>
+                            handleAccessTypeChange(tool.uuid!, value)
                           }
-                          className="gap-1"
+                          disabled={updateAccessTypeMutation.isPending}
                         >
-                          {tool.access_type === "read" ? (
-                            <>
-                              <BookOpen className="h-3 w-3" />
-                              {t("mcp-servers:tools.readOnly")}
-                            </>
-                          ) : (
-                            <>
-                              <PencilLine className="h-3 w-3" />
-                              {t("mcp-servers:tools.write")}
-                            </>
-                          )}
+                          <SelectTrigger className="w-[130px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="read">
+                              <div className="flex items-center gap-2">
+                                <BookOpen className="h-3 w-3" />
+                                {t("mcp-servers:tools.readOnly")}
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="write">
+                              <div className="flex items-center gap-2">
+                                <PencilLine className="h-3 w-3" />
+                                {t("mcp-servers:tools.write")}
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant="neutral" className="gap-1">
+                          <PencilLine className="h-3 w-3" />
+                          {t("mcp-servers:tools.write")} (default)
                         </Badge>
                       )}
                     </TableCell>
