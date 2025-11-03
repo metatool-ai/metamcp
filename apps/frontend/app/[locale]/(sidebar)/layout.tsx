@@ -40,7 +40,10 @@ import { authClient } from "@/lib/auth-client";
 import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
 
 // Menu items function - now takes locale parameter
-const getMenuItems = (t: (key: string) => string, locale: SupportedLocale) => [
+const getMenuItems = (t: (key: string) => string, locale: SupportedLocale) => {
+  console.log("[getMenuItems] Locale received:", locale);
+  console.log("[getMenuItems] OAuth clients URL:", getLocalizedPath("/oauth-clients", locale));
+  return [
   {
     title: t("navigation:exploreMcpServers"),
     url: getLocalizedPath("/search", locale),
@@ -82,6 +85,7 @@ const getMenuItems = (t: (key: string) => string, locale: SupportedLocale) => [
     icon: Settings,
   },
 ];
+};
 
 function LiveLogsMenuItem() {
   const { t, locale } = useTranslations();
@@ -159,6 +163,7 @@ export default function SidebarLayout({
   children: React.ReactNode;
 }) {
   const { t, locale } = useTranslations();
+  console.log("[SidebarLayout] Current locale:", locale);
   const items = getMenuItems(t, locale);
 
   return (

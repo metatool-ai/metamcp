@@ -11,9 +11,15 @@ export function useLocale() {
     const segments = pathname.split("/").filter(Boolean);
     const firstSegment = segments[0];
 
+    console.log("[useLocale] pathname:", pathname);
+    console.log("[useLocale] segments:", segments);
+    console.log("[useLocale] firstSegment:", firstSegment);
+
     if (SUPPORTED_LOCALES.includes(firstSegment as SupportedLocale)) {
+      console.log("[useLocale] Setting locale to:", firstSegment);
       setLocale(firstSegment as SupportedLocale);
     } else {
+      console.log("[useLocale] Setting locale to default: en");
       setLocale("en");
     }
   }, [pathname]);
