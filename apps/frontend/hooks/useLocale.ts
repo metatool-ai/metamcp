@@ -1,28 +1,19 @@
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 
 import { SUPPORTED_LOCALES, SupportedLocale } from "@/lib/i18n";
 
-export function useLocale() {
-  const pathname = usePathname();
-  const [locale, setLocale] = useState<SupportedLocale>("en");
+export function useLocale(): SupportedLocale {
+  const params = useParams();
+  const locale = params?.locale as string;
 
-  useEffect(() => {
-    const segments = pathname.split("/").filter(Boolean);
-    const firstSegment = segments[0];
+  console.log("[useLocale] params:", params);
+  console.log("[useLocale] locale from params:", locale);
 
-    console.log("[useLocale] pathname:", pathname);
-    console.log("[useLocale] segments:", segments);
-    console.log("[useLocale] firstSegment:", firstSegment);
+  if (locale && SUPPORTED_LOCALES.includes(locale as SupportedLocale)) {
+    console.log("[useLocale] Returning locale:", locale);
+    return locale as SupportedLocale;
+  }
 
-    if (SUPPORTED_LOCALES.includes(firstSegment as SupportedLocale)) {
-      console.log("[useLocale] Setting locale to:", firstSegment);
-      setLocale(firstSegment as SupportedLocale);
-    } else {
-      console.log("[useLocale] Setting locale to default: en");
-      setLocale("en");
-    }
-  }, [pathname]);
-
-  return locale;
+  console.log("[useLocale] Returning default: en");
+  return "en";
 }
