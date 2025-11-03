@@ -78,6 +78,13 @@
       "when": 1730620800000,
       "tag": "0010_brown_phalanx",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1730627000000,
+      "tag": "0011_migrate_to_mcp_annotations",
+      "breakpoints": true
     }
   ]
 }

@@ -31,6 +31,7 @@ export const mcpServerErrorStatusEnum = pgEnum(
   "mcp_server_error_status",
   McpServerErrorStatusEnum.options,
 );
+// Legacy enum - will be removed in future migration
 export const toolAccessTypeEnum = pgEnum(
   "tool_access_type",
   ToolAccessTypeEnum.options,
@@ -123,9 +124,16 @@ export const toolsTable = pgTable(
         required?: string[];
       }>()
       .notNull(),
-    access_type: toolAccessTypeEnum("access_type")
+    annotations: jsonb("annotations")
+      .$type<{
+        title?: string;
+        readOnlyHint?: boolean;
+        destructiveHint?: boolean;
+        idempotentHint?: boolean;
+        openWorldHint?: boolean;
+      }>()
       .notNull()
-      .default("write"),
+      .default({}),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -138,7 +146,6 @@ export const toolsTable = pgTable(
   },
   (table) => [
     index("tools_mcp_server_uuid_idx").on(table.mcp_server_uuid),
-    index("tools_access_type_idx").on(table.access_type),
     unique("tools_unique_tool_name_per_server_idx").on(
       table.mcp_server_uuid,
       table.name,
@@ -332,6 +339,13 @@ export const namespaceToolMappingsTable = pgTable(
       .default(McpServerStatusEnum.Enum.ACTIVE),
     override_name: text("override_name"),
     override_description: text("override_description"),
+    override_annotations: jsonb("override_annotations").$type<{
+      title?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    }>(),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
