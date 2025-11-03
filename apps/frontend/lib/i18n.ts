@@ -42,10 +42,7 @@ export function getLocalizedPath(
 ): string {
   const pathnameWithoutLocale = getPathnameWithoutLocale(pathname);
 
-  if (locale === "en") {
-    return pathnameWithoutLocale;
-  }
-
+  // Always add locale prefix for all locales (including "en")
   return `/${locale}${pathnameWithoutLocale === "/" ? "" : pathnameWithoutLocale}`;
 }
 
