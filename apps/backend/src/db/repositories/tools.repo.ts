@@ -36,6 +36,7 @@ export class ToolsRepository {
         type: "object" as const,
         ...tool.inputSchema,
       },
+      annotations: tool.annotations || {},
       mcp_server_uuid: input.mcpServerUuid,
     }));
 
@@ -48,6 +49,7 @@ export class ToolsRepository {
         set: {
           description: sql`excluded.description`,
           toolSchema: sql`excluded.tool_schema`,
+          annotations: sql`excluded.annotations`,
           updated_at: new Date(),
         },
       })

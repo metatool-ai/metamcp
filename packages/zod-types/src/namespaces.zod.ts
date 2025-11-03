@@ -162,6 +162,7 @@ export const RefreshNamespaceToolsRequestSchema = z.object({
       name: z.string(), // This will contain "ServerName__toolName" format
       description: z.string().optional(),
       inputSchema: z.record(z.any()),
+      annotations: ToolAnnotationsSchema.optional(),
       // Remove serverUuid since we'll resolve it from the tool name
     }),
   ),

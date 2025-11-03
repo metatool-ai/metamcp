@@ -106,6 +106,7 @@ export const ToolUpsertInputSchema = z.object({
           required: z.array(z.string()).optional(),
         })
         .optional(),
+      annotations: ToolAnnotationsSchema.optional(),
     }),
   ),
   mcpServerUuid: z.string(),

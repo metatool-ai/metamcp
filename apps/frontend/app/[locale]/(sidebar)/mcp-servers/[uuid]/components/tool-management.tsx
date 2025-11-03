@@ -123,6 +123,7 @@ export function ToolManagement({
           name: tool.name,
           description: tool.description || undefined,
           inputSchema: tool.inputSchema || { type: "object" as const },
+          annotations: tool.annotations,
         }));
 
         saveToolsMutation.mutate({

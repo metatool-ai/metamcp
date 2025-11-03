@@ -134,6 +134,7 @@ export function NamespaceToolManagement({
             name: tool.name,
             description: tool.description || "",
             inputSchema: tool.inputSchema,
+            annotations: tool.annotations,
           }));
 
           setMcpTools(mcpToolsData);
@@ -144,6 +145,7 @@ export function NamespaceToolManagement({
               name: tool.name, // Keep the full "ServerName__toolName" format
               description: tool.description || "",
               inputSchema: tool.inputSchema,
+              annotations: tool.annotations,
             }));
 
             // Set auto-saving flag for better user feedback
