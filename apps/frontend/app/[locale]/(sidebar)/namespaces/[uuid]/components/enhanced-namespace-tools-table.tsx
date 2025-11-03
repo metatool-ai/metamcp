@@ -74,6 +74,22 @@ interface EnhancedNamespaceTool {
   // Override fields
   overrideName?: string | null;
   overrideDescription?: string | null;
+  overrideAnnotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  } | null;
+
+  // Base tool annotations
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
 
   // Source tracking
   sources: {
@@ -124,7 +140,20 @@ export function EnhancedNamespaceToolsTable({
     new Set(),
   );
   const [tempOverrides, setTempOverrides] = useState<
-    Map<string, { name?: string; description?: string }>
+    Map<
+      string,
+      {
+        name?: string;
+        description?: string;
+        annotations?: {
+          title?: string;
+          readOnlyHint?: boolean;
+          destructiveHint?: boolean;
+          idempotentHint?: boolean;
+          openWorldHint?: boolean;
+        };
+      }
+    >
   >(new Map());
 
   // Get translations
@@ -346,6 +375,13 @@ export function EnhancedNamespaceToolsTable({
     tool: EnhancedNamespaceTool,
     overrideName?: string | null,
     overrideDescription?: string | null,
+    overrideAnnotations?: {
+      title?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    } | null,
   ) => {
     if (!tool.sources.saved || !tool.uuid || !tool.serverUuid) {
       toast.error(t("namespaces:enhancedToolsTable.cannotUpdateOverrides"));
@@ -363,6 +399,7 @@ export function EnhancedNamespaceToolsTable({
       serverUuid: tool.serverUuid,
       overrideName,
       overrideDescription,
+      overrideAnnotations,
     });
   };
 
@@ -376,6 +413,12 @@ export function EnhancedNamespaceToolsTable({
       new Map(prev).set(toolId, {
         name: tool.overrideName || tool.name || "",
         description: tool.overrideDescription || tool.description || "",
+        annotations: tool.overrideAnnotations || tool.annotations || {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
       }),
     );
 
@@ -409,10 +452,15 @@ export function EnhancedNamespaceToolsTable({
     // This allows users to set empty string as an override (to remove description)
     const shouldClearDescription = overrides.description === tool.description;
 
+    // Check if annotations match the original - if so, clear override
+    const shouldClearAnnotations =
+      JSON.stringify(overrides.annotations) === JSON.stringify(tool.annotations);
+
     await handleOverridesUpdate(
       tool,
       shouldClearName ? null : overrides.name?.trim() || "",
       shouldClearDescription ? null : overrides.description,
+      shouldClearAnnotations ? null : overrides.annotations,
     );
 
     // Clear editing state
@@ -421,13 +469,19 @@ export function EnhancedNamespaceToolsTable({
 
   const updateTempOverride = (
     toolId: string,
-    field: "name" | "description",
-    value: string,
+    field: "name" | "description" | "annotations",
+    value: string | {
+      title?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    },
   ) => {
     setTempOverrides((prev) => {
       const newMap = new Map(prev);
       const current = newMap.get(toolId) || {};
-      newMap.set(toolId, { ...current, [field]: value });
+      newMap.set(toolId, { ...current, [field]: value as any });
       return newMap;
     });
   };
@@ -1002,6 +1056,128 @@ export function EnhancedNamespaceToolsTable({
                                         {tool.description || "No description"}
                                       </p> */}
                                     </div>
+
+                                    {/* Tool Annotations Override */}
+                                    <div className="border-t pt-3 space-y-3">
+                                      <label className="text-xs font-medium text-muted-foreground">
+                                        Tool Annotations (MCP 2025-06-18)
+                                      </label>
+
+                                      {/* Title */}
+                                      <div>
+                                        <label className="text-xs text-muted-foreground">
+                                          {t("mcp-servers:tools.title")}
+                                        </label>
+                                        <Input
+                                          value={
+                                            tempOverrides.get(toolId)?.annotations?.title || ""
+                                          }
+                                          onChange={(e) => {
+                                            const current = tempOverrides.get(toolId)?.annotations || {};
+                                            updateTempOverride(toolId, "annotations", {
+                                              ...current,
+                                              title: e.target.value,
+                                            });
+                                          }}
+                                          placeholder={tool.name}
+                                          className="mt-1 h-8 text-sm"
+                                        />
+                                      </div>
+
+                                      {/* Read-Only Hint */}
+                                      <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                          <label className="text-xs text-muted-foreground">
+                                            {t("mcp-servers:tools.readOnlyHint")}
+                                          </label>
+                                          <p className="text-xs text-muted-foreground/70">
+                                            {t("mcp-servers:tools.readOnlyHintDesc")}
+                                          </p>
+                                        </div>
+                                        <Switch
+                                          checked={tempOverrides.get(toolId)?.annotations?.readOnlyHint || false}
+                                          onCheckedChange={(checked) => {
+                                            const current = tempOverrides.get(toolId)?.annotations || {};
+                                            updateTempOverride(toolId, "annotations", {
+                                              ...current,
+                                              readOnlyHint: checked,
+                                            });
+                                          }}
+                                        />
+                                      </div>
+
+                                      {/* Only show destructive and idempotent if not read-only */}
+                                      {!tempOverrides.get(toolId)?.annotations?.readOnlyHint && (
+                                        <>
+                                          {/* Destructive Hint */}
+                                          <div className="flex items-center justify-between">
+                                            <div className="space-y-0.5">
+                                              <label className="text-xs text-muted-foreground">
+                                                {t("mcp-servers:tools.destructiveHint")}
+                                              </label>
+                                              <p className="text-xs text-muted-foreground/70">
+                                                {t("mcp-servers:tools.destructiveHintDesc")}
+                                              </p>
+                                            </div>
+                                            <Switch
+                                              checked={tempOverrides.get(toolId)?.annotations?.destructiveHint ?? true}
+                                              onCheckedChange={(checked) => {
+                                                const current = tempOverrides.get(toolId)?.annotations || {};
+                                                updateTempOverride(toolId, "annotations", {
+                                                  ...current,
+                                                  destructiveHint: checked,
+                                                });
+                                              }}
+                                            />
+                                          </div>
+
+                                          {/* Idempotent Hint */}
+                                          <div className="flex items-center justify-between">
+                                            <div className="space-y-0.5">
+                                              <label className="text-xs text-muted-foreground">
+                                                {t("mcp-servers:tools.idempotentHint")}
+                                              </label>
+                                              <p className="text-xs text-muted-foreground/70">
+                                                {t("mcp-servers:tools.idempotentHintDesc")}
+                                              </p>
+                                            </div>
+                                            <Switch
+                                              checked={tempOverrides.get(toolId)?.annotations?.idempotentHint || false}
+                                              onCheckedChange={(checked) => {
+                                                const current = tempOverrides.get(toolId)?.annotations || {};
+                                                updateTempOverride(toolId, "annotations", {
+                                                  ...current,
+                                                  idempotentHint: checked,
+                                                });
+                                              }}
+                                            />
+                                          </div>
+                                        </>
+                                      )}
+
+                                      {/* Open World Hint */}
+                                      <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                          <label className="text-xs text-muted-foreground">
+                                            {t("mcp-servers:tools.openWorldHint")}
+                                          </label>
+                                          <p className="text-xs text-muted-foreground/70">
+                                            {t("mcp-servers:tools.openWorldHintDesc")}
+                                          </p>
+                                        </div>
+                                        <Switch
+                                          checked={tempOverrides.get(toolId)?.annotations?.openWorldHint ?? true}
+                                          onCheckedChange={(checked) => {
+                                            const current = tempOverrides.get(toolId)?.annotations || {};
+                                            updateTempOverride(toolId, "annotations", {
+                                              ...current,
+                                              openWorldHint: checked,
+                                            });
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+
                                     <div className="flex gap-2">
                                       <Button
                                         size="sm"
@@ -1038,6 +1214,16 @@ export function EnhancedNamespaceToolsTable({
                                             toolId,
                                             "description",
                                             tool.description || "",
+                                          );
+                                          updateTempOverride(
+                                            toolId,
+                                            "annotations",
+                                            tool.annotations || {
+                                              readOnlyHint: false,
+                                              destructiveHint: true,
+                                              idempotentHint: false,
+                                              openWorldHint: true,
+                                            },
                                           );
                                         }}
                                       >
