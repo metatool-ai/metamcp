@@ -42,8 +42,6 @@ export function getLocalizedPath(
 ): string {
   const pathnameWithoutLocale = getPathnameWithoutLocale(pathname);
 
-  console.log("[getLocalizedPath] pathname:", pathname, "locale:", locale, "result:", locale === "en" ? pathnameWithoutLocale : `/${locale}${pathnameWithoutLocale === "/" ? "" : pathnameWithoutLocale}`);
-
   if (locale === "en") {
     return pathnameWithoutLocale;
   }
