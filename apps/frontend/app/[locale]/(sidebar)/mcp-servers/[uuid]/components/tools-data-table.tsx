@@ -23,19 +23,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -70,7 +74,13 @@ interface EnhancedTool {
   updated_at?: string;
   mcp_server_uuid?: string;
   toolSchema?: Record<string, unknown>;
-  access_type?: "read" | "write";
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
 
   // MCP-specific fields
   inputSchema?: {
@@ -98,6 +108,157 @@ interface UnifiedToolsTableProps {
 type SortField = "name" | "description" | "updated_at";
 type SortDirection = "asc" | "desc";
 
+// Annotations Editor Dialog Component
+function AnnotationsEditor({
+  tool,
+  onSave,
+  isPending,
+}: {
+  tool: EnhancedTool;
+  onSave: (annotations: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  }) => void;
+  isPending: boolean;
+}) {
+  const { t } = useTranslations();
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    title: tool.annotations?.title || "",
+    readOnlyHint: tool.annotations?.readOnlyHint || false,
+    destructiveHint: tool.annotations?.destructiveHint ?? true,
+    idempotentHint: tool.annotations?.idempotentHint || false,
+    openWorldHint: tool.annotations?.openWorldHint ?? true,
+  });
+
+  const handleSave = () => {
+    onSave({
+      title: formData.title || undefined,
+      readOnlyHint: formData.readOnlyHint,
+      destructiveHint: formData.destructiveHint,
+      idempotentHint: formData.idempotentHint,
+      openWorldHint: formData.openWorldHint,
+    });
+    setOpen(false);
+  };
+
+  const getAnnotationSummary = () => {
+    const badges = [];
+    if (formData.readOnlyHint) badges.push(t("mcp-servers:tools.readOnly"));
+    else if (formData.destructiveHint) badges.push(t("mcp-servers:tools.destructive"));
+    if (formData.idempotentHint) badges.push(t("mcp-servers:tools.idempotent"));
+    if (formData.openWorldHint) badges.push(t("mcp-servers:tools.openWorld"));
+    return badges.length > 0 ? badges.join(", ") : t("mcp-servers:tools.default");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8">
+          <PencilLine className="h-3 w-3 mr-2" />
+          {getAnnotationSummary()}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>{t("mcp-servers:tools.editAnnotations")}</DialogTitle>
+          <DialogDescription>
+            {t("mcp-servers:tools.annotationsDescription")}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="title">{t("mcp-servers:tools.title")}</Label>
+            <Input
+              id="title"
+              value={formData.title}
+              onChange={(e) =>
+                setFormData({ ...formData, title: e.target.value })
+              }
+              placeholder={tool.name}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>{t("mcp-servers:tools.readOnlyHint")}</Label>
+              <p className="text-xs text-muted-foreground">
+                {t("mcp-servers:tools.readOnlyHintDesc")}
+              </p>
+            </div>
+            <Switch
+              checked={formData.readOnlyHint}
+              onCheckedChange={(checked) =>
+                setFormData({ ...formData, readOnlyHint: checked })
+              }
+            />
+          </div>
+          {!formData.readOnlyHint && (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>{t("mcp-servers:tools.destructiveHint")}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("mcp-servers:tools.destructiveHintDesc")}
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.destructiveHint}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, destructiveHint: checked })
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>{t("mcp-servers:tools.idempotentHint")}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("mcp-servers:tools.idempotentHintDesc")}
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.idempotentHint}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, idempotentHint: checked })
+                  }
+                />
+              </div>
+            </>
+          )}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>{t("mcp-servers:tools.openWorldHint")}</Label>
+              <p className="text-xs text-muted-foreground">
+                {t("mcp-servers:tools.openWorldHintDesc")}
+              </p>
+            </div>
+            <Switch
+              checked={formData.openWorldHint}
+              onCheckedChange={(checked) =>
+                setFormData({ ...formData, openWorldHint: checked })
+              }
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+          >
+            {t("common:cancel")}
+          </Button>
+          <Button onClick={handleSave} disabled={isPending}>
+            {isPending ? t("common:saving") : t("common:save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function UnifiedToolsTable({
   dbTools,
   mcpTools,
@@ -112,11 +273,11 @@ export function UnifiedToolsTable({
   const { t } = useTranslations();
   const utils = trpc.useUtils();
 
-  // Mutation for updating access type
-  const updateAccessTypeMutation = trpc.frontend.tools.updateAccessType.useMutation({
+  // Mutation for updating annotations
+  const updateAnnotationsMutation = trpc.frontend.tools.updateAnnotations.useMutation({
     onSuccess: (data) => {
       if (data.success) {
-        toast.success(t("mcp-servers:tools.accessTypeUpdated"));
+        toast.success(t("mcp-servers:tools.annotationsUpdated"));
         // Invalidate and refetch tools
         utils.frontend.tools.getByMcpServerUuid.invalidate({ mcpServerUuid });
       } else {
@@ -128,9 +289,18 @@ export function UnifiedToolsTable({
     },
   });
 
-  // Handle access type change
-  const handleAccessTypeChange = (toolUuid: string, accessType: "read" | "write") => {
-    updateAccessTypeMutation.mutate({ toolUuid, accessType });
+  // Handle annotations change
+  const handleAnnotationsChange = (
+    toolUuid: string,
+    annotations: {
+      title?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    },
+  ) => {
+    updateAnnotationsMutation.mutate({ toolUuid, annotations });
   };
 
   // Combine and enhance tools from both sources
@@ -430,7 +600,7 @@ export function UnifiedToolsTable({
                 </Button>
               </TableHead>
               <TableHead>{t("mcp-servers:tools.source")}</TableHead>
-              <TableHead>{t("mcp-servers:tools.accessType")}</TableHead>
+              <TableHead>{t("mcp-servers:tools.annotations")}</TableHead>
               <TableHead>
                 <Button
                   variant="ghost"
@@ -499,35 +669,17 @@ export function UnifiedToolsTable({
 
                     <TableCell>
                       {tool.uuid ? (
-                        <Select
-                          value={tool.access_type || "write"}
-                          onValueChange={(value: "read" | "write") =>
-                            handleAccessTypeChange(tool.uuid!, value)
+                        <AnnotationsEditor
+                          tool={tool}
+                          onSave={(annotations) =>
+                            handleAnnotationsChange(tool.uuid!, annotations)
                           }
-                          disabled={updateAccessTypeMutation.isPending}
-                        >
-                          <SelectTrigger className="w-[130px] h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="read">
-                              <div className="flex items-center gap-2">
-                                <BookOpen className="h-3 w-3" />
-                                {t("mcp-servers:tools.readOnly")}
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="write">
-                              <div className="flex items-center gap-2">
-                                <PencilLine className="h-3 w-3" />
-                                {t("mcp-servers:tools.write")}
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                          isPending={updateAnnotationsMutation.isPending}
+                        />
                       ) : (
                         <Badge variant="neutral" className="gap-1">
                           <PencilLine className="h-3 w-3" />
-                          {t("mcp-servers:tools.write")} (default)
+                          {t("mcp-servers:tools.notSaved")}
                         </Badge>
                       )}
                     </TableCell>

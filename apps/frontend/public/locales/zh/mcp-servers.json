@@ -205,10 +205,24 @@
     "noToolsFromMcp": "MCP 服务器上未找到工具",
     "failedToFetchTools": "从 MCP 服务器获取工具失败",
     "failedToSaveTools": "保存工具失败",
-    "accessType": "访问类型",
+    "annotations": "注释",
+    "editAnnotations": "编辑工具注释",
+    "annotationsDescription": "根据 2025-06-18 规范配置 MCP 工具注释",
+    "title": "标题",
     "readOnly": "只读",
-    "write": "写入",
-    "accessTypeUpdated": "访问类型更新成功",
-    "updateFailed": "更新访问类型失败"
+    "destructive": "破坏性",
+    "idempotent": "幂等",
+    "openWorld": "开放世界",
+    "default": "默认",
+    "readOnlyHint": "只读工具",
+    "readOnlyHintDesc": "工具不会修改其环境",
+    "destructiveHint": "破坏性更新",
+    "destructiveHintDesc": "工具可能执行破坏性更新（仅在非只读时）",
+    "idempotentHint": "幂等操作",
+    "idempotentHintDesc": "使用相同参数重复调用不会产生额外影响",
+    "openWorldHint": "开放世界交互",
+    "openWorldHintDesc": "工具与外部实体交互（例如网络搜索）",
+    "annotationsUpdated": "注释更新成功",
+    "updateFailed": "更新注释失败"
   }
 }
