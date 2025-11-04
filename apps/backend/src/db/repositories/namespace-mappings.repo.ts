@@ -9,6 +9,7 @@ import { db } from "../index";
 import {
   namespaceServerMappingsTable,
   namespaceToolMappingsTable,
+  toolsTable,
 } from "../schema";
 
 export class NamespaceMappingsRepository {
