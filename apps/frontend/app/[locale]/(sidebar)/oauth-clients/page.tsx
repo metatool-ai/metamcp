@@ -15,6 +15,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
+import { useParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -44,6 +45,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTranslations } from "@/hooks/useTranslations";
+import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
 type OAuthClientDisplay = Omit<OAuthClient, "created_at" | "updated_at"> & {
@@ -53,6 +55,8 @@ type OAuthClientDisplay = Omit<OAuthClient, "created_at" | "updated_at"> & {
 
 export default function OAuthClientsPage() {
   const { t } = useTranslations();
+  const params = useParams();
+  const locale = params.locale as SupportedLocale;
   const [searchTerm, setSearchTerm] = useState("");
 
   // Get all OAuth clients
@@ -314,7 +318,7 @@ export default function OAuthClientsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
                             <a
-                              href={`/oauth-clients/${client.client_id}/logs`}
+                              href={getLocalizedPath(`/oauth-clients/${client.client_id}/logs`, locale)}
                               className="flex items-center"
                             >
                               <Eye className="mr-2 h-4 w-4" />
@@ -323,7 +327,7 @@ export default function OAuthClientsPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <a
-                              href={`/oauth-clients/${client.client_id}/mcp-logs`}
+                              href={getLocalizedPath(`/oauth-clients/${client.client_id}/mcp-logs`, locale)}
                               className="flex items-center"
                             >
                               <Activity className="mr-2 h-4 w-4" />
