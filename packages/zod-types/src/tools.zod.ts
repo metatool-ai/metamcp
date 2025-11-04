@@ -60,6 +60,7 @@ export const CreateToolRequestSchema = z.object({
         properties: z.record(z.any()).optional(),
         required: z.array(z.string()).optional(),
       }),
+      annotations: ToolAnnotationsSchema.optional(),
     }),
   ),
 });

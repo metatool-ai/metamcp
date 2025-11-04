@@ -49,6 +49,7 @@ export class NamespacesRepository {
           .select({
             uuid: toolsTable.uuid,
             mcp_server_uuid: toolsTable.mcp_server_uuid,
+            annotations: toolsTable.annotations,
           })
           .from(toolsTable)
           .where(inArray(toolsTable.mcp_server_uuid, input.mcpServerUuids));
@@ -59,6 +60,8 @@ export class NamespacesRepository {
             tool_uuid: tool.uuid,
             mcp_server_uuid: tool.mcp_server_uuid,
             status: "ACTIVE" as const,
+            // Initialize override_annotations with annotations from tools table
+            override_annotations: tool.annotations || {},
           }));
 
           await tx.insert(namespaceToolMappingsTable).values(toolMappings);
@@ -341,6 +344,7 @@ export class NamespacesRepository {
             .select({
               uuid: toolsTable.uuid,
               mcp_server_uuid: toolsTable.mcp_server_uuid,
+              annotations: toolsTable.annotations,
             })
             .from(toolsTable)
             .where(inArray(toolsTable.mcp_server_uuid, input.mcpServerUuids));
@@ -353,6 +357,8 @@ export class NamespacesRepository {
               // Preserve existing status if tool was previously mapped, otherwise default to ACTIVE
               status:
                 existingToolStatusMap.get(tool.uuid) || ("ACTIVE" as const),
+              // Initialize override_annotations with annotations from tools table
+              override_annotations: tool.annotations || {},
             }));
 
             await tx.insert(namespaceToolMappingsTable).values(toolMappings);
