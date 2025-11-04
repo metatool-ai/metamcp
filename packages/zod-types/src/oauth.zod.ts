@@ -22,6 +22,7 @@ export const OAuthClientSchema = z.object({
   client_id: z.string(),
   client_secret: z.string().nullable(),
   client_name: z.string(),
+  email: z.string().nullable(),
   redirect_uris: z.array(z.string()),
   grant_types: z.array(z.string()),
   response_types: z.array(z.string()),
@@ -67,6 +68,7 @@ export const OAuthClientCreateInputSchema = z.object({
   client_id: z.string(),
   client_secret: z.string().nullable(),
   client_name: z.string(),
+  email: z.string().nullable().optional(),
   redirect_uris: z.array(z.string()),
   grant_types: z.array(z.string()),
   response_types: z.array(z.string()),
@@ -239,3 +241,65 @@ export type UpdateOAuthClientAdminAccessRequest = z.infer<typeof UpdateOAuthClie
 export type UpdateOAuthClientAdminAccessResponse = z.infer<typeof UpdateOAuthClientAdminAccessResponseSchema>;
 export type DeleteOAuthClientRequest = z.infer<typeof DeleteOAuthClientRequestSchema>;
 export type DeleteOAuthClientResponse = z.infer<typeof DeleteOAuthClientResponseSchema>;
+
+// OAuth Request Logs schemas
+export const OAuthRequestLogSchema = z.object({
+  uuid: z.string().uuid(),
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  request_type: z.string(), // 'authorization', 'token', 'refresh', 'userinfo', etc
+  request_method: z.string(), // GET, POST, etc
+  request_path: z.string(),
+  request_query: z.record(z.string()).nullable(),
+  request_headers: z.record(z.string()).nullable(),
+  request_body: z.record(z.any()).nullable(),
+  response_status: z.string(), // '200', '400', '401', etc
+  response_body: z.record(z.any()).nullable(),
+  error_message: z.string().nullable(),
+  ip_address: z.string().nullable(),
+  user_agent: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+  created_at: z.date(),
+});
+
+export const OAuthRequestLogCreateInputSchema = z.object({
+  client_id: z.string().nullable().optional(),
+  user_id: z.string().nullable().optional(),
+  request_type: z.string(),
+  request_method: z.string(),
+  request_path: z.string(),
+  request_query: z.record(z.string()).nullable().optional(),
+  request_headers: z.record(z.string()).nullable().optional(),
+  request_body: z.record(z.any()).nullable().optional(),
+  response_status: z.string(),
+  response_body: z.record(z.any()).nullable().optional(),
+  error_message: z.string().nullable().optional(),
+  ip_address: z.string().nullable().optional(),
+  user_agent: z.string().nullable().optional(),
+  duration_ms: z.string().nullable().optional(),
+});
+
+export const DatabaseOAuthRequestLogSchema = OAuthRequestLogSchema;
+
+export const GetOAuthRequestLogsRequestSchema = z.object({
+  clientId: z.string().optional(),
+  limit: z.number().int().positive().max(100).default(50),
+  offset: z.number().int().nonnegative().default(0),
+});
+
+export const GetOAuthRequestLogsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    OAuthRequestLogSchema.extend({
+      created_at: z.string().datetime(),
+    }),
+  ),
+  total: z.number(),
+  message: z.string().optional(),
+});
+
+export type OAuthRequestLog = z.infer<typeof OAuthRequestLogSchema>;
+export type OAuthRequestLogCreateInput = z.infer<typeof OAuthRequestLogCreateInputSchema>;
+export type DatabaseOAuthRequestLog = z.infer<typeof DatabaseOAuthRequestLogSchema>;
+export type GetOAuthRequestLogsRequest = z.infer<typeof GetOAuthRequestLogsRequestSchema>;
+export type GetOAuthRequestLogsResponse = z.infer<typeof GetOAuthRequestLogsResponseSchema>;

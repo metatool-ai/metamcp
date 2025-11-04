@@ -407,6 +407,7 @@ export const oauthClientsTable = pgTable("oauth_clients", {
   client_id: text("client_id").primaryKey(),
   client_secret: text("client_secret"),
   client_name: text("client_name").notNull(),
+  email: text("email"), // Email from OIDC or manual registration
   redirect_uris: text("redirect_uris")
     .array()
     .notNull()
@@ -487,5 +488,40 @@ export const oauthAccessTokensTable = pgTable(
     index("oauth_access_tokens_client_id_idx").on(table.client_id),
     index("oauth_access_tokens_user_id_idx").on(table.user_id),
     index("oauth_access_tokens_expires_at_idx").on(table.expires_at),
+  ],
+);
+
+// OAuth Request Logs table - for auditing and debugging OAuth flows
+export const oauthRequestLogsTable = pgTable(
+  "oauth_request_logs",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    client_id: text("client_id").references(() => oauthClientsTable.client_id, {
+      onDelete: "set null",
+    }),
+    user_id: text("user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    request_type: text("request_type").notNull(), // 'authorization', 'token', 'refresh', 'userinfo', etc
+    request_method: text("request_method").notNull(), // GET, POST, etc
+    request_path: text("request_path").notNull(),
+    request_query: jsonb("request_query").$type<Record<string, string>>(),
+    request_headers: jsonb("request_headers").$type<Record<string, string>>(),
+    request_body: jsonb("request_body").$type<Record<string, any>>(),
+    response_status: text("response_status").notNull(), // '200', '400', '401', etc
+    response_body: jsonb("response_body").$type<Record<string, any>>(),
+    error_message: text("error_message"),
+    ip_address: text("ip_address"),
+    user_agent: text("user_agent"),
+    duration_ms: text("duration_ms"), // Duration in milliseconds
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("oauth_request_logs_client_id_idx").on(table.client_id),
+    index("oauth_request_logs_user_id_idx").on(table.user_id),
+    index("oauth_request_logs_request_type_idx").on(table.request_type),
+    index("oauth_request_logs_created_at_idx").on(table.created_at),
   ],
 );
