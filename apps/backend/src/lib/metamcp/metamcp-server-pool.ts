@@ -78,6 +78,11 @@ export class MetaMcpServerPool {
       this.sessionToNamespace[sessionId] = namespaceUuid;
       this.sessionTimestamps[sessionId] = Date.now();
 
+      // IMPORTANT: Update the sessionId in the server instance for logging
+      if (typeof (idleServer.server as any).__updateSessionId === "function") {
+        (idleServer.server as any).__updateSessionId(sessionId);
+      }
+
       console.log(
         `Converted idle MetaMCP server to active for namespace ${namespaceUuid}, session ${sessionId}`,
       );

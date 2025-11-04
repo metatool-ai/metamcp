@@ -105,6 +105,9 @@ export const createServer = async (
   const promptToClient: Record<string, ConnectedClient> = {};
   const resourceToClient: Record<string, ConnectedClient> = {};
 
+  // Store current sessionId - this can be updated when idle server is reused
+  let currentSessionId = sessionId;
+
   // Helper function to detect if a server is the same instance
   const isSameServerInstance = (
     params: { name?: string; url?: string | null },
@@ -132,6 +135,12 @@ export const createServer = async (
       },
     },
   );
+
+  // Store a reference to update sessionId - this is used when idle server is reused
+  (server as any).__updateSessionId = (newSessionId: string) => {
+    console.log(`[MetaMCP] Updating sessionId from ${currentSessionId} to ${newSessionId}`);
+    currentSessionId = newSessionId;
+  };
 
   // Create the handler context
   const handlerContext: MetaMCPHandlerContext = {
@@ -449,9 +458,9 @@ export const createServer = async (
     const startTime = Date.now();
     try {
       const result = await listToolsWithMiddleware(request, handlerContext);
-      // Log successful request
+      // Log successful request - use currentSessionId which can be updated
       await logMcpRequest({
-        sessionId,
+        sessionId: currentSessionId,
         requestType: "list_tools",
         requestParams: request.params,
         responseResult: result as any,
@@ -462,7 +471,7 @@ export const createServer = async (
     } catch (error) {
       // Log failed request
       await logMcpRequest({
-        sessionId,
+        sessionId: currentSessionId,
         requestType: "list_tools",
         requestParams: request.params,
         responseStatus: "error",
@@ -478,9 +487,9 @@ export const createServer = async (
     const toolName = request.params.name;
     try {
       const result = await callToolWithMiddleware(request, handlerContext);
-      // Log successful request
+      // Log successful request - use currentSessionId which can be updated
       await logMcpRequest({
-        sessionId,
+        sessionId: currentSessionId,
         requestType: "call_tool",
         requestParams: request.params,
         responseResult: result as any,
@@ -492,7 +501,7 @@ export const createServer = async (
     } catch (error) {
       // Log failed request
       await logMcpRequest({
-        sessionId,
+        sessionId: currentSessionId,
         requestType: "call_tool",
         requestParams: request.params,
         responseStatus: "error",
@@ -513,7 +522,7 @@ export const createServer = async (
     if (!clientForPrompt) {
       const error = new Error(`Unknown prompt: ${name}`);
       await logMcpRequest({
-        sessionId,
+        sessionId: currentSessionId,
         requestType: "get_prompt",
         requestParams: request.params,
         responseStatus: "error",
@@ -544,7 +553,7 @@ export const createServer = async (
       );
 
       await logMcpRequest({
-        sessionId,
+        sessionId: currentSessionId,
         requestType: "get_prompt",
         requestParams: request.params,
         responseResult: response as any,
@@ -561,7 +570,7 @@ export const createServer = async (
         error,
       );
       await logMcpRequest({
-        sessionId,
+        sessionId: currentSessionId,
         requestType: "get_prompt",
         requestParams: request.params,
         responseStatus: "error",
@@ -674,7 +683,7 @@ export const createServer = async (
       };
 
       await logMcpRequest({
-        sessionId,
+        sessionId: currentSessionId,
         requestType: "list_prompts",
         requestParams: request.params,
         responseResult: result as any,
@@ -685,7 +694,7 @@ export const createServer = async (
       return result;
     } catch (error) {
       await logMcpRequest({
-        sessionId,
+        sessionId: currentSessionId,
         requestType: "list_prompts",
         requestParams: request.params,
         responseStatus: "error",

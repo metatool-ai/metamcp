@@ -90,13 +90,23 @@ sseRouter.get(
       sessionManager.addSession(sessionId, webAppTransport);
 
       // Store OAuth client information for this session
-      mcpSessionStorage.setSession(sessionId, {
+      const sessionInfo = {
         clientId: authReq.oauthClientId || null,
         userId: authReq.oauthUserId || authReq.apiKeyUserId || null,
         authMethod: authReq.authMethod || null,
         endpointName,
         namespaceUuid,
         createdAt: Date.now(),
+      };
+
+      mcpSessionStorage.setSession(sessionId, sessionInfo);
+
+      console.log("[SSE] Stored session info:", {
+        sessionId,
+        clientId: sessionInfo.clientId,
+        userId: sessionInfo.userId,
+        authMethod: sessionInfo.authMethod,
+        endpointName: sessionInfo.endpointName,
       });
 
       // Handle cleanup when connection closes

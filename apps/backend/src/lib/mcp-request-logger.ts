@@ -29,6 +29,16 @@ export async function logMcpRequest(params: {
     // Get session info
     const sessionInfo = mcpSessionStorage.getSession(sessionId);
 
+    // Debug logging
+    console.log("[MCP Logger] Logging request:", {
+      sessionId,
+      requestType,
+      toolName,
+      hasSessionInfo: !!sessionInfo,
+      clientId: sessionInfo?.clientId || null,
+      userId: sessionInfo?.userId || null,
+    });
+
     // Calculate duration
     const durationMs = (Date.now() - startTime).toString();
 
@@ -47,6 +57,8 @@ export async function logMcpRequest(params: {
       tool_name: toolName || null,
       duration_ms: durationMs,
     });
+
+    console.log("[MCP Logger] Successfully logged to database");
   } catch (error) {
     // Don't fail the request if logging fails
     console.error("Failed to log MCP request:", error);
