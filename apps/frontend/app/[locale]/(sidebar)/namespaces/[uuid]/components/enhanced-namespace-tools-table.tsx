@@ -1208,17 +1208,17 @@ export function EnhancedNamespaceToolsTable({
                                           updateTempOverride(
                                             toolId,
                                             "name",
-                                            tool.name || "",
+                                            tool.overrideName || tool.name || "",
                                           );
                                           updateTempOverride(
                                             toolId,
                                             "description",
-                                            tool.description || "",
+                                            tool.overrideDescription || tool.description || "",
                                           );
                                           updateTempOverride(
                                             toolId,
                                             "annotations",
-                                            tool.annotations || {
+                                            tool.overrideAnnotations || tool.annotations || {
                                               readOnlyHint: false,
                                               destructiveHint: true,
                                               idempotentHint: false,
