@@ -85,6 +85,20 @@
       "when": 1730627000000,
       "tag": "0011_migrate_to_mcp_annotations",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1730724660000,
+      "tag": "0012_add_oauth_logging_and_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1730734320000,
+      "tag": "0013_add_mcp_request_logs",
+      "breakpoints": true
     }
   ]
 }
