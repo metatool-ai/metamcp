@@ -3,7 +3,7 @@ import {
   NamespaceToolOverridesUpdate,
   NamespaceToolStatusUpdate,
 } from "@repo/zod-types";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../index";
 import {
@@ -151,7 +151,7 @@ export class NamespaceMappingsRepository {
         annotations: toolsTable.annotations,
       })
       .from(toolsTable)
-      .where(sql`${toolsTable.uuid} = ANY(${toolUuids})`);
+      .where(inArray(toolsTable.uuid, toolUuids));
 
     const annotationsMap = new Map(
       toolAnnotations.map(t => [t.uuid, t.annotations])
