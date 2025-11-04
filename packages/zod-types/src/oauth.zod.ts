@@ -303,3 +303,81 @@ export type OAuthRequestLogCreateInput = z.infer<typeof OAuthRequestLogCreateInp
 export type DatabaseOAuthRequestLog = z.infer<typeof DatabaseOAuthRequestLogSchema>;
 export type GetOAuthRequestLogsRequest = z.infer<typeof GetOAuthRequestLogsRequestSchema>;
 export type GetOAuthRequestLogsResponse = z.infer<typeof GetOAuthRequestLogsResponseSchema>;
+
+// ============================================================
+// MCP Request Logs Schemas
+// ============================================================
+
+export const McpRequestLogSchema = z.object({
+  uuid: z.string().uuid(),
+  clientId: z.string().nullable(),
+  userId: z.string().nullable(),
+  sessionId: z.string().nullable(),
+  endpointName: z.string().nullable(),
+  namespaceUuid: z.string().nullable(),
+  requestType: z.string(),
+  requestParams: z.record(z.any()).nullable(),
+  responseResult: z.record(z.any()).nullable(),
+  responseStatus: z.string(),
+  errorMessage: z.string().nullable(),
+  toolName: z.string().nullable(),
+  durationMs: z.string().nullable(),
+  createdAt: z.date(),
+});
+
+export const McpRequestLogCreateInputSchema = z.object({
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  session_id: z.string().nullable(),
+  endpoint_name: z.string().nullable(),
+  namespace_uuid: z.string().nullable(),
+  request_type: z.string(),
+  request_params: z.record(z.any()).nullable(),
+  response_result: z.record(z.any()).nullable(),
+  response_status: z.string(),
+  error_message: z.string().nullable(),
+  tool_name: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+});
+
+export const DatabaseMcpRequestLogSchema = z.object({
+  uuid: z.string().uuid(),
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  session_id: z.string().nullable(),
+  endpoint_name: z.string().nullable(),
+  namespace_uuid: z.string().nullable(),
+  request_type: z.string(),
+  request_params: z.record(z.any()).nullable(),
+  response_result: z.record(z.any()).nullable(),
+  response_status: z.string(),
+  error_message: z.string().nullable(),
+  tool_name: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+  created_at: z.date(),
+});
+
+export const GetMcpRequestLogsRequestSchema = z.object({
+  clientId: z.string().optional(),
+  sessionId: z.string().optional(),
+  requestType: z.string().optional(),
+  limit: z.number().int().positive().max(100).default(50),
+  offset: z.number().int().nonnegative().default(0),
+});
+
+export const GetMcpRequestLogsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    DatabaseMcpRequestLogSchema.extend({
+      createdAt: z.string(),
+    }),
+  ),
+  total: z.number(),
+  message: z.string().optional(),
+});
+
+export type McpRequestLog = z.infer<typeof McpRequestLogSchema>;
+export type McpRequestLogCreateInput = z.infer<typeof McpRequestLogCreateInputSchema>;
+export type DatabaseMcpRequestLog = z.infer<typeof DatabaseMcpRequestLogSchema>;
+export type GetMcpRequestLogsRequest = z.infer<typeof GetMcpRequestLogsRequestSchema>;
+export type GetMcpRequestLogsResponse = z.infer<typeof GetMcpRequestLogsResponseSchema>;

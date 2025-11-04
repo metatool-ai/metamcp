@@ -525,3 +525,39 @@ export const oauthRequestLogsTable = pgTable(
     index("oauth_request_logs_created_at_idx").on(table.created_at),
   ],
 );
+
+// MCP Request Logs table - for auditing MCP requests from OAuth clients
+export const mcpRequestLogsTable = pgTable(
+  "mcp_request_logs",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    client_id: text("client_id").references(() => oauthClientsTable.client_id, {
+      onDelete: "set null",
+    }),
+    user_id: text("user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    session_id: text("session_id"), // SSE session ID
+    endpoint_name: text("endpoint_name"), // MetaMCP endpoint name
+    namespace_uuid: text("namespace_uuid"), // Namespace UUID
+    request_type: text("request_type").notNull(), // 'list_tools', 'call_tool', 'list_prompts', etc
+    request_params: jsonb("request_params").$type<Record<string, any>>(), // MCP request parameters
+    response_result: jsonb("response_result").$type<Record<string, any>>(), // MCP response result
+    response_status: text("response_status").notNull(), // 'success', 'error'
+    error_message: text("error_message"),
+    tool_name: text("tool_name"), // For call_tool requests
+    duration_ms: text("duration_ms"), // Duration in milliseconds
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("mcp_request_logs_client_id_idx").on(table.client_id),
+    index("mcp_request_logs_user_id_idx").on(table.user_id),
+    index("mcp_request_logs_session_id_idx").on(table.session_id),
+    index("mcp_request_logs_endpoint_name_idx").on(table.endpoint_name),
+    index("mcp_request_logs_request_type_idx").on(table.request_type),
+    index("mcp_request_logs_tool_name_idx").on(table.tool_name),
+    index("mcp_request_logs_created_at_idx").on(table.created_at),
+  ],
+);

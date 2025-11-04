@@ -15,6 +15,7 @@ export interface ApiKeyAuthenticatedRequest extends express.Request {
   apiKeyUserId?: string;
   apiKeyUuid?: string;
   oauthUserId?: string; // For OAuth-authenticated requests
+  oauthClientId?: string; // OAuth client ID for logging
   authMethod?: "api_key" | "oauth"; // Track which auth method was used
 }
 
@@ -55,6 +56,7 @@ async function validateOAuthToken(
 ): Promise<{
   valid: boolean;
   user_id?: string;
+  client_id?: string;
   scopes?: string[];
   error?: string;
 }> {
@@ -84,6 +86,7 @@ async function validateOAuthToken(
         const introspectData = (await introspectResponse.json()) as {
           active?: boolean;
           sub?: string;
+          client_id?: string;
           scope?: string;
         };
 
@@ -94,6 +97,7 @@ async function validateOAuthToken(
         return {
           valid: true,
           user_id: introspectData.sub,
+          client_id: introspectData.client_id,
           scopes: introspectData.scope
             ? introspectData.scope.split(" ")
             : ["admin"],
@@ -243,6 +247,7 @@ export const authenticateApiKey = async (
         if (oauthResult.valid) {
           // OAuth token valid - perform access control and pass
           authReq.oauthUserId = oauthResult.user_id;
+          authReq.oauthClientId = oauthResult.client_id;
           authReq.authMethod = "oauth";
 
           const accessCheckResult = checkOAuthAccess(oauthResult, endpoint);
@@ -313,6 +318,7 @@ export const authenticateApiKey = async (
       if (oauthResult.valid) {
         // OAuth token valid - perform access control and pass
         authReq.oauthUserId = oauthResult.user_id;
+        authReq.oauthClientId = oauthResult.client_id;
         authReq.authMethod = "oauth";
 
         const accessCheckResult = checkOAuthAccess(oauthResult, endpoint);
@@ -322,7 +328,7 @@ export const authenticateApiKey = async (
             error_description: accessCheckResult.message,
             timestamp: new Date().toISOString(),
           });
-        }
+          }
 
         return next();
       } else {

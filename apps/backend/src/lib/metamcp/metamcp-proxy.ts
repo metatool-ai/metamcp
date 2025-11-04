@@ -23,6 +23,7 @@ import { z } from "zod";
 
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { configService } from "../config.service";
+import { logMcpRequest } from "../mcp-request-logger";
 import { ConnectedClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
 import { mcpServerPool } from "./mcp-server-pool";
@@ -445,20 +446,81 @@ export const createServer = async (
 
   // Set up the handlers with middleware
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-    return await listToolsWithMiddleware(request, handlerContext);
+    const startTime = Date.now();
+    try {
+      const result = await listToolsWithMiddleware(request, handlerContext);
+      // Log successful request
+      await logMcpRequest({
+        sessionId,
+        requestType: "list_tools",
+        requestParams: request.params,
+        responseResult: result as any,
+        responseStatus: "success",
+        startTime,
+      });
+      return result;
+    } catch (error) {
+      // Log failed request
+      await logMcpRequest({
+        sessionId,
+        requestType: "list_tools",
+        requestParams: request.params,
+        responseStatus: "error",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        startTime,
+      });
+      throw error;
+    }
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    return await callToolWithMiddleware(request, handlerContext);
+    const startTime = Date.now();
+    const toolName = request.params.name;
+    try {
+      const result = await callToolWithMiddleware(request, handlerContext);
+      // Log successful request
+      await logMcpRequest({
+        sessionId,
+        requestType: "call_tool",
+        requestParams: request.params,
+        responseResult: result as any,
+        responseStatus: "success",
+        toolName,
+        startTime,
+      });
+      return result;
+    } catch (error) {
+      // Log failed request
+      await logMcpRequest({
+        sessionId,
+        requestType: "call_tool",
+        requestParams: request.params,
+        responseStatus: "error",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        toolName,
+        startTime,
+      });
+      throw error;
+    }
   });
 
   // Get Prompt Handler
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const startTime = Date.now();
     const { name } = request.params;
     const clientForPrompt = promptToClient[name];
 
     if (!clientForPrompt) {
-      throw new Error(`Unknown prompt: ${name}`);
+      const error = new Error(`Unknown prompt: ${name}`);
+      await logMcpRequest({
+        sessionId,
+        requestType: "get_prompt",
+        requestParams: request.params,
+        responseStatus: "error",
+        errorMessage: error.message,
+        startTime,
+      });
+      throw error;
     }
 
     try {
@@ -481,6 +543,15 @@ export const createServer = async (
         GetPromptResultSchema,
       );
 
+      await logMcpRequest({
+        sessionId,
+        requestType: "get_prompt",
+        requestParams: request.params,
+        responseResult: response as any,
+        responseStatus: "success",
+        startTime,
+      });
+
       return response;
     } catch (error) {
       console.error(
@@ -489,108 +560,140 @@ export const createServer = async (
         }:`,
         error,
       );
+      await logMcpRequest({
+        sessionId,
+        requestType: "get_prompt",
+        requestParams: request.params,
+        responseStatus: "error",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        startTime,
+      });
       throw error;
     }
   });
 
   // List Prompts Handler
   server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
-    const serverParams = await getMcpServers(
-      namespaceUuid,
-      includeInactiveServers,
-    );
-    const allPrompts: z.infer<typeof ListPromptsResultSchema>["prompts"] = [];
+    const startTime = Date.now();
+    try {
+      const serverParams = await getMcpServers(
+        namespaceUuid,
+        includeInactiveServers,
+      );
+      const allPrompts: z.infer<typeof ListPromptsResultSchema>["prompts"] = [];
 
-    // Track visited servers to detect circular references - reset on each call
-    const visitedServers = new Set<string>();
+      // Track visited servers to detect circular references - reset on each call
+      const visitedServers = new Set<string>();
 
-    // Filter out self-referencing servers before processing
-    const validPromptServers = Object.entries(serverParams).filter(
-      ([uuid, params]) => {
-        // Skip if we've already visited this server to prevent circular references
-        if (visitedServers.has(uuid)) {
-          console.log(
-            `Skipping already visited server in prompts: ${params.name || uuid}`,
-          );
-          return false;
-        }
-
-        // Check if this server is the same instance to prevent self-referencing
-        if (isSameServerInstance(params, uuid)) {
-          console.log(
-            `Skipping self-referencing server in prompts: ${params.name || uuid}`,
-          );
-          return false;
-        }
-
-        // Mark this server as visited
-        visitedServers.add(uuid);
-        return true;
-      },
-    );
-
-    await Promise.allSettled(
-      validPromptServers.map(async ([uuid, params]) => {
-        const session = await mcpServerPool.getSession(
-          sessionId,
-          uuid,
-          params,
-          namespaceUuid,
-        );
-        if (!session) return;
-
-        // Now check for self-referencing using the actual MCP server name
-        const serverVersion = session.client.getServerVersion();
-        const actualServerName = serverVersion?.name || params.name || "";
-        const ourServerName = `metamcp-unified-${namespaceUuid}`;
-
-        if (actualServerName === ourServerName) {
-          console.log(
-            `Skipping self-referencing MetaMCP server in prompts: "${actualServerName}"`,
-          );
-          return;
-        }
-
-        const capabilities = session.client.getServerCapabilities();
-        if (!capabilities?.prompts) return;
-
-        // Use name assigned by user, fallback to name from server
-        const serverName =
-          params.name || session.client.getServerVersion()?.name || "";
-        try {
-          const result = await session.client.request(
-            {
-              method: "prompts/list",
-              params: {
-                cursor: request.params?.cursor,
-                _meta: request.params?._meta,
-              },
-            },
-            ListPromptsResultSchema,
-          );
-
-          if (result.prompts) {
-            const promptsWithSource = result.prompts.map((prompt) => {
-              const promptName = `${sanitizeName(serverName)}__${prompt.name}`;
-              promptToClient[promptName] = session;
-              return {
-                ...prompt,
-                name: promptName,
-                description: prompt.description || "",
-              };
-            });
-            allPrompts.push(...promptsWithSource);
+      // Filter out self-referencing servers before processing
+      const validPromptServers = Object.entries(serverParams).filter(
+        ([uuid, params]) => {
+          // Skip if we've already visited this server to prevent circular references
+          if (visitedServers.has(uuid)) {
+            console.log(
+              `Skipping already visited server in prompts: ${params.name || uuid}`,
+            );
+            return false;
           }
-        } catch (error) {
-          console.error(`Error fetching prompts from: ${serverName}`, error);
-        }
-      }),
-    );
 
-    return {
-      prompts: allPrompts,
-      nextCursor: request.params?.cursor,
-    };
+          // Check if this server is the same instance to prevent self-referencing
+          if (isSameServerInstance(params, uuid)) {
+            console.log(
+              `Skipping self-referencing server in prompts: ${params.name || uuid}`,
+            );
+            return false;
+          }
+
+          // Mark this server as visited
+          visitedServers.add(uuid);
+          return true;
+        },
+      );
+
+      await Promise.allSettled(
+        validPromptServers.map(async ([uuid, params]) => {
+          const session = await mcpServerPool.getSession(
+            sessionId,
+            uuid,
+            params,
+            namespaceUuid,
+          );
+          if (!session) return;
+
+          // Now check for self-referencing using the actual MCP server name
+          const serverVersion = session.client.getServerVersion();
+          const actualServerName = serverVersion?.name || params.name || "";
+          const ourServerName = `metamcp-unified-${namespaceUuid}`;
+
+          if (actualServerName === ourServerName) {
+            console.log(
+              `Skipping self-referencing MetaMCP server in prompts: "${actualServerName}"`,
+            );
+            return;
+          }
+
+          const capabilities = session.client.getServerCapabilities();
+          if (!capabilities?.prompts) return;
+
+          // Use name assigned by user, fallback to name from server
+          const serverName =
+            params.name || session.client.getServerVersion()?.name || "";
+          try {
+            const result = await session.client.request(
+              {
+                method: "prompts/list",
+                params: {
+                  cursor: request.params?.cursor,
+                  _meta: request.params?._meta,
+                },
+              },
+              ListPromptsResultSchema,
+            );
+
+            if (result.prompts) {
+              const promptsWithSource = result.prompts.map((prompt) => {
+                const promptName = `${sanitizeName(serverName)}__${prompt.name}`;
+                promptToClient[promptName] = session;
+                return {
+                  ...prompt,
+                  name: promptName,
+                  description: prompt.description || "",
+                };
+              });
+              allPrompts.push(...promptsWithSource);
+            }
+          } catch (error) {
+            console.error(`Error fetching prompts from: ${serverName}`, error);
+          }
+        }),
+      );
+
+      const result = {
+        prompts: allPrompts,
+        nextCursor: request.params?.cursor,
+      };
+
+      await logMcpRequest({
+        sessionId,
+        requestType: "list_prompts",
+        requestParams: request.params,
+        responseResult: result as any,
+        responseStatus: "success",
+        startTime,
+      });
+
+      return result;
+    } catch (error) {
+      await logMcpRequest({
+        sessionId,
+        requestType: "list_prompts",
+        requestParams: request.params,
+        responseStatus: "error",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        startTime,
+      });
+      throw error;
+    }
   });
 
   // List Resources Handler

@@ -240,7 +240,7 @@ tokenRouter.post("/oauth/introspect", async (req, res) => {
     res.json({
       active: true,
       scope: tokenData.scope,
-      client_id: "mcp_client", // In production, store and return actual client_id
+      client_id: tokenData.client_id,
       token_type: "Bearer",
       exp: Math.floor(tokenData.expires_at.getTime() / 1000),
       iat: Math.floor((tokenData.expires_at.getTime() - 3600 * 1000) / 1000), // Issued 1 hour before expiry
