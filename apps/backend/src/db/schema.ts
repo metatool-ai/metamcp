@@ -561,3 +561,39 @@ export const mcpRequestLogsTable = pgTable(
     index("mcp_request_logs_created_at_idx").on(table.created_at),
   ],
 );
+
+// MCP Server Call Logs table - for auditing calls from MetaMCP to real MCP servers
+export const mcpServerCallLogsTable = pgTable(
+  "mcp_server_call_logs",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    client_id: text("client_id").references(() => oauthClientsTable.client_id, {
+      onDelete: "set null",
+    }),
+    user_id: text("user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    session_id: text("session_id"), // SSE session ID that initiated this call
+    endpoint_name: text("endpoint_name"), // MetaMCP endpoint name
+    namespace_uuid: text("namespace_uuid"), // Namespace UUID
+    mcp_server_uuid: text("mcp_server_uuid"), // UUID of the MCP server that was called
+    mcp_server_name: text("mcp_server_name"), // Name of the MCP server
+    tool_name: text("tool_name").notNull(), // Tool that was called on the MCP server
+    tool_arguments: jsonb("tool_arguments").$type<Record<string, any>>(), // Arguments passed to the tool
+    result: jsonb("result").$type<Record<string, any>>(), // Result from the tool execution
+    status: text("status").notNull(), // 'success', 'error'
+    error_message: text("error_message"),
+    duration_ms: text("duration_ms"), // Duration in milliseconds
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("mcp_server_call_logs_client_id_idx").on(table.client_id),
+    index("mcp_server_call_logs_user_id_idx").on(table.user_id),
+    index("mcp_server_call_logs_session_id_idx").on(table.session_id),
+    index("mcp_server_call_logs_mcp_server_uuid_idx").on(table.mcp_server_uuid),
+    index("mcp_server_call_logs_tool_name_idx").on(table.tool_name),
+    index("mcp_server_call_logs_created_at_idx").on(table.created_at),
+  ],
+);

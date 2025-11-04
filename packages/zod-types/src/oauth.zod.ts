@@ -381,3 +381,85 @@ export type McpRequestLogCreateInput = z.infer<typeof McpRequestLogCreateInputSc
 export type DatabaseMcpRequestLog = z.infer<typeof DatabaseMcpRequestLogSchema>;
 export type GetMcpRequestLogsRequest = z.infer<typeof GetMcpRequestLogsRequestSchema>;
 export type GetMcpRequestLogsResponse = z.infer<typeof GetMcpRequestLogsResponseSchema>;
+
+// ============================================================
+// MCP Server Call Logs Schemas (MetaMCP -> Real MCP Server calls)
+// ============================================================
+
+export const McpServerCallLogSchema = z.object({
+  uuid: z.string().uuid(),
+  clientId: z.string().nullable(),
+  userId: z.string().nullable(),
+  sessionId: z.string().nullable(),
+  endpointName: z.string().nullable(),
+  namespaceUuid: z.string().nullable(),
+  mcpServerUuid: z.string().nullable(),
+  mcpServerName: z.string().nullable(),
+  toolName: z.string(),
+  toolArguments: z.record(z.any()).nullable(),
+  result: z.record(z.any()).nullable(),
+  status: z.string(),
+  errorMessage: z.string().nullable(),
+  durationMs: z.string().nullable(),
+  createdAt: z.date(),
+});
+
+export const McpServerCallLogCreateInputSchema = z.object({
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  session_id: z.string().nullable(),
+  endpoint_name: z.string().nullable(),
+  namespace_uuid: z.string().nullable(),
+  mcp_server_uuid: z.string().nullable(),
+  mcp_server_name: z.string().nullable(),
+  tool_name: z.string(),
+  tool_arguments: z.record(z.any()).nullable(),
+  result: z.record(z.any()).nullable(),
+  status: z.string(),
+  error_message: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+});
+
+export const DatabaseMcpServerCallLogSchema = z.object({
+  uuid: z.string().uuid(),
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  session_id: z.string().nullable(),
+  endpoint_name: z.string().nullable(),
+  namespace_uuid: z.string().nullable(),
+  mcp_server_uuid: z.string().nullable(),
+  mcp_server_name: z.string().nullable(),
+  tool_name: z.string(),
+  tool_arguments: z.record(z.any()).nullable(),
+  result: z.record(z.any()).nullable(),
+  status: z.string(),
+  error_message: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+  created_at: z.date(),
+});
+
+export const GetMcpServerCallLogsRequestSchema = z.object({
+  clientId: z.string().optional(),
+  sessionId: z.string().optional(),
+  mcpServerUuid: z.string().optional(),
+  toolName: z.string().optional(),
+  limit: z.number().int().positive().max(100).default(50),
+  offset: z.number().int().nonnegative().default(0),
+});
+
+export const GetMcpServerCallLogsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    DatabaseMcpServerCallLogSchema.extend({
+      createdAt: z.string(),
+    }),
+  ),
+  total: z.number(),
+  message: z.string().optional(),
+});
+
+export type McpServerCallLog = z.infer<typeof McpServerCallLogSchema>;
+export type McpServerCallLogCreateInput = z.infer<typeof McpServerCallLogCreateInputSchema>;
+export type DatabaseMcpServerCallLog = z.infer<typeof DatabaseMcpServerCallLogSchema>;
+export type GetMcpServerCallLogsRequest = z.infer<typeof GetMcpServerCallLogsRequestSchema>;
+export type GetMcpServerCallLogsResponse = z.infer<typeof GetMcpServerCallLogsResponseSchema>;

@@ -4,6 +4,8 @@ import {
   GetAllOAuthClientsResponseSchema,
   GetMcpRequestLogsRequestSchema,
   GetMcpRequestLogsResponseSchema,
+  GetMcpServerCallLogsRequestSchema,
+  GetMcpServerCallLogsResponseSchema,
   GetOAuthRequestLogsRequestSchema,
   GetOAuthRequestLogsResponseSchema,
   GetOAuthSessionRequestSchema,
@@ -21,6 +23,7 @@ import {
   oauthRequestLogsRepository,
   oauthSessionsRepository,
 } from "../db/repositories";
+import { mcpServerCallLogsRepository } from "../db/repositories/mcp-server-call-logs.repo";
 import { OAuthSessionsSerializer } from "../db/serializers";
 
 export const oauthImplementations = {
@@ -208,6 +211,38 @@ export const oauthImplementations = {
         data: [],
         total: 0,
         message: "Failed to fetch MCP request logs",
+      };
+    }
+  },
+
+  getMcpServerCallLogs: async (
+    input: z.infer<typeof GetMcpServerCallLogsRequestSchema>,
+  ): Promise<z.infer<typeof GetMcpServerCallLogsResponseSchema>> => {
+    try {
+      const { logs, total } = await mcpServerCallLogsRepository.findMany({
+        clientId: input.clientId,
+        sessionId: input.sessionId,
+        mcpServerUuid: input.mcpServerUuid,
+        toolName: input.toolName,
+        limit: input.limit,
+        offset: input.offset,
+      });
+
+      return {
+        success: true,
+        data: logs.map((log) => ({
+          ...log,
+          created_at: log.created_at.toISOString(),
+        })),
+        total,
+      };
+    } catch (error) {
+      console.error("Error fetching MCP server call logs:", error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        message: "Failed to fetch MCP server call logs",
       };
     }
   },

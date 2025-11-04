@@ -99,6 +99,13 @@
       "when": 1730734320000,
       "tag": "0013_add_mcp_request_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1730737920000,
+      "tag": "0014_add_mcp_server_call_logs",
+      "breakpoints": true
     }
   ]
 }

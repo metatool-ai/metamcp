@@ -28,7 +28,7 @@ export default function McpLogsPage() {
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
-  const { data: logsResponse, isLoading } = trpc.frontend.oauth.getMcpRequestLogs.useQuery({
+  const { data: logsResponse, isLoading } = trpc.frontend.oauth.getMcpServerCallLogs.useQuery({
     clientId,
     limit: pageSize,
     offset: page * pageSize,
@@ -57,8 +57,8 @@ export default function McpLogsPage() {
 
   // Calculate stats
   const totalRequests = logs.length;
-  const successfulRequests = logs.filter((log) => log.response_status === "success").length;
-  const failedRequests = logs.filter((log) => log.response_status === "error").length;
+  const successfulRequests = logs.filter((log) => log.status === "success").length;
+  const failedRequests = logs.filter((log) => log.status === "error").length;
   const avgDuration =
     logs.length > 0
       ? Math.round(
@@ -145,15 +145,7 @@ export default function McpLogsPage() {
               {logs.map((log) => {
                 const isExpanded = expandedLogs.has(log.uuid);
                 const statusColor =
-                  log.response_status === "success" ? "text-green-500" : "text-red-500";
-                const requestTypeBadgeColor =
-                  log.request_type === "call_tool"
-                    ? "bg-blue-500"
-                    : log.request_type === "list_tools"
-                      ? "bg-purple-500"
-                      : log.request_type === "get_prompt"
-                        ? "bg-orange-500"
-                        : "bg-gray-500";
+                  log.status === "success" ? "text-green-500" : "text-red-500";
 
                 return (
                   <div
@@ -171,18 +163,18 @@ export default function McpLogsPage() {
                           <ChevronRight className="h-4 w-4 flex-shrink-0" />
                         )}
 
-                        <Badge className={requestTypeBadgeColor}>
-                          {log.request_type}
+                        <Badge className="bg-blue-500">
+                          {log.tool_name}
                         </Badge>
 
-                        {log.tool_name && (
+                        {log.mcp_server_name && (
                           <span className="text-sm font-mono text-muted-foreground">
-                            {log.tool_name}
+                            {log.mcp_server_name}
                           </span>
                         )}
 
                         <span className={`font-semibold ${statusColor}`}>
-                          {log.response_status === "success" ? "✓" : "✗"}
+                          {log.status === "success" ? "✓" : "✗"}
                         </span>
 
                         <span className="text-sm text-muted-foreground">
@@ -201,6 +193,18 @@ export default function McpLogsPage() {
                       <div className="mt-4 pl-7 space-y-4 text-sm">
                         {/* Session Info */}
                         <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="font-semibold">MCP Server:</span>{" "}
+                            <span className="text-muted-foreground">
+                              {log.mcp_server_name || "N/A"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-semibold">Server UUID:</span>{" "}
+                            <span className="font-mono text-xs">
+                              {log.mcp_server_uuid || "N/A"}
+                            </span>
+                          </div>
                           <div>
                             <span className="font-semibold">Session ID:</span>{" "}
                             <span className="font-mono text-xs">{log.session_id || "N/A"}</span>
@@ -223,22 +227,22 @@ export default function McpLogsPage() {
                           </div>
                         </div>
 
-                        {/* Request Parameters */}
-                        {log.request_params && (
+                        {/* Tool Arguments */}
+                        {log.tool_arguments && (
                           <div>
-                            <div className="font-semibold mb-2">Request Parameters:</div>
+                            <div className="font-semibold mb-2">Tool Arguments:</div>
                             <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
-                              {JSON.stringify(log.request_params, null, 2)}
+                              {JSON.stringify(log.tool_arguments, null, 2)}
                             </pre>
                           </div>
                         )}
 
                         {/* Response Result */}
-                        {log.response_result && (
+                        {log.result && (
                           <div>
-                            <div className="font-semibold mb-2">Response Result:</div>
+                            <div className="font-semibold mb-2">Result:</div>
                             <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs max-h-96">
-                              {JSON.stringify(log.response_result, null, 2)}
+                              {JSON.stringify(log.result, null, 2)}
                             </pre>
                           </div>
                         )}

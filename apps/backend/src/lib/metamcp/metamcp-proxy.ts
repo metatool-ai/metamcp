@@ -24,6 +24,7 @@ import { z } from "zod";
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { configService } from "../config.service";
 import { logMcpRequest } from "../mcp-request-logger";
+import { logMcpServerCall } from "../mcp-server-call-logger";
 import { ConnectedClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
 import { mcpServerPool } from "./mcp-server-pool";
@@ -402,6 +403,13 @@ export const createServer = async (
         timeout,
         maxTotalTimeout,
       };
+
+      // Get MCP server name for logging
+      const mcpServerName = clientForTool.client.getServerVersion()?.name || serverUuid || "unknown";
+
+      // Track start time for logging
+      const callStartTime = Date.now();
+
       // Use the correct schema for tool calls
       const result = await clientForTool.client.request(
         {
@@ -416,6 +424,18 @@ export const createServer = async (
         mcpRequestOptions,
       );
 
+      // Log successful call to MCP server
+      await logMcpServerCall({
+        sessionId: currentSessionId,
+        mcpServerUuid: serverUuid,
+        mcpServerName,
+        toolName: originalToolName,
+        toolArguments: args || {},
+        result: result as any,
+        status: "success",
+        startTime: callStartTime,
+      });
+
       // Cast the result to CallToolResult type
       return result as CallToolResult;
     } catch (error) {
@@ -425,6 +445,21 @@ export const createServer = async (
         }:`,
         error,
       );
+
+      // Log failed call to MCP server
+      const mcpServerName = clientForTool.client.getServerVersion()?.name || serverUuid || "unknown";
+      const callStartTime = Date.now();
+      await logMcpServerCall({
+        sessionId: currentSessionId,
+        mcpServerUuid: serverUuid,
+        mcpServerName,
+        toolName: originalToolName,
+        toolArguments: args || {},
+        status: "error",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        startTime: callStartTime,
+      });
+
       throw error;
     }
   };
