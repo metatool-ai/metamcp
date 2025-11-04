@@ -615,6 +615,7 @@ export const namespacesImplementations = {
           serverUuid: input.serverUuid,
           overrideName: input.overrideName,
           overrideDescription: input.overrideDescription,
+          overrideAnnotations: input.overrideAnnotations,
         });
 
       if (!updatedMapping) {
