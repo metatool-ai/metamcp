@@ -4,7 +4,7 @@ import type {
   McpRequestLogCreateInput,
 } from "@repo/zod-types";
 
-import { db } from "../drizzle";
+import { db } from "../index";
 import { mcpRequestLogsTable } from "../schema";
 
 export class McpRequestLogsRepository {
