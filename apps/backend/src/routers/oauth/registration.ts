@@ -2,6 +2,7 @@ import express from "express";
 
 import { oauthRepository } from "../../db/repositories";
 import { configService } from "../../lib/config.service";
+import { logRegistrationRequest } from "./logging-middleware";
 import {
   generateSecureClientId,
   generateSecureClientSecret,
@@ -16,7 +17,11 @@ const registrationRouter = express.Router();
  * Allows clients to dynamically register with the authorization server
  * Implementation follows RFC 7591 with OAuth 2.1 security enhancements
  */
-registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
+registrationRouter.post(
+  "/oauth/register",
+  logRegistrationRequest,
+  rateLimitToken,
+  async (req, res) => {
   try {
     // Check if body was parsed correctly
     if (!req.body || typeof req.body !== "object") {

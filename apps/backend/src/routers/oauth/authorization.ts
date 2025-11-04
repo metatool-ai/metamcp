@@ -2,6 +2,7 @@ import express from "express";
 
 import { auth } from "../../auth";
 import { oauthRepository } from "../../db/repositories";
+import { logAuthorizationRequest } from "./logging-middleware";
 import {
   generateSecureAuthCode,
   getBaseUrl,
@@ -16,7 +17,11 @@ const authorizationRouter = express.Router();
  * OAuth 2.0 Authorization Endpoint
  * Handles authorization requests from MCP clients
  */
-authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
+authorizationRouter.get(
+  "/oauth/authorize",
+  logAuthorizationRequest,
+  rateLimitAuth,
+  async (req, res) => {
   try {
     const {
       response_type,
@@ -199,7 +204,10 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
  * Handles the callback from frontend login and redirects back to the OAuth client
  * Verifies user authentication before issuing authorization code
  */
-authorizationRouter.get("/oauth/callback", async (req, res) => {
+authorizationRouter.get(
+  "/oauth/callback",
+  logAuthorizationRequest,
+  async (req, res) => {
   try {
     let oauthParams: OAuthParams;
 
