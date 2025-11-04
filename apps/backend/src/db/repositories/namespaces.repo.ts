@@ -247,6 +247,7 @@ export class NamespacesRepository {
         name: toolsTable.name,
         description: toolsTable.description,
         toolSchema: toolsTable.toolSchema,
+        annotations: toolsTable.annotations,
         created_at: toolsTable.created_at,
         updated_at: toolsTable.updated_at,
         mcp_server_uuid: toolsTable.mcp_server_uuid,
@@ -257,6 +258,7 @@ export class NamespacesRepository {
         status: namespaceToolMappingsTable.status,
         overrideName: namespaceToolMappingsTable.override_name,
         overrideDescription: namespaceToolMappingsTable.override_description,
+        overrideAnnotations: namespaceToolMappingsTable.override_annotations,
       })
       .from(toolsTable)
       .innerJoin(
