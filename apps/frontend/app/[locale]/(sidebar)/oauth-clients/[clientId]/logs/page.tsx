@@ -44,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTranslations } from "@/hooks/useTranslations";
+import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
 type OAuthRequestLogDisplay = Omit<OAuthRequestLog, "created_at"> & {
@@ -53,6 +54,7 @@ type OAuthRequestLogDisplay = Omit<OAuthRequestLog, "created_at"> & {
 export default function OAuthClientLogsPage() {
   const params = useParams();
   const clientId = params.clientId as string;
+  const locale = params.locale as SupportedLocale;
   const { t } = useTranslations();
 
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
@@ -127,7 +129,7 @@ export default function OAuthClientLogsPage() {
     <div className="container mx-auto py-6 space-y-6">
       {/* Header with back button */}
       <div className="flex items-center gap-4">
-        <Link href="/oauth-clients">
+        <Link href={getLocalizedPath("/oauth-clients", locale)}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-2" />
             {t("oauth-clients:backToClients")}

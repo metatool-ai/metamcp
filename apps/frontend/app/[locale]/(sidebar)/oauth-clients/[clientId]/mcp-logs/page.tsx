@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ChevronDown, ChevronRight, Activity, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Activity, Clock, AlertCircle, CheckCircle2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -15,10 +16,14 @@ import {
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
+import { useTranslations } from "@/hooks/useTranslations";
+import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
 
 export default function McpLogsPage() {
   const params = useParams();
   const clientId = params.clientId as string;
+  const locale = params.locale as SupportedLocale;
+  const { t } = useTranslations();
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
   const pageSize = 50;
@@ -42,7 +47,7 @@ export default function McpLogsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading MCP logs...</div>
+        <div className="text-muted-foreground">{t("oauth-clients:loadingMcpLogs")}</div>
       </div>
     );
   }
@@ -66,18 +71,27 @@ export default function McpLogsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold mb-2">MCP Request Logs</h1>
-        <p className="text-muted-foreground">
-          View MCP requests made by OAuth client: {clientId}
-        </p>
+      {/* Header with back button */}
+      <div className="flex items-center gap-4 mb-6">
+        <Link href={getLocalizedPath("/oauth-clients", locale)}>
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            {t("oauth-clients:backToClients")}
+          </Button>
+        </Link>
+        <div className="flex-1">
+          <h1 className="text-3xl font-bold mb-2">{t("oauth-clients:mcpRequestLogs")}</h1>
+          <p className="text-muted-foreground">
+            {t("oauth-clients:mcpLogsFor")} <code className="text-sm bg-muted px-2 py-1 rounded">{clientId}</code>
+          </p>
+        </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("oauth-clients:totalRequests")}</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -87,7 +101,7 @@ export default function McpLogsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Successful</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("oauth-clients:successful")}</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -97,7 +111,7 @@ export default function McpLogsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Failed</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("oauth-clients:failed")}</CardTitle>
             <AlertCircle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
@@ -107,7 +121,7 @@ export default function McpLogsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Duration</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("oauth-clients:avgDuration")}</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -119,12 +133,12 @@ export default function McpLogsPage() {
       {/* Logs Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Request Logs</CardTitle>
+          <CardTitle>{t("oauth-clients:requestLogsTitle")}</CardTitle>
         </CardHeader>
         <CardContent>
           {logs.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No MCP request logs found for this client
+              {t("oauth-clients:noMcpLogsFound")}
             </div>
           ) : (
             <div className="space-y-2">
