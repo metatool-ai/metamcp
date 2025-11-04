@@ -2,6 +2,8 @@ import {
   DeleteOAuthClientRequestSchema,
   DeleteOAuthClientResponseSchema,
   GetAllOAuthClientsResponseSchema,
+  GetOAuthRequestLogsRequestSchema,
+  GetOAuthRequestLogsResponseSchema,
   GetOAuthSessionRequestSchema,
   GetOAuthSessionResponseSchema,
   UpdateOAuthClientAdminAccessRequestSchema,
@@ -31,6 +33,9 @@ export const createOAuthRouter = (
     deleteClient: (
       input: z.infer<typeof DeleteOAuthClientRequestSchema>,
     ) => Promise<z.infer<typeof DeleteOAuthClientResponseSchema>>;
+    getRequestLogs: (
+      input: z.infer<typeof GetOAuthRequestLogsRequestSchema>,
+    ) => Promise<z.infer<typeof GetOAuthRequestLogsResponseSchema>>;
   },
 ) => {
   return router({
@@ -71,6 +76,14 @@ export const createOAuthRouter = (
       .output(DeleteOAuthClientResponseSchema)
       .mutation(async ({ input }) => {
         return await implementations.deleteClient(input);
+      }),
+
+    // Protected: Get OAuth request logs
+    getRequestLogs: protectedProcedure
+      .input(GetOAuthRequestLogsRequestSchema)
+      .output(GetOAuthRequestLogsResponseSchema)
+      .query(async ({ input }) => {
+        return await implementations.getRequestLogs(input);
       }),
   });
 };

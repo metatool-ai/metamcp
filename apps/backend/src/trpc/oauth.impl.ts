@@ -2,6 +2,8 @@ import {
   DeleteOAuthClientRequestSchema,
   DeleteOAuthClientResponseSchema,
   GetAllOAuthClientsResponseSchema,
+  GetOAuthRequestLogsRequestSchema,
+  GetOAuthRequestLogsResponseSchema,
   GetOAuthSessionRequestSchema,
   GetOAuthSessionResponseSchema,
   UpdateOAuthClientAdminAccessRequestSchema,
@@ -11,7 +13,11 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
-import { oauthRepository, oauthSessionsRepository } from "../db/repositories";
+import {
+  oauthRepository,
+  oauthRequestLogsRepository,
+  oauthSessionsRepository,
+} from "../db/repositories";
 import { OAuthSessionsSerializer } from "../db/serializers";
 
 export const oauthImplementations = {
@@ -139,6 +145,35 @@ export const oauthImplementations = {
       return {
         success: false,
         message: "Failed to delete OAuth client",
+      };
+    }
+  },
+
+  getRequestLogs: async (
+    input: z.infer<typeof GetOAuthRequestLogsRequestSchema>,
+  ): Promise<z.infer<typeof GetOAuthRequestLogsResponseSchema>> => {
+    try {
+      const { logs, total } = await oauthRequestLogsRepository.findMany({
+        clientId: input.clientId,
+        limit: input.limit,
+        offset: input.offset,
+      });
+
+      return {
+        success: true,
+        data: logs.map((log) => ({
+          ...log,
+          created_at: log.created_at.toISOString(),
+        })),
+        total,
+      };
+    } catch (error) {
+      console.error("Error fetching OAuth request logs:", error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        message: "Failed to fetch OAuth request logs",
       };
     }
   },
