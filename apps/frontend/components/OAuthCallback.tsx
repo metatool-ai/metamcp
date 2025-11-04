@@ -3,14 +3,11 @@
 import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
 import { useEffect, useRef } from "react";
 
-import { useTranslations } from "@/hooks/useTranslations";
-
 import { getServerSpecificKey, SESSION_KEYS } from "../lib/constants";
 import { createAuthProvider } from "../lib/oauth-provider";
 import { vanillaTrpcClient } from "../lib/trpc";
 
 const OAuthCallback = () => {
-  const { t } = useTranslations();
   const hasProcessedRef = useRef(false);
 
   useEffect(() => {
@@ -96,7 +93,7 @@ const OAuthCallback = () => {
   return (
     <div className="flex items-center justify-center h-screen">
       <p className="text-lg text-gray-500">
-        {t("common:oauth.processingCallback")}
+        Processing OAuth callback...
       </p>
     </div>
   );
