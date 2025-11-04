@@ -4,8 +4,10 @@ import { OAuthClient } from "@repo/zod-types";
 import {
   Calendar,
   CheckCircle,
+  Eye,
   ExternalLink,
   Key,
+  Mail,
   MoreHorizontal,
   RefreshCw,
   Shield,
@@ -225,6 +227,7 @@ export default function OAuthClientsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("oauth-clients:clientName")}</TableHead>
+                  <TableHead>{t("oauth-clients:email")}</TableHead>
                   <TableHead>{t("oauth-clients:clientId")}</TableHead>
                   <TableHead>{t("oauth-clients:adminAccess")}</TableHead>
                   <TableHead>{t("oauth-clients:grantTypes")}</TableHead>
@@ -240,6 +243,18 @@ export default function OAuthClientsPage() {
                         <Shield className="h-4 w-4 text-blue-500" />
                         <span>{client.client_name}</span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {client.email ? (
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-sm">{client.email}</span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground italic">
+                          {t("oauth-clients:noEmail")}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -296,6 +311,15 @@ export default function OAuthClientsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={`/oauth-clients/${client.client_id}/logs`}
+                              className="flex items-center"
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              {t("oauth-clients:viewLogs")}
+                            </a>
+                          </DropdownMenuItem>
                           {client.client_uri && (
                             <DropdownMenuItem asChild>
                               <a
