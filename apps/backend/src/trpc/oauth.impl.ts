@@ -2,6 +2,8 @@ import {
   DeleteOAuthClientRequestSchema,
   DeleteOAuthClientResponseSchema,
   GetAllOAuthClientsResponseSchema,
+  GetMcpRequestLogsRequestSchema,
+  GetMcpRequestLogsResponseSchema,
   GetOAuthRequestLogsRequestSchema,
   GetOAuthRequestLogsResponseSchema,
   GetOAuthSessionRequestSchema,
@@ -14,6 +16,7 @@ import {
 import { z } from "zod";
 
 import {
+  mcpRequestLogsRepository,
   oauthRepository,
   oauthRequestLogsRepository,
   oauthSessionsRepository,
@@ -174,6 +177,37 @@ export const oauthImplementations = {
         data: [],
         total: 0,
         message: "Failed to fetch OAuth request logs",
+      };
+    }
+  },
+
+  getMcpRequestLogs: async (
+    input: z.infer<typeof GetMcpRequestLogsRequestSchema>,
+  ): Promise<z.infer<typeof GetMcpRequestLogsResponseSchema>> => {
+    try {
+      const { logs, total } = await mcpRequestLogsRepository.findMany({
+        clientId: input.clientId,
+        sessionId: input.sessionId,
+        requestType: input.requestType,
+        limit: input.limit,
+        offset: input.offset,
+      });
+
+      return {
+        success: true,
+        data: logs.map((log) => ({
+          ...log,
+          created_at: log.created_at.toISOString(),
+        })),
+        total,
+      };
+    } catch (error) {
+      console.error("Error fetching MCP request logs:", error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        message: "Failed to fetch MCP request logs",
       };
     }
   },

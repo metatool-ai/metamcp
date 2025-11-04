@@ -2,6 +2,8 @@ import {
   DeleteOAuthClientRequestSchema,
   DeleteOAuthClientResponseSchema,
   GetAllOAuthClientsResponseSchema,
+  GetMcpRequestLogsRequestSchema,
+  GetMcpRequestLogsResponseSchema,
   GetOAuthRequestLogsRequestSchema,
   GetOAuthRequestLogsResponseSchema,
   GetOAuthSessionRequestSchema,
@@ -36,6 +38,9 @@ export const createOAuthRouter = (
     getRequestLogs: (
       input: z.infer<typeof GetOAuthRequestLogsRequestSchema>,
     ) => Promise<z.infer<typeof GetOAuthRequestLogsResponseSchema>>;
+    getMcpRequestLogs: (
+      input: z.infer<typeof GetMcpRequestLogsRequestSchema>,
+    ) => Promise<z.infer<typeof GetMcpRequestLogsResponseSchema>>;
   },
 ) => {
   return router({
@@ -84,6 +89,14 @@ export const createOAuthRouter = (
       .output(GetOAuthRequestLogsResponseSchema)
       .query(async ({ input }) => {
         return await implementations.getRequestLogs(input);
+      }),
+
+    // Protected: Get MCP request logs
+    getMcpRequestLogs: protectedProcedure
+      .input(GetMcpRequestLogsRequestSchema)
+      .output(GetMcpRequestLogsResponseSchema)
+      .query(async ({ input }) => {
+        return await implementations.getMcpRequestLogs(input);
       }),
   });
 };

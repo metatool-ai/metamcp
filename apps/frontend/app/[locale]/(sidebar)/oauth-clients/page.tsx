@@ -2,6 +2,7 @@
 
 import { OAuthClient } from "@repo/zod-types";
 import {
+  Activity,
   Calendar,
   CheckCircle,
   Eye,
@@ -318,6 +319,15 @@ export default function OAuthClientsPage() {
                             >
                               <Eye className="mr-2 h-4 w-4" />
                               {t("oauth-clients:viewLogs")}
+                            </a>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={`/oauth-clients/${client.client_id}/mcp-logs`}
+                              className="flex items-center"
+                            >
+                              <Activity className="mr-2 h-4 w-4" />
+                              View MCP Logs
                             </a>
                           </DropdownMenuItem>
                           {client.client_uri && (
