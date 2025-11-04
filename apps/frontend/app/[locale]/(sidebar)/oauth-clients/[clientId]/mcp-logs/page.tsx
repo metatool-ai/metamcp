@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { trpc } from "@/trpc/client";
+import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 
 export default function McpLogsPage() {
