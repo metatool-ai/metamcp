@@ -90,11 +90,18 @@ async function validateOAuthToken(
           scope?: string;
         };
 
+        console.log("[OAuth Middleware] Token introspection result:", {
+          active: introspectData.active,
+          user_id: introspectData.sub,
+          client_id: introspectData.client_id,
+          hasScope: !!introspectData.scope,
+        });
+
         if (!introspectData.active) {
           return { valid: false, error: "Token is not active" };
         }
 
-        return {
+        const result = {
           valid: true,
           user_id: introspectData.sub,
           client_id: introspectData.client_id,
@@ -102,6 +109,14 @@ async function validateOAuthToken(
             ? introspectData.scope.split(" ")
             : ["admin"],
         };
+
+        console.log("[OAuth Middleware] Returning validation result:", {
+          valid: result.valid,
+          user_id: result.user_id,
+          client_id: result.client_id,
+        });
+
+        return result;
       } catch (error) {
         console.error("Error introspecting MCP token:", error);
         return { valid: false, error: "Token validation failed" };
@@ -250,6 +265,12 @@ export const authenticateApiKey = async (
           authReq.oauthClientId = oauthResult.client_id;
           authReq.authMethod = "oauth";
 
+          console.log("[OAuth Middleware] OAuth authentication successful (CONDITION 3):", {
+            userId: authReq.oauthUserId,
+            clientId: authReq.oauthClientId,
+            endpoint: authReq.endpointName,
+          });
+
           const accessCheckResult = checkOAuthAccess(oauthResult, endpoint);
           if (!accessCheckResult.allowed) {
             return res.status(403).json({
@@ -320,6 +341,12 @@ export const authenticateApiKey = async (
         authReq.oauthUserId = oauthResult.user_id;
         authReq.oauthClientId = oauthResult.client_id;
         authReq.authMethod = "oauth";
+
+        console.log("[OAuth Middleware] OAuth authentication successful (CONDITION 4):", {
+          userId: authReq.oauthUserId,
+          clientId: authReq.oauthClientId,
+          endpoint: authReq.endpointName,
+        });
 
         const accessCheckResult = checkOAuthAccess(oauthResult, endpoint);
         if (!accessCheckResult.allowed) {
