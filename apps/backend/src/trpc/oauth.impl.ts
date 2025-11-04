@@ -188,6 +188,14 @@ export const oauthImplementations = {
     input: z.infer<typeof GetMcpRequestLogsRequestSchema>,
   ): Promise<z.infer<typeof GetMcpRequestLogsResponseSchema>> => {
     try {
+      console.log("[tRPC getMcpRequestLogs] Request:", {
+        clientId: input.clientId,
+        sessionId: input.sessionId,
+        requestType: input.requestType,
+        limit: input.limit,
+        offset: input.offset,
+      });
+
       const { logs, total } = await mcpRequestLogsRepository.findMany({
         clientId: input.clientId,
         sessionId: input.sessionId,
@@ -196,7 +204,18 @@ export const oauthImplementations = {
         offset: input.offset,
       });
 
-      return {
+      console.log("[tRPC getMcpRequestLogs] Found logs:", {
+        count: logs.length,
+        total,
+        firstLog: logs[0] ? {
+          uuid: logs[0].uuid,
+          client_id: logs[0].client_id,
+          request_type: logs[0].request_type,
+          created_at: logs[0].created_at,
+        } : null,
+      });
+
+      const result = {
         success: true,
         data: logs.map((log) => ({
           ...log,
@@ -204,6 +223,14 @@ export const oauthImplementations = {
         })),
         total,
       };
+
+      console.log("[tRPC getMcpRequestLogs] Returning:", {
+        success: result.success,
+        dataCount: result.data.length,
+        total: result.total,
+      });
+
+      return result;
     } catch (error) {
       console.error("Error fetching MCP request logs:", error);
       return {
