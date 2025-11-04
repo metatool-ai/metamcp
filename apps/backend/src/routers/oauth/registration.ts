@@ -40,6 +40,7 @@ registrationRouter.post(
       logo_uri,
       scope,
       contacts,
+      email,
       tos_uri,
       policy_uri,
       token_endpoint_auth_method,
@@ -143,12 +144,29 @@ registrationRouter.post(
       clientSecret = generateSecureClientSecret();
     }
 
+    // Extract email from email field or first contact
+    let clientEmail: string | null = null;
+    if (email && typeof email === "string") {
+      clientEmail = email;
+    } else if (contacts && Array.isArray(contacts) && contacts.length > 0) {
+      // Use first contact as email if it looks like an email
+      const firstContact = contacts[0];
+      if (
+        typeof firstContact === "string" &&
+        firstContact.includes("@") &&
+        firstContact.includes(".")
+      ) {
+        clientEmail = firstContact;
+      }
+    }
+
     // Create client registration
     // MCP clients registered via Dynamic Client Registration do not get admin panel access by default
     const clientRegistration = {
       client_id: clientId,
       client_secret: clientSecret,
       client_name: client_name || "Unnamed MCP Client",
+      email: clientEmail,
       redirect_uris: redirect_uris,
       grant_types: clientGrantTypes,
       response_types: clientResponseTypes,
@@ -240,6 +258,7 @@ registrationRouter.get("/oauth/register", async (req, res) => {
 
       optional_parameters: {
         client_name: "Human-readable name for your application",
+        email: "Contact email for the client (or use contacts array)",
         grant_types: "OAuth grant types (default: ['authorization_code'])",
         response_types: "OAuth response types (default: ['code'])",
         token_endpoint_auth_method:
