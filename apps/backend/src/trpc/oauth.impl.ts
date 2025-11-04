@@ -218,8 +218,20 @@ export const oauthImplementations = {
       const result = {
         success: true,
         data: logs.map((log) => ({
-          ...log,
-          created_at: log.created_at.toISOString(),
+          uuid: log.uuid,
+          clientId: log.client_id,
+          userId: log.user_id,
+          sessionId: log.session_id,
+          endpointName: log.endpoint_name,
+          namespaceUuid: log.namespace_uuid,
+          requestType: log.request_type,
+          requestParams: log.request_params,
+          responseResult: log.response_result,
+          responseStatus: log.response_status,
+          errorMessage: log.error_message,
+          toolName: log.tool_name,
+          durationMs: log.duration_ms,
+          createdAt: log.created_at.toISOString(),
         })),
         total,
       };
@@ -228,6 +240,7 @@ export const oauthImplementations = {
         success: result.success,
         dataCount: result.data.length,
         total: result.total,
+        firstLogFields: result.data[0] ? Object.keys(result.data[0]) : [],
       });
 
       return result;
