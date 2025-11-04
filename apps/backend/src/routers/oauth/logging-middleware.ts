@@ -96,11 +96,11 @@ export const oauthLoggingMiddleware = (requestType: string) => {
           request_query:
             Object.keys(req.query).length > 0
               ? (req.query as Record<string, string>)
-              : null,
-          request_headers: sanitizedHeaders,
-          request_body: sanitizedBody,
+              : {},
+          request_headers: sanitizedHeaders || {},
+          request_body: sanitizedBody || {},
           response_status: res.statusCode.toString(),
-          response_body: responseBody || null,
+          response_body: responseBody || {},
           error_message: errorMessage,
           ip_address:
             (req.headers["x-forwarded-for"] as string)?.split(",")[0] ||
