@@ -42,8 +42,7 @@ export async function logMcpRequest(params: {
     // Calculate duration
     const durationMs = (Date.now() - startTime).toString();
 
-    // Log to database
-    await mcpRequestLogsRepository.create({
+    const logData = {
       client_id: sessionInfo?.clientId || null,
       user_id: sessionInfo?.userId || null,
       session_id: sessionId,
@@ -56,9 +55,21 @@ export async function logMcpRequest(params: {
       error_message: errorMessage || null,
       tool_name: toolName || null,
       duration_ms: durationMs,
-    });
+    };
 
-    console.log("[MCP Logger] Successfully logged to database");
+    console.log("[MCP Logger] Writing to database:", JSON.stringify({
+      client_id: logData.client_id,
+      session_id: logData.session_id,
+      endpoint_name: logData.endpoint_name,
+      request_type: logData.request_type,
+      tool_name: logData.tool_name,
+      response_status: logData.response_status,
+    }));
+
+    // Log to database
+    const result = await mcpRequestLogsRepository.create(logData);
+
+    console.log("[MCP Logger] Successfully logged to database with uuid:", result.uuid);
   } catch (error) {
     // Don't fail the request if logging fails
     console.error("Failed to log MCP request:", error);
