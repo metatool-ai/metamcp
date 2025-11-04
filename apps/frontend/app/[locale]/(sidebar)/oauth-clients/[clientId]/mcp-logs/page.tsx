@@ -57,15 +57,15 @@ export default function McpLogsPage() {
 
   // Calculate stats
   const totalRequests = logs.length;
-  const successfulRequests = logs.filter((log) => log.response_status === "success").length;
-  const failedRequests = logs.filter((log) => log.response_status === "error").length;
+  const successfulRequests = logs.filter((log) => log.responseStatus === "success").length;
+  const failedRequests = logs.filter((log) => log.responseStatus === "error").length;
   const avgDuration =
     logs.length > 0
       ? Math.round(
           logs
-            .filter((log) => log.duration_ms)
-            .reduce((sum, log) => sum + parseInt(log.duration_ms || "0"), 0) /
-            logs.filter((log) => log.duration_ms).length,
+            .filter((log) => log.durationMs)
+            .reduce((sum, log) => sum + parseInt(log.durationMs || "0"), 0) /
+            logs.filter((log) => log.durationMs).length,
         )
       : 0;
 
@@ -145,13 +145,13 @@ export default function McpLogsPage() {
               {logs.map((log) => {
                 const isExpanded = expandedLogs.has(log.uuid);
                 const statusColor =
-                  log.response_status === "success" ? "text-green-500" : "text-red-500";
+                  log.responseStatus === "success" ? "text-green-500" : "text-red-500";
                 const requestTypeBadgeColor =
-                  log.request_type === "call_tool"
+                  log.requestType === "call_tool"
                     ? "bg-blue-500"
-                    : log.request_type === "list_tools"
+                    : log.requestType === "list_tools"
                       ? "bg-purple-500"
-                      : log.request_type === "get_prompt"
+                      : log.requestType === "get_prompt"
                         ? "bg-orange-500"
                         : "bg-gray-500";
 
@@ -172,26 +172,26 @@ export default function McpLogsPage() {
                         )}
 
                         <Badge className={requestTypeBadgeColor}>
-                          {log.request_type}
+                          {log.requestType}
                         </Badge>
 
-                        {log.tool_name && (
+                        {log.toolName && (
                           <span className="text-sm font-mono text-muted-foreground">
-                            {log.tool_name}
+                            {log.toolName}
                           </span>
                         )}
 
                         <span className={`font-semibold ${statusColor}`}>
-                          {log.response_status === "success" ? "✓" : "✗"}
+                          {log.responseStatus === "success" ? "✓" : "✗"}
                         </span>
 
                         <span className="text-sm text-muted-foreground">
-                          {new Date(log.created_at).toLocaleString()}
+                          {new Date(log.createdAt).toLocaleString()}
                         </span>
 
-                        {log.duration_ms && (
+                        {log.durationMs && (
                           <span className="text-sm text-muted-foreground ml-auto">
-                            {log.duration_ms}ms
+                            {log.durationMs}ms
                           </span>
                         )}
                       </div>
@@ -203,52 +203,52 @@ export default function McpLogsPage() {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <span className="font-semibold">Session ID:</span>{" "}
-                            <span className="font-mono text-xs">{log.session_id || "N/A"}</span>
+                            <span className="font-mono text-xs">{log.sessionId || "N/A"}</span>
                           </div>
                           <div>
                             <span className="font-semibold">Endpoint:</span>{" "}
                             <span className="text-muted-foreground">
-                              {log.endpoint_name || "N/A"}
+                              {log.endpointName || "N/A"}
                             </span>
                           </div>
                           <div>
                             <span className="font-semibold">Namespace:</span>{" "}
                             <span className="font-mono text-xs">
-                              {log.namespace_uuid || "N/A"}
+                              {log.namespaceUuid || "N/A"}
                             </span>
                           </div>
                           <div>
                             <span className="font-semibold">User ID:</span>{" "}
-                            <span className="font-mono text-xs">{log.user_id || "N/A"}</span>
+                            <span className="font-mono text-xs">{log.userId || "N/A"}</span>
                           </div>
                         </div>
 
                         {/* Request Parameters */}
-                        {log.request_params && (
+                        {log.requestParams && (
                           <div>
                             <div className="font-semibold mb-2">Request Parameters:</div>
                             <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
-                              {JSON.stringify(log.request_params, null, 2)}
+                              {JSON.stringify(log.requestParams, null, 2)}
                             </pre>
                           </div>
                         )}
 
                         {/* Response Result */}
-                        {log.response_result && (
+                        {log.responseResult && (
                           <div>
                             <div className="font-semibold mb-2">Response Result:</div>
                             <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs max-h-96">
-                              {JSON.stringify(log.response_result, null, 2)}
+                              {JSON.stringify(log.responseResult, null, 2)}
                             </pre>
                           </div>
                         )}
 
                         {/* Error Message */}
-                        {log.error_message && (
+                        {log.errorMessage && (
                           <div>
                             <div className="font-semibold mb-2 text-red-500">Error:</div>
                             <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3 rounded-md text-red-600 dark:text-red-400">
-                              {log.error_message}
+                              {log.errorMessage}
                             </div>
                           </div>
                         )}
