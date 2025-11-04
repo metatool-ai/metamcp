@@ -28,13 +28,6 @@ export interface ToolOverridesConfig {
 interface ToolOverride {
   overrideName?: string | null;
   overrideDescription?: string | null;
-  annotations?: {
-    title?: string;
-    readOnlyHint?: boolean;
-    destructiveHint?: boolean;
-    idempotentHint?: boolean;
-    openWorldHint?: boolean;
-  } | null;
   overrideAnnotations?: {
     title?: string;
     readOnlyHint?: boolean;
@@ -195,7 +188,6 @@ async function getToolOverrides(
       .select({
         overrideName: namespaceToolMappingsTable.override_name,
         overrideDescription: namespaceToolMappingsTable.override_description,
-        annotations: toolsTable.annotations,
         overrideAnnotations: namespaceToolMappingsTable.override_annotations,
       })
       .from(namespaceToolMappingsTable)
@@ -214,7 +206,6 @@ async function getToolOverrides(
     const override: ToolOverride = {
       overrideName: toolMapping?.overrideName || null,
       overrideDescription: toolMapping?.overrideDescription || null,
-      annotations: toolMapping?.annotations || null,
       overrideAnnotations: toolMapping?.overrideAnnotations || null,
     };
 
@@ -294,14 +285,13 @@ async function applyToolOverrides(
             ? override.overrideDescription
             : tool.description;
 
-        // For annotations: use override annotations if present, else use from DB, else from MCP server
-        // Priority: overrideAnnotations > annotations from DB > annotations from live MCP server
+        // For annotations: use override annotations if present, else use from MCP server
+        // overrideAnnotations is initialized with tool.annotations during mapping creation
+        // Priority: overrideAnnotations (from DB) > annotations from live MCP server
         const finalAnnotations =
           override.overrideAnnotations !== null && override.overrideAnnotations !== undefined
             ? override.overrideAnnotations
-            : override.annotations !== null && override.annotations !== undefined
-              ? override.annotations
-              : tool.annotations;
+            : tool.annotations;
 
         const overriddenTool: Tool = {
           ...tool,
