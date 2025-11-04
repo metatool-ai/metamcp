@@ -409,15 +409,20 @@ export function EnhancedNamespaceToolsTable({
     tool: EnhancedNamespaceTool,
   ) => {
     setEditingOverrides((prev) => new Set(prev).add(toolId));
+
+    // Use override annotations if they exist, otherwise use original annotations
+    const annotationsToUse = tool.overrideAnnotations || tool.annotations;
+
     setTempOverrides((prev) =>
       new Map(prev).set(toolId, {
         name: tool.overrideName || tool.name || "",
         description: tool.overrideDescription || tool.description || "",
-        annotations: tool.overrideAnnotations || tool.annotations || {
-          readOnlyHint: false,
-          destructiveHint: true,
-          idempotentHint: false,
-          openWorldHint: true,
+        annotations: {
+          title: annotationsToUse?.title,
+          readOnlyHint: annotationsToUse?.readOnlyHint ?? false,
+          destructiveHint: annotationsToUse?.destructiveHint ?? true,
+          idempotentHint: annotationsToUse?.idempotentHint ?? false,
+          openWorldHint: annotationsToUse?.openWorldHint ?? true,
         },
       }),
     );
@@ -1208,21 +1213,22 @@ export function EnhancedNamespaceToolsTable({
                                           updateTempOverride(
                                             toolId,
                                             "name",
-                                            tool.overrideName || tool.name || "",
+                                            tool.name || "",
                                           );
                                           updateTempOverride(
                                             toolId,
                                             "description",
-                                            tool.overrideDescription || tool.description || "",
+                                            tool.description || "",
                                           );
                                           updateTempOverride(
                                             toolId,
                                             "annotations",
-                                            tool.overrideAnnotations || tool.annotations || {
-                                              readOnlyHint: false,
-                                              destructiveHint: true,
-                                              idempotentHint: false,
-                                              openWorldHint: true,
+                                            {
+                                              title: tool.annotations?.title,
+                                              readOnlyHint: tool.annotations?.readOnlyHint ?? false,
+                                              destructiveHint: tool.annotations?.destructiveHint ?? true,
+                                              idempotentHint: tool.annotations?.idempotentHint ?? false,
+                                              openWorldHint: tool.annotations?.openWorldHint ?? true,
                                             },
                                           );
                                         }}
