@@ -368,7 +368,7 @@ export const GetMcpRequestLogsRequestSchema = z.object({
 export const GetMcpRequestLogsResponseSchema = z.object({
   success: z.boolean(),
   data: z.array(
-    DatabaseMcpRequestLogSchema.extend({
+    McpRequestLogSchema.extend({
       createdAt: z.string(),
     }),
   ),
