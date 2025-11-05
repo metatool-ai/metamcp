@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTranslations } from "@/hooks/useTranslations";
-import { authClient, User } from "@/lib/auth-client";
+import { authClient, User, SessionResponse } from "@/lib/auth-client";
 import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
 
 // Menu items function - now takes locale and isAdmin parameters
@@ -125,7 +125,7 @@ function UserInfoFooter() {
 
   // Get user info
   useEffect(() => {
-    authClient.getSession().then((session) => {
+    authClient.getSession().then((session: SessionResponse) => {
       if (session?.data?.user) {
         setUser(session.data.user as User);
       }
@@ -183,7 +183,7 @@ export default function SidebarLayout({
 
   // Get user info to determine admin status
   useEffect(() => {
-    authClient.getSession().then((session) => {
+    authClient.getSession().then((session: SessionResponse) => {
       if (session?.data?.user) {
         setUser(session.data.user as User);
       }

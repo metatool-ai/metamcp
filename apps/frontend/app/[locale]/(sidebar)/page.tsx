@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ShieldOff, Mail } from "lucide-react";
 
 import { useTranslations } from "@/hooks/useTranslations";
-import { authClient, User, isAuthenticatedUser } from "@/lib/auth-client";
+import { authClient, User, isAuthenticatedUser, SessionResponse } from "@/lib/auth-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -16,7 +16,7 @@ export default function RootPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    authClient.getSession().then((session) => {
+    authClient.getSession().then((session: SessionResponse) => {
       if (session?.data?.user && isAuthenticatedUser(session.data.user)) {
         const authenticatedUser = session.data.user as User;
         setUser(authenticatedUser);

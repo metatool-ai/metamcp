@@ -27,6 +27,22 @@ export interface User {
   isAdmin: boolean; // From additionalFields in backend
 }
 
+// Define session types for type-safe callbacks
+export interface SessionData {
+  user: User;
+  session: {
+    id: string;
+    userId: string;
+    expiresAt: Date;
+    token: string;
+  };
+}
+
+export interface SessionResponse {
+  data: SessionData | null;
+  error: any | null;
+}
+
 // Type guard to check if session has user with isAdmin
 export function isAuthenticatedUser(user: any): user is User {
   return user && typeof user.id === 'string' && typeof user.isAdmin === 'boolean';
