@@ -12,7 +12,6 @@ import {
   Shield,
   Users,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -221,24 +220,8 @@ export default function SidebarLayout({
   return (
     <SidebarProvider>
       <Sidebar>
-        <SidebarHeader className="flex flex-col justify-center items-center px-2 py-4">
-          <div className="flex items-center justify-center w-full mb-2">
-            <div className="flex items-center gap-4">
-              <Image
-                src="/favicon.ico"
-                alt="MetaMCP Logo"
-                width={256}
-                height={256}
-                className="h-12 w-12"
-              />
-              <h2 className="text-2xl font-semibold">MetaMCP</h2>
-            </div>
-          </div>
-        </SidebarHeader>
-
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>{t("navigation:application")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {items.map((item) => (
