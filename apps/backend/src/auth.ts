@@ -123,6 +123,10 @@ export const auth = betterAuth({
         type: "boolean",
         defaultValue: false,
       },
+      isAdmin: {
+        type: "boolean",
+        defaultValue: false,
+      },
     },
   },
   advanced: {
@@ -168,6 +172,15 @@ export const auth = betterAuth({
                 "Registration and login are restricted to specific email domains. Please contact the administrator.",
               );
             }
+          }
+
+          // Check if this is the first user - if so, make them an admin
+          const existingUsers = await db.select().from(schema.usersTable).limit(1);
+          const isFirstUser = existingUsers.length === 0;
+
+          if (isFirstUser) {
+            console.log("First user registration detected - granting admin role");
+            user.isAdmin = true;
           }
 
           return { data: user };
