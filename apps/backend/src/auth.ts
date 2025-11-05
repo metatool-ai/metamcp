@@ -219,5 +219,7 @@ console.log("✓ Better Auth instance created successfully");
 console.log(`✓ OIDC Providers configured: ${oidcProviders.length}`);
 
 export type Session = typeof auth.$Infer.Session;
-// Note: User type needs to be inferred from Session.user
-export type User = typeof auth.$Infer.Session.user;
+// Note: User type needs to be inferred from Session.user and extended with isAdmin
+export type User = typeof auth.$Infer.Session.user & {
+  isAdmin: boolean;
+};

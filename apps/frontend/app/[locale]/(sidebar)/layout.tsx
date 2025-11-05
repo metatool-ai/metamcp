@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTranslations } from "@/hooks/useTranslations";
-import { authClient } from "@/lib/auth-client";
+import { authClient, ExtendedUser } from "@/lib/auth-client";
 import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
 
 // Menu items function - now takes locale and isAdmin parameters
@@ -121,13 +121,13 @@ function LiveLogsMenuItem() {
 
 function UserInfoFooter() {
   const { t } = useTranslations();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<ExtendedUser | null>(null);
 
   // Get user info
   useEffect(() => {
     authClient.getSession().then((session) => {
       if (session?.data?.user) {
-        setUser(session.data.user);
+        setUser(session.data.user as ExtendedUser);
       }
     });
   }, []);
@@ -179,13 +179,13 @@ export default function SidebarLayout({
   children: React.ReactNode;
 }) {
   const { t, locale } = useTranslations();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<ExtendedUser | null>(null);
 
   // Get user info to determine admin status
   useEffect(() => {
     authClient.getSession().then((session) => {
       if (session?.data?.user) {
-        setUser(session.data.user);
+        setUser(session.data.user as ExtendedUser);
       }
     });
   }, []);

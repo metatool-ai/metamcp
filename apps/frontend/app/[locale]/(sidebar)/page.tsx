@@ -5,22 +5,22 @@ import { useEffect, useState } from "react";
 import { ShieldOff, Mail } from "lucide-react";
 
 import { useTranslations } from "@/hooks/useTranslations";
-import { authClient } from "@/lib/auth-client";
+import { authClient, ExtendedUser } from "@/lib/auth-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function RootPage() {
   const { t } = useTranslations();
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<ExtendedUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     authClient.getSession().then((session) => {
       if (session?.data?.user) {
-        setUser(session.data.user);
+        setUser(session.data.user as ExtendedUser);
         // If user is admin, redirect to MCP servers page
-        if (session.data.user.isAdmin) {
+        if ((session.data.user as ExtendedUser).isAdmin) {
           router.replace("/mcp-servers");
         } else {
           setLoading(false);
