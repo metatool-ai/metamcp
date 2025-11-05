@@ -22,6 +22,7 @@ export type Translations = {
   inspector: Record<string, any>;
   logs: Record<string, any>;
   validation: Record<string, any>;
+  users: Record<string, any>;
 };
 
 // Utility functions for working with localized paths
@@ -70,6 +71,7 @@ export async function loadTranslations(
       logs: (await import("../public/locales/en/logs.json")).default,
       validation: (await import("../public/locales/en/validation.json"))
         .default,
+      users: (await import("../public/locales/en/users.json")).default,
     };
   } else if (locale === "zh") {
     // Load Chinese translations with fallback to English
@@ -87,6 +89,7 @@ export async function loadTranslations(
       inspectorZh,
       logsZh,
       validationZh,
+      usersZh,
     ] = await Promise.all([
       import("../public/locales/zh/common.json").catch(() => ({ default: {} })),
       import("../public/locales/zh/auth.json").catch(() => ({ default: {} })),
@@ -119,6 +122,7 @@ export async function loadTranslations(
       import("../public/locales/zh/validation.json").catch(() => ({
         default: {},
       })),
+      import("../public/locales/zh/users.json").catch(() => ({ default: {} })),
     ]);
 
     // Get English fallback
@@ -138,6 +142,7 @@ export async function loadTranslations(
       inspector: { ...englishDict.inspector, ...inspectorZh.default },
       logs: { ...englishDict.logs, ...logsZh.default },
       validation: { ...englishDict.validation, ...validationZh.default },
+      users: { ...englishDict.users, ...usersZh.default },
     };
   } else {
     // Fallback to English for unsupported locales
