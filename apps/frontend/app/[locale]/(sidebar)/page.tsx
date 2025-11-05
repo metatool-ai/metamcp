@@ -58,9 +58,9 @@ export default function RootPage() {
                 <ShieldOff className="h-10 w-10 text-muted-foreground" />
               </div>
             </div>
-            <CardTitle className="text-2xl">{t("users:notLoggedIn")}</CardTitle>
+            <CardTitle className="text-2xl">{t("auth:notLoggedIn")}</CardTitle>
             <CardDescription className="text-base mt-2">
-              {t("users:pleaseLoginToAccess")}
+              {t("auth:pleaseLoginToAccess")}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center">
@@ -68,7 +68,7 @@ export default function RootPage() {
               onClick={() => router.push("/auth/login")}
               className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
             >
-              {t("users:loginButton")}
+              {t("auth:loginButton")}
             </button>
           </CardContent>
         </Card>
@@ -105,8 +105,6 @@ export default function RootPage() {
           <div className="bg-muted p-4 rounded-lg">
             <h3 className="font-semibold text-sm mb-2">{t("users:whatYouCanDo")}</h3>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• {t("users:canRegisterOAuthClients")}</li>
-              <li>• {t("users:canUseApiKeys")}</li>
               <li>• {t("users:canMakeRequests")}</li>
             </ul>
           </div>

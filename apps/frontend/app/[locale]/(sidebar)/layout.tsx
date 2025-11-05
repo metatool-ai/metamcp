@@ -77,13 +77,13 @@ const getMenuItems = (t: (key: string) => string, locale: SupportedLocale, isAdm
       title: t("navigation:apiKeys"),
       url: getLocalizedPath("/api-keys", locale),
       icon: Key,
-      adminOnly: false, // Non-admins can manage their API keys
+      adminOnly: true, // Only admins can manage API keys
     },
     {
       title: t("navigation:oauthClients"),
       url: getLocalizedPath("/oauth-clients", locale),
       icon: Shield,
-      adminOnly: false, // Non-admins can manage their OAuth clients
+      adminOnly: true, // Only admins can manage OAuth clients
     },
     {
       title: t("navigation:users"),
@@ -103,8 +103,13 @@ const getMenuItems = (t: (key: string) => string, locale: SupportedLocale, isAdm
   return allItems.filter(item => !item.adminOnly || isAdmin);
 };
 
-function LiveLogsMenuItem() {
+function LiveLogsMenuItem({ isAdmin }: { isAdmin: boolean }) {
   const { t, locale } = useTranslations();
+
+  // Only show for admins
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <SidebarMenuItem>
@@ -246,7 +251,7 @@ export default function SidebarLayout({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
-                <LiveLogsMenuItem />
+                <LiveLogsMenuItem isAdmin={user.isAdmin} />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

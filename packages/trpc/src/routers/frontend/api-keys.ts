@@ -11,7 +11,7 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
-import { protectedProcedure, router } from "../../trpc";
+import { adminProcedure, router } from "../../trpc";
 
 export const createApiKeysRouter = (implementations: {
   create: (
@@ -32,34 +32,34 @@ export const createApiKeysRouter = (implementations: {
   ) => Promise<z.infer<typeof ValidateApiKeyResponseSchema>>;
 }) => {
   return router({
-    create: protectedProcedure
+    create: adminProcedure
       .input(CreateApiKeyRequestSchema)
       .output(CreateApiKeyResponseSchema)
       .mutation(async ({ input, ctx }) => {
         return implementations.create(input, ctx.user.id);
       }),
 
-    list: protectedProcedure
+    list: adminProcedure
       .output(ListApiKeysResponseSchema)
       .query(async ({ ctx }) => {
         return implementations.list(ctx.user.id);
       }),
 
-    update: protectedProcedure
+    update: adminProcedure
       .input(UpdateApiKeyRequestSchema)
       .output(UpdateApiKeyResponseSchema)
       .mutation(async ({ input, ctx }) => {
         return implementations.update(input, ctx.user.id);
       }),
 
-    delete: protectedProcedure
+    delete: adminProcedure
       .input(DeleteApiKeyRequestSchema)
       .output(DeleteApiKeyResponseSchema)
       .mutation(async ({ input, ctx }) => {
         return implementations.delete(input, ctx.user.id);
       }),
 
-    validate: protectedProcedure
+    validate: adminProcedure
       .input(ValidateApiKeyRequestSchema)
       .output(ValidateApiKeyResponseSchema)
       .query(async ({ input }) => {

@@ -26,14 +26,9 @@
   "emailVerified": "邮箱已验证",
   "emailNotVerified": "邮箱未验证",
   "noAdminAccess": "无管理员权限",
-  "noAdminAccessDescription": "您没有管理员权限查看此页面。请联系管理员获取权限。",
+  "noAdminAccessDescription": "您没有管理员权限。您的账户只能向 MetaMCP 端点发出请求。",
   "contactAdmin": "联系管理员",
   "yourAccount": "您的账户：",
   "whatYouCanDo": "您可以做的事情：",
-  "canRegisterOAuthClients": "注册 OAuth 客户端以访问 MCP 服务器",
-  "canUseApiKeys": "使用 API 密钥连接到 MetaMCP 端点",
-  "canMakeRequests": "通过授权端点向 MCP 服务器发出请求",
-  "notLoggedIn": "未登录",
-  "pleaseLoginToAccess": "请登录以访问 MetaMCP。登录后，您可以注册 OAuth 客户端并使用 API 端点。",
-  "loginButton": "登录"
+  "canMakeRequests": "通过您的 OAuth 客户端向 MetaMCP 端点发出请求"
 }
