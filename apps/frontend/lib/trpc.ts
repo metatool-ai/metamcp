@@ -1,9 +1,6 @@
-import { createAppRouter } from "@repo/trpc";
+import type { AppRouter } from "@repo/trpc";
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 import { type CreateTRPCReact, createTRPCReact } from "@trpc/react-query";
-
-// Create a type that matches the backend router
-type AppRouter = ReturnType<typeof createAppRouter>;
 
 // Create the tRPC client
 export const trpc: CreateTRPCReact<AppRouter, unknown> =
