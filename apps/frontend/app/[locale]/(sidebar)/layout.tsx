@@ -10,6 +10,7 @@ import {
   Server,
   Settings,
   Shield,
+  Users,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -39,49 +40,68 @@ import { useTranslations } from "@/hooks/useTranslations";
 import { authClient } from "@/lib/auth-client";
 import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
 
-// Menu items function - now takes locale parameter
-const getMenuItems = (t: (key: string) => string, locale: SupportedLocale) => [
-  {
-    title: t("navigation:exploreMcpServers"),
-    url: getLocalizedPath("/search", locale),
-    icon: Search,
-  },
-  {
-    title: t("navigation:mcpServers"),
-    url: getLocalizedPath("/mcp-servers", locale),
-    icon: Server,
-  },
-  {
-    title: t("navigation:metamcpNamespaces"),
-    url: getLocalizedPath("/namespaces", locale),
-    icon: Package,
-  },
-  {
-    title: t("navigation:metamcpEndpoints"),
-    url: getLocalizedPath("/endpoints", locale),
-    icon: LinkIcon,
-  },
-  {
-    title: t("navigation:mcpInspector"),
-    url: getLocalizedPath("/mcp-inspector", locale),
-    icon: SearchCode,
-  },
-  {
-    title: t("navigation:apiKeys"),
-    url: getLocalizedPath("/api-keys", locale),
-    icon: Key,
-  },
-  {
-    title: t("navigation:oauthClients"),
-    url: getLocalizedPath("/oauth-clients", locale),
-    icon: Shield,
-  },
-  {
-    title: t("navigation:settings"),
-    url: getLocalizedPath("/settings", locale),
-    icon: Settings,
-  },
-];
+// Menu items function - now takes locale and isAdmin parameters
+const getMenuItems = (t: (key: string) => string, locale: SupportedLocale, isAdmin: boolean = true) => {
+  const allItems = [
+    {
+      title: t("navigation:exploreMcpServers"),
+      url: getLocalizedPath("/search", locale),
+      icon: Search,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:mcpServers"),
+      url: getLocalizedPath("/mcp-servers", locale),
+      icon: Server,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:metamcpNamespaces"),
+      url: getLocalizedPath("/namespaces", locale),
+      icon: Package,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:metamcpEndpoints"),
+      url: getLocalizedPath("/endpoints", locale),
+      icon: LinkIcon,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:mcpInspector"),
+      url: getLocalizedPath("/mcp-inspector", locale),
+      icon: SearchCode,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:apiKeys"),
+      url: getLocalizedPath("/api-keys", locale),
+      icon: Key,
+      adminOnly: false, // Non-admins can manage their API keys
+    },
+    {
+      title: t("navigation:oauthClients"),
+      url: getLocalizedPath("/oauth-clients", locale),
+      icon: Shield,
+      adminOnly: false, // Non-admins can manage their OAuth clients
+    },
+    {
+      title: t("navigation:users"),
+      url: getLocalizedPath("/users", locale),
+      icon: Users,
+      adminOnly: true, // Only admins can manage users
+    },
+    {
+      title: t("navigation:settings"),
+      url: getLocalizedPath("/settings", locale),
+      icon: Settings,
+      adminOnly: true, // Only admins can access settings
+    },
+  ];
+
+  // Filter items based on admin status
+  return allItems.filter(item => !item.adminOnly || isAdmin);
+};
 
 function LiveLogsMenuItem() {
   const { t, locale } = useTranslations();
@@ -159,7 +179,18 @@ export default function SidebarLayout({
   children: React.ReactNode;
 }) {
   const { t, locale } = useTranslations();
-  const items = getMenuItems(t, locale);
+  const [user, setUser] = useState<any>(null);
+
+  // Get user info to determine admin status
+  useEffect(() => {
+    authClient.getSession().then((session) => {
+      if (session?.data?.user) {
+        setUser(session.data.user);
+      }
+    });
+  }, []);
+
+  const items = getMenuItems(t, locale, user?.isAdmin);
 
   return (
     <SidebarProvider>

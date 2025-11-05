@@ -74,6 +74,7 @@
     "next": "Next",
     "page": "Page",
     "of": "of",
+    "showing": "Showing",
     "goToPage": "Go to page {{page}}",
     "morePages": "More pages"
   }
