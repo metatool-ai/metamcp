@@ -27,5 +27,13 @@
   "emailNotVerified": "Email Not Verified",
   "noAdminAccess": "No Admin Access",
   "noAdminAccessDescription": "You do not have admin access to view this page. Please contact an administrator for access.",
-  "contactAdmin": "Contact Administrator"
+  "contactAdmin": "Contact Administrator",
+  "yourAccount": "Your account:",
+  "whatYouCanDo": "What you can do:",
+  "canRegisterOAuthClients": "Register OAuth clients for MCP server access",
+  "canUseApiKeys": "Use API keys to connect to MetaMCP endpoints",
+  "canMakeRequests": "Make requests to MCP servers through authorized endpoints",
+  "notLoggedIn": "Not Logged In",
+  "pleaseLoginToAccess": "Please log in to access MetaMCP. Once logged in, you can register OAuth clients and use API endpoints.",
+  "loginButton": "Log In"
 }

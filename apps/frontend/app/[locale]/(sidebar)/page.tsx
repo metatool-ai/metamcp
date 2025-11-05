@@ -27,6 +27,8 @@ export default function RootPage() {
           setLoading(false);
         }
       } else {
+        // User is not authenticated
+        setUser(null);
         setLoading(false);
       }
     });
@@ -45,7 +47,36 @@ export default function RootPage() {
     );
   }
 
-  // Show non-admin placeholder
+  // Show unauthenticated placeholder
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)] p-6">
+        <Card className="max-w-2xl w-full">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="rounded-full bg-muted p-3">
+                <ShieldOff className="h-10 w-10 text-muted-foreground" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl">{t("users:notLoggedIn")}</CardTitle>
+            <CardDescription className="text-base mt-2">
+              {t("users:pleaseLoginToAccess")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <button
+              onClick={() => router.push("/auth/login")}
+              className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              {t("users:loginButton")}
+            </button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show non-admin placeholder (user is authenticated but not admin)
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-200px)] p-6">
       <Card className="max-w-2xl w-full">
@@ -66,17 +97,17 @@ export default function RootPage() {
             <AlertDescription>
               <strong>{t("users:contactAdmin")}</strong>
               <p className="text-sm text-muted-foreground mt-1">
-                Your account: <span className="font-mono">{user?.email}</span>
+                {t("users:yourAccount")} <span className="font-mono">{user.email}</span>
               </p>
             </AlertDescription>
           </Alert>
 
           <div className="bg-muted p-4 rounded-lg">
-            <h3 className="font-semibold text-sm mb-2">What you can do:</h3>
+            <h3 className="font-semibold text-sm mb-2">{t("users:whatYouCanDo")}</h3>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• Register OAuth clients for MCP server access</li>
-              <li>• Use API keys to connect to MetaMCP endpoints</li>
-              <li>• Make requests to MCP servers through authorized endpoints</li>
+              <li>• {t("users:canRegisterOAuthClients")}</li>
+              <li>• {t("users:canUseApiKeys")}</li>
+              <li>• {t("users:canMakeRequests")}</li>
             </ul>
           </div>
         </CardContent>

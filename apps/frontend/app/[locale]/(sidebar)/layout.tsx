@@ -180,17 +180,38 @@ export default function SidebarLayout({
 }) {
   const { t, locale } = useTranslations();
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Get user info to determine admin status
   useEffect(() => {
     authClient.getSession().then((session: SessionResponse) => {
       if (session?.data?.user) {
         setUser(session.data.user as User);
+      } else {
+        setUser(null);
       }
+      setLoading(false);
     });
   }, []);
 
-  const items = getMenuItems(t, locale, user?.isAdmin);
+  // If loading, show nothing (or a loader)
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">{t("common:loading")}</div>;
+  }
+
+  // If user is not authenticated, render children without sidebar
+  if (!user) {
+    return (
+      <div className="flex min-h-screen">
+        <div className="flex flex-1 flex-col">
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  // User is authenticated, show sidebar with filtered menu items
+  const items = getMenuItems(t, locale, user.isAdmin);
 
   return (
     <SidebarProvider>
