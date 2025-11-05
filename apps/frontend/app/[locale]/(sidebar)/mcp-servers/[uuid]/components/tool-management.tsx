@@ -20,6 +20,7 @@ import { UnifiedToolsTable } from "./tools-data-table";
 // MCP Tool type from the protocol
 interface MCPTool {
   name: string;
+  title?: string;
   description?: string;
   inputSchema: {
     type: "object";
