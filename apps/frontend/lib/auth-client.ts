@@ -1,12 +1,15 @@
 import { genericOAuthClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
+import type { InferSessionFromClient } from "better-auth/client";
 
 import { getAppUrl } from "./env";
 
-export const authClient = createAuthClient({
+const client = createAuthClient({
   baseURL: getAppUrl(),
   plugins: [genericOAuthClient()],
 });
+
+export const authClient: typeof client = client;
 
 // Extend the session type to include isAdmin field
 export type ExtendedUser = {
