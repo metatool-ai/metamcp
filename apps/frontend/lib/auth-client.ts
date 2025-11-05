@@ -6,10 +6,14 @@ import { getAppUrl } from "./env";
 // Create auth client with extended user fields
 // The backend defines additionalFields with isAdmin, but the client needs
 // to know about it for type safety
-export const authClient = createAuthClient({
+const _authClient = createAuthClient({
   baseURL: getAppUrl(),
   plugins: [genericOAuthClient()],
 });
+
+// Export with explicit type to avoid 'non-portable type' error
+// We use 'any' here because Better Auth's internal types are not portable
+export const authClient: any = _authClient;
 
 // Define the user type that matches backend's additionalFields
 export interface User {
