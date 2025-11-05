@@ -202,7 +202,7 @@ async function getToolOverrides(
       overrideTitle:
         typeof toolMapping?.overrideTitle !== "undefined"
           ? toolMapping.overrideTitle
-          : null,
+          : undefined,
       overrideDescription: toolMapping?.overrideDescription || null,
     };
 
@@ -283,15 +283,26 @@ async function applyToolOverrides(
             : tool.description;
 
         // For title: apply override if provided (null means no override)
-        const hasTitleOverride =
-          typeof override.overrideTitle !== "undefined" &&
-          override.overrideTitle !== null;
-        const overriddenTitle = hasTitleOverride
-          ? override.overrideTitle
-          : tool.title;
-        const overriddenAnnotations = hasTitleOverride
-          ? { ...(tool.annotations || {}), title: override.overrideTitle }
-          : tool.annotations;
+        let overriddenTitle: string | undefined = tool.title;
+        let overriddenAnnotations =
+          tool.annotations && Object.keys(tool.annotations).length > 0
+            ? { ...tool.annotations }
+            : undefined;
+
+        if (typeof override.overrideTitle !== "undefined") {
+          overriddenTitle =
+            override.overrideTitle === null
+              ? undefined
+              : override.overrideTitle;
+        }
+
+        if (overriddenAnnotations && "title" in overriddenAnnotations) {
+          // Strip legacy title hint to avoid conflicting with top-level title
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars -- remove only the title key
+          const { title: _removed, ...rest } = overriddenAnnotations;
+          overriddenAnnotations =
+            Object.keys(rest).length > 0 ? rest : undefined;
+        }
 
         const overriddenTool: Tool = {
           ...tool,
