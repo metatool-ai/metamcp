@@ -27,6 +27,7 @@ export interface ToolOverridesConfig {
  */
 interface ToolOverride {
   overrideName?: string | null;
+  overrideTitle?: string | null;
   overrideDescription?: string | null;
 }
 
@@ -177,9 +178,10 @@ async function getToolOverrides(
     }
 
     // Query database for tool overrides
-    const [toolMapping] = await db
+  const [toolMapping] = await db
       .select({
         overrideName: namespaceToolMappingsTable.override_name,
+        overrideTitle: namespaceToolMappingsTable.override_title,
         overrideDescription: namespaceToolMappingsTable.override_description,
       })
       .from(namespaceToolMappingsTable)
@@ -197,6 +199,10 @@ async function getToolOverrides(
 
     const override: ToolOverride = {
       overrideName: toolMapping?.overrideName || null,
+      overrideTitle:
+        typeof toolMapping?.overrideTitle !== "undefined"
+          ? toolMapping.overrideTitle
+          : null,
       overrideDescription: toolMapping?.overrideDescription || null,
     };
 
@@ -276,9 +282,22 @@ async function applyToolOverrides(
             ? override.overrideDescription
             : tool.description;
 
+        // For title: apply override if provided (null means no override)
+        const hasTitleOverride =
+          typeof override.overrideTitle !== "undefined" &&
+          override.overrideTitle !== null;
+        const overriddenTitle = hasTitleOverride
+          ? override.overrideTitle
+          : tool.title;
+        const overriddenAnnotations = hasTitleOverride
+          ? { ...(tool.annotations || {}), title: override.overrideTitle }
+          : tool.annotations;
+
         const overriddenTool: Tool = {
           ...tool,
           name: overriddenName,
+          title: overriddenTitle,
+          annotations: overriddenAnnotations,
           description: overriddenDescription,
         };
 

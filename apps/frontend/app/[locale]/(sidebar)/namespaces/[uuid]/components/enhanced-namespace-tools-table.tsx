@@ -50,6 +50,7 @@ import { trpc } from "@/lib/trpc";
 // MCP Tool type from MetaMCP
 interface MCPTool {
   name: string; // Contains "ServerName__toolName" format
+  title?: string;
   description?: string;
   inputSchema: Record<string, unknown>;
 }
@@ -59,6 +60,7 @@ interface EnhancedNamespaceTool {
   // Common fields
   name: string; // The actual tool name (without server prefix)
   description?: string | null;
+  title?: string | null;
   toolSchema?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
 
@@ -73,6 +75,7 @@ interface EnhancedNamespaceTool {
 
   // Override fields
   overrideName?: string | null;
+  overrideTitle?: string | null;
   overrideDescription?: string | null;
 
   // Source tracking
@@ -124,7 +127,7 @@ export function EnhancedNamespaceToolsTable({
     new Set(),
   );
   const [tempOverrides, setTempOverrides] = useState<
-    Map<string, { name?: string; description?: string }>
+    Map<string, { name?: string; title?: string; description?: string }>
   >(new Map());
 
   // Get translations
@@ -273,6 +276,9 @@ export function EnhancedNamespaceToolsTable({
         if (mcpTool.description && !existingTool.description) {
           existingTool.description = mcpTool.description;
         }
+        if (typeof mcpTool.title === "string") {
+          existingTool.title = mcpTool.title;
+        }
       } else {
         // Check if this MCP tool name matches any existing tool's override name
         // Use the ORIGINAL parsed values before nested modifications for this check
@@ -291,6 +297,9 @@ export function EnhancedNamespaceToolsTable({
             if (mcpTool.description && !existingTool.description) {
               existingTool.description = mcpTool.description;
             }
+            if (typeof mcpTool.title === "string") {
+              existingTool.title = mcpTool.title;
+            }
             isOverrideOfExistingTool = true;
             break;
           }
@@ -300,6 +309,7 @@ export function EnhancedNamespaceToolsTable({
           // Tool only exists in MetaMCP, add as new
           toolMap.set(toolKey, {
             name: toolName,
+            title: mcpTool.title ?? null,
             description: mcpTool.description,
             inputSchema: mcpTool.inputSchema,
             serverName: serverName,
@@ -345,6 +355,7 @@ export function EnhancedNamespaceToolsTable({
   const handleOverridesUpdate = async (
     tool: EnhancedNamespaceTool,
     overrideName?: string | null,
+    overrideTitle?: string | null,
     overrideDescription?: string | null,
   ) => {
     if (!tool.sources.saved || !tool.uuid || !tool.serverUuid) {
@@ -362,6 +373,7 @@ export function EnhancedNamespaceToolsTable({
       toolUuid: tool.uuid,
       serverUuid: tool.serverUuid,
       overrideName,
+      overrideTitle,
       overrideDescription,
     });
   };
@@ -374,8 +386,9 @@ export function EnhancedNamespaceToolsTable({
     setEditingOverrides((prev) => new Set(prev).add(toolId));
     setTempOverrides((prev) =>
       new Map(prev).set(toolId, {
-        name: tool.overrideName || tool.name || "",
-        description: tool.overrideDescription || tool.description || "",
+        name: tool.overrideName ?? tool.name ?? "",
+        title: tool.overrideTitle ?? tool.title ?? tool.name ?? "",
+        description: tool.overrideDescription ?? tool.description ?? "",
       }),
     );
 
@@ -402,8 +415,14 @@ export function EnhancedNamespaceToolsTable({
 
     // Determine if we should clear overrides (set to null) or keep them
     // Clear name override if it matches the original name or is empty
+    const trimmedName = overrides.name?.trim() ?? "";
     const shouldClearName =
-      overrides.name === tool.name || overrides.name?.trim() === "";
+      trimmedName === "" || trimmedName === (tool.name || "");
+
+    const trimmedTitle = overrides.title?.trim() ?? "";
+    const originalTitle = (tool.title ?? tool.name ?? "").trim();
+    const shouldClearTitle =
+      trimmedTitle === "" || trimmedTitle === originalTitle;
 
     // Clear description override only if it exactly matches the original description
     // This allows users to set empty string as an override (to remove description)
@@ -411,7 +430,8 @@ export function EnhancedNamespaceToolsTable({
 
     await handleOverridesUpdate(
       tool,
-      shouldClearName ? null : overrides.name?.trim() || "",
+      shouldClearName ? null : trimmedName,
+      shouldClearTitle ? null : trimmedTitle,
       shouldClearDescription ? null : overrides.description,
     );
 
@@ -421,7 +441,7 @@ export function EnhancedNamespaceToolsTable({
 
   const updateTempOverride = (
     toolId: string,
-    field: "name" | "description",
+    field: "name" | "title" | "description",
     value: string,
   ) => {
     setTempOverrides((prev) => {
@@ -448,12 +468,18 @@ export function EnhancedNamespaceToolsTable({
 
     // Apply search filter
     if (searchTerm) {
-      filtered = enhancedTools.filter(
-        (tool) =>
-          tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          tool.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          tool.serverName?.toLowerCase().includes(searchTerm.toLowerCase()),
-      );
+      const searchLower = searchTerm.toLowerCase();
+      filtered = enhancedTools.filter((tool) => {
+        return (
+          tool.name.toLowerCase().includes(searchLower) ||
+          tool.overrideName?.toLowerCase().includes(searchLower) ||
+          tool.title?.toLowerCase().includes(searchLower) ||
+          tool.overrideTitle?.toLowerCase().includes(searchLower) ||
+          tool.description?.toLowerCase().includes(searchLower) ||
+          tool.overrideDescription?.toLowerCase().includes(searchLower) ||
+          tool.serverName?.toLowerCase().includes(searchLower)
+        );
+      });
     }
 
     // Apply sorting
@@ -765,6 +791,13 @@ export function EnhancedNamespaceToolsTable({
                 const parameters = getToolParameters(tool);
                 const isToggling =
                   sessionInitializing || updateToolStatusMutation.isPending;
+                const hasNameOverride = Boolean(tool.overrideName);
+                const hasTitleOverride =
+                  tool.overrideTitle !== null &&
+                  tool.overrideTitle !== undefined;
+                const displayTitle = tool.overrideTitle ?? tool.title;
+                const originalTitle = tool.title ?? tool.name ?? "";
+                const hasAnyOverride = hasNameOverride || hasTitleOverride;
 
                 return (
                   <React.Fragment key={toolId}>
@@ -791,13 +824,23 @@ export function EnhancedNamespaceToolsTable({
                             <span className="truncate font-medium">
                               {tool.overrideName || tool.name}
                             </span>
-                            {tool.overrideName && (
+                            {hasNameOverride && (
                               <span className="text-xs text-muted-foreground truncate">
-                                Original: {tool.name}
+                                Original name: {tool.name}
+                              </span>
+                            )}
+                            {displayTitle && (
+                              <span className="text-xs text-muted-foreground truncate">
+                                Title: {displayTitle}
+                              </span>
+                            )}
+                            {hasTitleOverride && (
+                              <span className="text-[10px] text-muted-foreground truncate">
+                                Original title: {originalTitle || "—"}
                               </span>
                             )}
                           </div>
-                          {tool.overrideName && (
+                          {hasAnyOverride && (
                             <Badge
                               variant="secondary"
                               className="text-xs flex-shrink-0"
@@ -979,6 +1022,29 @@ export function EnhancedNamespaceToolsTable({
                                     </div>
                                     <div>
                                       <label className="text-xs font-medium text-muted-foreground">
+                                        Tool Title
+                                      </label>
+                                      <Input
+                                        value={
+                                          tempOverrides.get(toolId)?.title || ""
+                                        }
+                                        onChange={(e) =>
+                                          updateTempOverride(
+                                            toolId,
+                                            "title",
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="Enter custom tool title"
+                                        className="mt-1"
+                                      />
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Original:{" "}
+                                        {tool.title || tool.name || "N/A"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <label className="text-xs font-medium text-muted-foreground">
                                         Tool Description
                                       </label>
                                       <Textarea
@@ -1033,6 +1099,11 @@ export function EnhancedNamespaceToolsTable({
                                             toolId,
                                             "name",
                                             tool.name || "",
+                                          );
+                                          updateTempOverride(
+                                            toolId,
+                                            "title",
+                                            tool.title || tool.name || "",
                                           );
                                           updateTempOverride(
                                             toolId,

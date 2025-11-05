@@ -8,6 +8,7 @@ export type ToolStatus = z.infer<typeof ToolStatusEnum>;
 export const ToolSchema = z.object({
   uuid: z.string().uuid(),
   name: z.string(),
+  title: z.string().nullable().optional(),
   description: z.string().nullable(),
   toolSchema: z.object({
     type: z.literal("object"),
@@ -101,6 +102,7 @@ export type ToolUpsertInput = z.infer<typeof ToolUpsertInputSchema>;
 export const DatabaseToolSchema = z.object({
   uuid: z.string(),
   name: z.string(),
+  title: z.string().nullable().optional(),
   description: z.string().nullable(),
   toolSchema: z.object({
     type: z.literal("object"),
