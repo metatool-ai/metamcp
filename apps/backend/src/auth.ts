@@ -180,7 +180,8 @@ export const auth = betterAuth({
 
           if (isFirstUser) {
             console.log("First user registration detected - granting admin role");
-            user.isAdmin = true;
+            // Type assertion needed because additionalFields are not in the hook's user type
+            (user as any).isAdmin = true;
           }
 
           return { data: user };
@@ -218,8 +219,7 @@ export const auth = betterAuth({
 console.log("✓ Better Auth instance created successfully");
 console.log(`✓ OIDC Providers configured: ${oidcProviders.length}`);
 
+// Export types from Better Auth
+// Note: Better Auth automatically includes additionalFields in the inferred types
 export type Session = typeof auth.$Infer.Session;
-// Note: User type needs to be inferred from Session.user and extended with isAdmin
-export type User = typeof auth.$Infer.Session.user & {
-  isAdmin: boolean;
-};
+export type User = typeof auth.$Infer.Session.user;
