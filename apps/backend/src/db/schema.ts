@@ -409,6 +409,9 @@ export const oauthClientsTable = pgTable("oauth_clients", {
   client_secret: text("client_secret"),
   client_name: text("client_name").notNull(),
   email: text("email"), // Email from OIDC or manual registration
+  user_id: text("user_id").references(() => usersTable.id, {
+    onDelete: "set null",
+  }), // User who registered this OAuth client
   redirect_uris: text("redirect_uris")
     .array()
     .notNull()

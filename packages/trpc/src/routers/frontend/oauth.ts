@@ -6,6 +6,8 @@ import {
   GetMcpRequestLogsResponseSchema,
   GetMcpServerCallLogsRequestSchema,
   GetMcpServerCallLogsResponseSchema,
+  GetOAuthClientsByUserIdRequestSchema,
+  GetOAuthClientsByUserIdResponseSchema,
   GetOAuthRequestLogsRequestSchema,
   GetOAuthRequestLogsResponseSchema,
   GetOAuthSessionRequestSchema,
@@ -31,6 +33,9 @@ export const createOAuthRouter = (
       input: z.infer<typeof UpsertOAuthSessionRequestSchema>,
     ) => Promise<z.infer<typeof UpsertOAuthSessionResponseSchema>>;
     getAllClients: () => Promise<z.infer<typeof GetAllOAuthClientsResponseSchema>>;
+    getClientsByUserId: (
+      input: z.infer<typeof GetOAuthClientsByUserIdRequestSchema>,
+    ) => Promise<z.infer<typeof GetOAuthClientsByUserIdResponseSchema>>;
     updateClientAdminAccess: (
       input: z.infer<typeof UpdateOAuthClientAdminAccessRequestSchema>,
     ) => Promise<z.infer<typeof UpdateOAuthClientAdminAccessResponseSchema>>;
@@ -70,6 +75,14 @@ export const createOAuthRouter = (
       .output(GetAllOAuthClientsResponseSchema)
       .query(async () => {
         return await implementations.getAllClients();
+      }),
+
+    // Admin only: Get OAuth clients by user ID
+    getClientsByUserId: adminProcedure
+      .input(GetOAuthClientsByUserIdRequestSchema)
+      .output(GetOAuthClientsByUserIdResponseSchema)
+      .query(async ({ input }) => {
+        return await implementations.getClientsByUserId(input);
       }),
 
     // Admin only: Update OAuth client admin access

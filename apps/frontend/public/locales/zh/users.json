@@ -8,6 +8,7 @@
   "email": "邮箱",
   "name": "姓名",
   "role": "角色",
+  "oauthClients": "OAuth 客户端",
   "admin": "管理员",
   "user": "用户",
   "createdAt": "创建时间",

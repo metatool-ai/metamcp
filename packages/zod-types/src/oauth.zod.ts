@@ -236,11 +236,28 @@ export const DeleteOAuthClientResponseSchema = z.object({
   message: z.string().optional(),
 });
 
+export const GetOAuthClientsByUserIdRequestSchema = z.object({
+  userId: z.string(),
+});
+
+export const GetOAuthClientsByUserIdResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    OAuthClientSchema.extend({
+      created_at: z.string().datetime(),
+      updated_at: z.string().datetime().optional(),
+    }),
+  ),
+  message: z.string().optional(),
+});
+
 export type GetAllOAuthClientsResponse = z.infer<typeof GetAllOAuthClientsResponseSchema>;
 export type UpdateOAuthClientAdminAccessRequest = z.infer<typeof UpdateOAuthClientAdminAccessRequestSchema>;
 export type UpdateOAuthClientAdminAccessResponse = z.infer<typeof UpdateOAuthClientAdminAccessResponseSchema>;
 export type DeleteOAuthClientRequest = z.infer<typeof DeleteOAuthClientRequestSchema>;
 export type DeleteOAuthClientResponse = z.infer<typeof DeleteOAuthClientResponseSchema>;
+export type GetOAuthClientsByUserIdRequest = z.infer<typeof GetOAuthClientsByUserIdRequestSchema>;
+export type GetOAuthClientsByUserIdResponse = z.infer<typeof GetOAuthClientsByUserIdResponseSchema>;
 
 // OAuth Request Logs schemas
 export const OAuthRequestLogSchema = z.object({

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Shield, ShieldOff, Users as UsersIcon, CheckCircle2, XCircle } from "lucide-react";
+import { Shield, ShieldOff, Users as UsersIcon, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -27,6 +27,26 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
+// Component to show OAuth clients count for a user
+function UserOAuthClientsCount({ userId }: { userId: string }) {
+  const { data: clientsResponse, isLoading } = trpc.frontend.oauth.getClientsByUserId.useQuery({
+    userId,
+  });
+
+  if (isLoading) {
+    return <span className="text-sm text-muted-foreground">...</span>;
+  }
+
+  const count = clientsResponse?.success ? clientsResponse.data.length : 0;
+
+  return (
+    <Badge variant={count > 0 ? "default" : "outline"} className="gap-1">
+      <Shield className="h-3 w-3" />
+      {count}
+    </Badge>
+  );
+}
+
 export default function UsersPage() {
   const { t } = useTranslations();
   const [page, setPage] = useState(0);
@@ -36,6 +56,7 @@ export default function UsersPage() {
     userName: string;
     action: "grant" | "revoke";
   }>({ open: false, userId: "", userName: "", action: "grant" });
+  const [userClientsCount, setUserClientsCount] = useState<Record<string, number>>({});
   const pageSize = 50;
 
   const { data: usersResponse, isLoading, refetch } = trpc.frontend.users.getAllUsers.useQuery({
@@ -147,6 +168,7 @@ export default function UsersPage() {
                     <TableHead>{t("users:name")}</TableHead>
                     <TableHead>{t("users:email")}</TableHead>
                     <TableHead>{t("users:role")}</TableHead>
+                    <TableHead>{t("users:oauthClients")}</TableHead>
                     <TableHead>{t("users:emailVerified")}</TableHead>
                     <TableHead>{t("users:createdAt")}</TableHead>
                     <TableHead>{t("users:actions")}</TableHead>
@@ -166,6 +188,9 @@ export default function UsersPage() {
                         ) : (
                           <Badge variant="secondary">{t("users:user")}</Badge>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <UserOAuthClientsCount userId={user.id} />
                       </TableCell>
                       <TableCell>
                         {user.emailVerified ? (

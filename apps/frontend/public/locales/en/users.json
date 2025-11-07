@@ -8,6 +8,7 @@
   "email": "Email",
   "name": "Name",
   "role": "Role",
+  "oauthClients": "OAuth Clients",
   "admin": "Admin",
   "user": "User",
   "createdAt": "Created At",

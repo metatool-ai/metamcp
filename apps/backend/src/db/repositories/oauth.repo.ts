@@ -13,6 +13,7 @@ import {
   oauthAccessTokensTable,
   oauthAuthorizationCodesTable,
   oauthClientsTable,
+  usersTable,
 } from "../schema";
 
 export class OAuthRepository {
@@ -41,8 +42,62 @@ export class OAuthRepository {
   }
 
   async getAllClients(): Promise<OAuthClient[]> {
-    const result = await db.select().from(oauthClientsTable);
-    return result;
+    const result = await db
+      .select({
+        client_id: oauthClientsTable.client_id,
+        client_secret: oauthClientsTable.client_secret,
+        client_name: oauthClientsTable.client_name,
+        email: usersTable.email, // Get email from users table
+        user_id: oauthClientsTable.user_id,
+        redirect_uris: oauthClientsTable.redirect_uris,
+        grant_types: oauthClientsTable.grant_types,
+        response_types: oauthClientsTable.response_types,
+        token_endpoint_auth_method: oauthClientsTable.token_endpoint_auth_method,
+        scope: oauthClientsTable.scope,
+        can_access_admin: oauthClientsTable.can_access_admin,
+        client_uri: oauthClientsTable.client_uri,
+        logo_uri: oauthClientsTable.logo_uri,
+        contacts: oauthClientsTable.contacts,
+        tos_uri: oauthClientsTable.tos_uri,
+        policy_uri: oauthClientsTable.policy_uri,
+        software_id: oauthClientsTable.software_id,
+        software_version: oauthClientsTable.software_version,
+        created_at: oauthClientsTable.created_at,
+        updated_at: oauthClientsTable.updated_at,
+      })
+      .from(oauthClientsTable)
+      .leftJoin(usersTable, eq(oauthClientsTable.user_id, usersTable.id));
+    return result as OAuthClient[];
+  }
+
+  async getClientsByUserId(userId: string): Promise<OAuthClient[]> {
+    const result = await db
+      .select({
+        client_id: oauthClientsTable.client_id,
+        client_secret: oauthClientsTable.client_secret,
+        client_name: oauthClientsTable.client_name,
+        email: usersTable.email,
+        user_id: oauthClientsTable.user_id,
+        redirect_uris: oauthClientsTable.redirect_uris,
+        grant_types: oauthClientsTable.grant_types,
+        response_types: oauthClientsTable.response_types,
+        token_endpoint_auth_method: oauthClientsTable.token_endpoint_auth_method,
+        scope: oauthClientsTable.scope,
+        can_access_admin: oauthClientsTable.can_access_admin,
+        client_uri: oauthClientsTable.client_uri,
+        logo_uri: oauthClientsTable.logo_uri,
+        contacts: oauthClientsTable.contacts,
+        tos_uri: oauthClientsTable.tos_uri,
+        policy_uri: oauthClientsTable.policy_uri,
+        software_id: oauthClientsTable.software_id,
+        software_version: oauthClientsTable.software_version,
+        created_at: oauthClientsTable.created_at,
+        updated_at: oauthClientsTable.updated_at,
+      })
+      .from(oauthClientsTable)
+      .leftJoin(usersTable, eq(oauthClientsTable.user_id, usersTable.id))
+      .where(eq(oauthClientsTable.user_id, userId));
+    return result as OAuthClient[];
   }
 
   async updateClientAdminAccess(

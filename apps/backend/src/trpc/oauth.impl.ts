@@ -6,6 +6,8 @@ import {
   GetMcpRequestLogsResponseSchema,
   GetMcpServerCallLogsRequestSchema,
   GetMcpServerCallLogsResponseSchema,
+  GetOAuthClientsByUserIdRequestSchema,
+  GetOAuthClientsByUserIdResponseSchema,
   GetOAuthRequestLogsRequestSchema,
   GetOAuthRequestLogsResponseSchema,
   GetOAuthSessionRequestSchema,
@@ -110,6 +112,30 @@ export const oauthImplementations = {
         success: false,
         data: [],
         message: "Failed to fetch OAuth clients",
+      };
+    }
+  },
+
+  getClientsByUserId: async (
+    input: z.infer<typeof GetOAuthClientsByUserIdRequestSchema>,
+  ): Promise<z.infer<typeof GetOAuthClientsByUserIdResponseSchema>> => {
+    try {
+      const clients = await oauthRepository.getClientsByUserId(input.userId);
+
+      return {
+        success: true,
+        data: clients.map((client) => ({
+          ...client,
+          created_at: client.created_at.toISOString(),
+          updated_at: client.updated_at?.toISOString(),
+        })),
+      };
+    } catch (error) {
+      console.error("Error fetching OAuth clients by user ID:", error);
+      return {
+        success: false,
+        data: [],
+        message: "Failed to fetch OAuth clients for user",
       };
     }
   },

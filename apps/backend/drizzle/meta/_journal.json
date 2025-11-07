@@ -113,6 +113,13 @@
       "when": 1730850000000,
       "tag": "0015_add_user_admin_role",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1730900000000,
+      "tag": "0016_add_user_id_to_oauth_clients",
+      "breakpoints": true
     }
   ]
 }
