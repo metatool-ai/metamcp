@@ -6,7 +6,7 @@ import {
   OAuthClient,
   OAuthClientCreateInput,
 } from "@repo/zod-types";
-import { eq, lt } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 
 import { db } from "../index";
 import {
@@ -135,8 +135,12 @@ export class OAuthRepository {
     await db
       .update(oauthClientsTable)
       .set({ user_id: userId, updated_at: new Date() })
-      .where(eq(oauthClientsTable.client_id, clientId))
-      .where(eq(oauthClientsTable.user_id, null));
+      .where(
+        and(
+          eq(oauthClientsTable.client_id, clientId),
+          isNull(oauthClientsTable.user_id)
+        )
+      );
   }
 
   // ===== Authorization Codes =====

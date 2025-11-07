@@ -1,11 +1,13 @@
 import express from "express";
 
+import { auth } from "../../auth";
 import { oauthRepository } from "../../db/repositories";
 import { configService } from "../../lib/config.service";
 import { logRegistrationRequest } from "./logging-middleware";
 import {
   generateSecureClientId,
   generateSecureClientSecret,
+  getBaseUrl,
   rateLimitToken,
   validateRedirectUri,
 } from "./utils";
@@ -30,6 +32,48 @@ registrationRouter.post(
         error_description: "Request body is missing or malformed",
       });
     }
+
+    // Verify user authentication by checking session cookies
+    if (!req.headers.cookie) {
+      return res.status(401).json({
+        error: "unauthorized",
+        error_description: "User must be authenticated to register OAuth clients",
+      });
+    }
+
+    // Verify the session using better-auth
+    const baseUrl = getBaseUrl(req);
+    const sessionUrl = new URL("/api/auth/get-session", baseUrl);
+    const headers = new Headers();
+    headers.set("cookie", req.headers.cookie);
+
+    const sessionRequest = new Request(sessionUrl.toString(), {
+      method: "GET",
+      headers,
+    });
+
+    const sessionResponse = await auth.handler(sessionRequest);
+
+    if (!sessionResponse.ok) {
+      return res.status(401).json({
+        error: "unauthorized",
+        error_description: "Invalid or expired session",
+      });
+    }
+
+    const sessionData = (await sessionResponse.json()) as {
+      user?: { id: string; email?: string };
+    };
+
+    if (!sessionData?.user?.id) {
+      return res.status(401).json({
+        error: "unauthorized",
+        error_description: "User must be authenticated to register OAuth clients",
+      });
+    }
+
+    const userId = sessionData.user.id;
+    const userEmail = sessionData.user.email;
 
     const {
       redirect_uris,
@@ -167,6 +211,7 @@ registrationRouter.post(
       client_secret: clientSecret,
       client_name: client_name || "Unnamed MCP Client",
       email: clientEmail,
+      user_id: userId, // Link client to the authenticated user
       redirect_uris: redirect_uris,
       grant_types: clientGrantTypes,
       response_types: clientResponseTypes,
@@ -187,7 +232,6 @@ registrationRouter.post(
     await oauthRepository.upsertClient(clientRegistration);
 
     // Prepare response according to RFC 7591 with OAuth 2.1 guidance
-    const baseUrl = req.protocol + "://" + req.get("host");
     const response: any = {
       client_id: clientId,
       client_name: clientRegistration.client_name,
