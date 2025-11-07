@@ -162,6 +162,13 @@ authorizationRouter.get(
               expires_at: Date.now() + 10 * 60 * 1000, // 10 minutes
             });
 
+            // Update the OAuth client's user_id if not already set
+            // This links the client to the first user who authorized it
+            await oauthRepository.setClientUserIdIfNotSet(
+              oauthParams.client_id,
+              sessionData.user.id,
+            );
+
             // Redirect back to the MCP client with authorization code
             const redirectUrl = new URL(oauthParams.redirect_uri);
             redirectUrl.searchParams.set("code", code);
@@ -344,6 +351,13 @@ Content-Type: application/json
       code_challenge_method: oauthParams.code_challenge_method || null,
       expires_at: Date.now() + 10 * 60 * 1000, // 10 minutes
     });
+
+    // Update the OAuth client's user_id if not already set
+    // This links the client to the first user who authorized it
+    await oauthRepository.setClientUserIdIfNotSet(
+      client_id,
+      sessionData.user.id,
+    );
 
     // Redirect back to the MCP client with authorization code
     const redirectUrl = new URL(redirect_uri);

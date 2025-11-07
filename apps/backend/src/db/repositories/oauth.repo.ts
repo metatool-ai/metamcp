@@ -36,6 +36,7 @@ export class OAuthRepository {
         target: oauthClientsTable.client_id,
         set: {
           redirect_uris: clientData.redirect_uris,
+          user_id: clientData.user_id,
           updated_at: new Date(),
         },
       });
@@ -114,6 +115,28 @@ export class OAuthRepository {
     await db
       .delete(oauthClientsTable)
       .where(eq(oauthClientsTable.client_id, clientId));
+  }
+
+  async updateClientUserId(
+    clientId: string,
+    userId: string,
+  ): Promise<void> {
+    await db
+      .update(oauthClientsTable)
+      .set({ user_id: userId, updated_at: new Date() })
+      .where(eq(oauthClientsTable.client_id, clientId));
+  }
+
+  async setClientUserIdIfNotSet(
+    clientId: string,
+    userId: string,
+  ): Promise<void> {
+    // Only update if user_id is not already set
+    await db
+      .update(oauthClientsTable)
+      .set({ user_id: userId, updated_at: new Date() })
+      .where(eq(oauthClientsTable.client_id, clientId))
+      .where(eq(oauthClientsTable.user_id, null));
   }
 
   // ===== Authorization Codes =====
