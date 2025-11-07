@@ -31,5 +31,7 @@
   "contactAdmin": "联系管理员",
   "yourAccount": "您的账户：",
   "whatYouCanDo": "您可以做的事情：",
-  "canMakeRequests": "通过您的 OAuth 客户端向 MetaMCP 端点发出请求"
+  "canMakeRequests": "通过您的 OAuth 客户端向 MetaMCP 端点发出请求",
+  "oauthClientsFor": "{{name}} 的 OAuth 客户端",
+  "manageOAuthClientsDescription": "查看和管理此用户注册的 OAuth 客户端"
 }

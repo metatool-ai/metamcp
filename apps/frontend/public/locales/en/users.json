@@ -31,5 +31,7 @@
   "contactAdmin": "Contact Administrator",
   "yourAccount": "Your account:",
   "whatYouCanDo": "What you can do:",
-  "canMakeRequests": "Make requests to MetaMCP endpoints through your OAuth clients"
+  "canMakeRequests": "Make requests to MetaMCP endpoints through your OAuth clients",
+  "oauthClientsFor": "OAuth Clients for {{name}}",
+  "manageOAuthClientsDescription": "View and manage OAuth clients registered by this user"
 }

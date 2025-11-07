@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Shield, ShieldOff, Users as UsersIcon, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
+import { Shield, ShieldOff, Users as UsersIcon, CheckCircle2, XCircle, ExternalLink, Trash2, Key, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -25,10 +25,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 // Component to show OAuth clients count for a user
-function UserOAuthClientsCount({ userId }: { userId: string }) {
+function UserOAuthClientsCount({ userId, onClick }: { userId: string; onClick: () => void }) {
   const { data: clientsResponse, isLoading } = trpc.frontend.oauth.getClientsByUserId.useQuery({
     userId,
   });
@@ -40,7 +47,11 @@ function UserOAuthClientsCount({ userId }: { userId: string }) {
   const count = clientsResponse?.success ? clientsResponse.data.length : 0;
 
   return (
-    <Badge variant={count > 0 ? "default" : "outline"} className="gap-1">
+    <Badge
+      variant={count > 0 ? "default" : "outline"}
+      className="gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+      onClick={onClick}
+    >
       <Shield className="h-3 w-3" />
       {count}
     </Badge>
@@ -56,7 +67,11 @@ export default function UsersPage() {
     userName: string;
     action: "grant" | "revoke";
   }>({ open: false, userId: "", userName: "", action: "grant" });
-  const [userClientsCount, setUserClientsCount] = useState<Record<string, number>>({});
+  const [oauthClientsDialog, setOauthClientsDialog] = useState<{
+    open: boolean;
+    userId: string;
+    userName: string;
+  }>({ open: false, userId: "", userName: "" });
   const pageSize = 50;
 
   const { data: usersResponse, isLoading, refetch } = trpc.frontend.users.getAllUsers.useQuery({
@@ -78,6 +93,19 @@ export default function UsersPage() {
     },
   });
 
+  const deleteOAuthClientMutation = trpc.frontend.oauth.deleteClient.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(t("oauth-clients:clientDeleted"));
+      } else {
+        toast.error(data.message || t("oauth-clients:deleteFailed"));
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
   const handleAdminAccessChange = (userId: string, userName: string, currentIsAdmin: boolean) => {
     setConfirmDialog({
       open: true,
@@ -95,6 +123,16 @@ export default function UsersPage() {
     setConfirmDialog({ open: false, userId: "", userName: "", action: "grant" });
   };
 
+  const handleShowOAuthClients = (userId: string, userName: string) => {
+    setOauthClientsDialog({ open: true, userId, userName });
+  };
+
+  const handleDeleteOAuthClient = (clientId: string, clientName: string) => {
+    if (confirm(t("oauth-clients:confirmDelete", { name: clientName }))) {
+      deleteOAuthClientMutation.mutate({ clientId });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -109,7 +147,7 @@ export default function UsersPage() {
   const regularCount = users.filter((u) => !u.isAdmin).length;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold mb-2">{t("users:userManagement")}</h1>
@@ -190,7 +228,10 @@ export default function UsersPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <UserOAuthClientsCount userId={user.id} />
+                        <UserOAuthClientsCount
+                          userId={user.id}
+                          onClick={() => handleShowOAuthClients(user.id, user.name)}
+                        />
                       </TableCell>
                       <TableCell>
                         {user.emailVerified ? (
@@ -279,6 +320,125 @@ export default function UsersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* OAuth Clients Dialog */}
+      <OAuthClientsDialog
+        open={oauthClientsDialog.open}
+        userId={oauthClientsDialog.userId}
+        userName={oauthClientsDialog.userName}
+        onOpenChange={(open) => setOauthClientsDialog({ ...oauthClientsDialog, open })}
+        onDeleteClient={handleDeleteOAuthClient}
+      />
     </div>
+  );
+}
+
+// Component to display OAuth clients in a dialog
+function OAuthClientsDialog({
+  open,
+  userId,
+  userName,
+  onOpenChange,
+  onDeleteClient,
+}: {
+  open: boolean;
+  userId: string;
+  userName: string;
+  onOpenChange: (open: boolean) => void;
+  onDeleteClient: (clientId: string, clientName: string) => void;
+}) {
+  const { t } = useTranslations();
+  const { data: clientsResponse, isLoading } = trpc.frontend.oauth.getClientsByUserId.useQuery(
+    { userId },
+    { enabled: open }
+  );
+
+  const clients = clientsResponse?.success ? clientsResponse.data : [];
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{t("users:oauthClientsFor", { name: userName })}</DialogTitle>
+          <DialogDescription>
+            {t("users:manageOAuthClientsDescription")}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-muted-foreground">{t("common:loading")}</div>
+            </div>
+          ) : clients.length === 0 ? (
+            <div className="text-center py-8">
+              <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-sm text-muted-foreground">
+                {t("oauth-clients:noClients")}
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("oauth-clients:clientName")}</TableHead>
+                  <TableHead>{t("oauth-clients:clientId")}</TableHead>
+                  <TableHead>{t("oauth-clients:created")}</TableHead>
+                  <TableHead className="w-[60px]">{t("users:actions")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {clients.map((client) => (
+                  <TableRow key={client.client_id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-blue-500" />
+                        <span>{client.client_name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Key className="h-3 w-3 text-muted-foreground" />
+                        <code className="text-xs bg-muted px-2 py-1 rounded">
+                          {client.client_id}
+                        </code>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
+                          {formatDate(client.created_at)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDeleteClient(client.client_id, client.client_name)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
