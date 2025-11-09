@@ -320,7 +320,7 @@ function OAuthClientsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-7xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>{t("users:oauthClientsFor", { name: userName })}</DialogTitle>
           <DialogDescription>
@@ -328,7 +328,7 @@ function OAuthClientsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-4">
+        <div className="mt-4 overflow-y-auto max-h-[calc(85vh-180px)]">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <div className="text-muted-foreground">{t("common:loading")}</div>
@@ -361,8 +361,8 @@ function OAuthClientsDialog({
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Key className="h-3 w-3 text-muted-foreground" />
-                        <code className="text-xs bg-muted px-2 py-1 rounded">
+                        <Key className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <code className="text-xs bg-muted px-2 py-1 rounded break-all max-w-xs">
                           {client.client_id}
                         </code>
                       </div>
