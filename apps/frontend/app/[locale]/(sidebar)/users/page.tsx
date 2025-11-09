@@ -13,18 +13,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
 import { useTranslations } from "@/hooks/useTranslations";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -61,12 +52,6 @@ function UserOAuthClientsCount({ userId, onClick }: { userId: string; onClick: (
 export default function UsersPage() {
   const { t } = useTranslations();
   const [page, setPage] = useState(0);
-  const [confirmDialog, setConfirmDialog] = useState<{
-    open: boolean;
-    userId: string;
-    userName: string;
-    action: "grant" | "revoke";
-  }>({ open: false, userId: "", userName: "", action: "grant" });
   const [oauthClientsDialog, setOauthClientsDialog] = useState<{
     open: boolean;
     userId: string;
@@ -106,21 +91,11 @@ export default function UsersPage() {
     },
   });
 
-  const handleAdminAccessChange = (userId: string, userName: string, currentIsAdmin: boolean) => {
-    setConfirmDialog({
-      open: true,
-      userId,
-      userName,
-      action: currentIsAdmin ? "revoke" : "grant",
-    });
-  };
-
-  const confirmAdminAccessChange = () => {
+  const handleAdminAccessToggle = (userId: string, isAdmin: boolean) => {
     updateAdminAccessMutation.mutate({
-      userId: confirmDialog.userId,
-      isAdmin: confirmDialog.action === "grant",
+      userId,
+      isAdmin,
     });
-    setConfirmDialog({ open: false, userId: "", userName: "", action: "grant" });
   };
 
   const handleShowOAuthClients = (userId: string, userName: string) => {
@@ -242,24 +217,26 @@ export default function UsersPage() {
                       </TableCell>
                       <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                       <TableCell>
-                        <Button
-                          variant={user.isAdmin ? "destructive" : "default"}
-                          size="sm"
-                          onClick={() => handleAdminAccessChange(user.id, user.name, user.isAdmin)}
-                          disabled={updateAdminAccessMutation.isPending}
-                        >
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={user.isAdmin}
+                            onCheckedChange={(checked) =>
+                              handleAdminAccessToggle(user.id, checked)
+                            }
+                            disabled={updateAdminAccessMutation.isPending}
+                          />
                           {user.isAdmin ? (
-                            <>
-                              <ShieldOff className="h-3 w-3 mr-1" />
-                              {t("users:revokeAdminAccess")}
-                            </>
+                            <Badge className="bg-green-500 gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              {t("users:admin")}
+                            </Badge>
                           ) : (
-                            <>
-                              <Shield className="h-3 w-3 mr-1" />
-                              {t("users:grantAdminAccess")}
-                            </>
+                            <Badge variant="secondary" className="gap-1">
+                              <XCircle className="h-3 w-3" />
+                              {t("users:user")}
+                            </Badge>
                           )}
-                        </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -296,30 +273,6 @@ export default function UsersPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Confirmation Dialog */}
-      <AlertDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirmDialog.action === "grant"
-                ? t("users:grantAdminAccess")
-                : t("users:revokeAdminAccess")}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmDialog.action === "grant"
-                ? t("users:confirmGrantAdmin", { name: confirmDialog.userName })
-                : t("users:confirmRevokeAdmin", { name: confirmDialog.userName })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("common:cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmAdminAccessChange}>
-              {t("common:confirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* OAuth Clients Dialog */}
       <OAuthClientsDialog
