@@ -149,7 +149,7 @@ function UserInfoFooter() {
             <LanguageSwitcher />
             <ThemeToggle />
           </div>
-          <p className="text-xs text-muted-foreground">v2.4.16</p>
+          <p className="text-xs text-muted-foreground">v2.4.17</p>
         </div>
         <Separator />
         {user && (

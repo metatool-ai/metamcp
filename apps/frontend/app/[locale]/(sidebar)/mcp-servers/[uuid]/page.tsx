@@ -5,7 +5,15 @@ import {
   McpServerErrorStatusEnum,
   McpServerTypeEnum,
 } from "@repo/zod-types";
-import { ArrowLeft, Edit, Eye, EyeOff, Plug, Server } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit,
+  Eye,
+  EyeOff,
+  Plug,
+  SearchCode,
+  Server,
+} from "lucide-react";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
@@ -314,6 +322,16 @@ export default function McpServerDetailPage({
           </Button>
         </Link>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              router.push(`/mcp-inspector?server=${encodeURIComponent(uuid)}`)
+            }
+          >
+            <SearchCode className="h-4 w-4 mr-2" />
+            {t("mcp-servers:list.inspect")}
+          </Button>
           <Button
             variant="outline"
             size="sm"
