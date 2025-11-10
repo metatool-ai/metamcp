@@ -169,6 +169,18 @@ tokenRouter.post("/oauth/token", logTokenRequest, rateLimitToken, async (req, re
     // Code is valid, delete it (authorization codes are single-use)
     await oauthRepository.deleteAuthCode(code);
 
+    // If client was registered without a user (public registration with user_id=null),
+    // update the client to be owned by the first user who authorizes it
+    if (clientData.user_id === null && codeData.user_id) {
+      console.log(
+        `Linking client ${client_id} to user ${codeData.user_id} (first authorization)`,
+      );
+      await oauthRepository.setClientUserIdIfNotSet(
+        client_id,
+        codeData.user_id,
+      );
+    }
+
     // Generate access token
     const accessToken = generateSecureAccessToken();
     const expiresIn = 3600; // 1 hour
