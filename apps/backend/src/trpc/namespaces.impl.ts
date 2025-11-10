@@ -841,6 +841,25 @@ export const namespacesImplementations = {
         };
       }
 
+      // Get all existing INACTIVE tool mappings for this namespace
+      // These tools should be preserved even if they're not in the refresh list
+      // (they're filtered by middleware because they're inactive)
+      const existingMappings =
+        await namespaceMappingsRepository.findToolMappingsByNamespace(
+          input.namespaceUuid,
+        );
+
+      // Group INACTIVE tool UUIDs by server
+      const inactiveToolUuidsByServer = new Map<string, Set<string>>();
+      for (const mapping of existingMappings) {
+        if (mapping.status === "INACTIVE") {
+          if (!inactiveToolUuidsByServer.has(mapping.mcp_server_uuid)) {
+            inactiveToolUuidsByServer.set(mapping.mcp_server_uuid, new Set());
+          }
+          inactiveToolUuidsByServer.get(mapping.mcp_server_uuid)!.add(mapping.tool_uuid);
+        }
+      }
+
       let totalToolsCreated = 0;
       let totalMappingsCreated = 0;
 
@@ -849,6 +868,11 @@ export const namespacesImplementations = {
         toolsByServerName,
       )) {
         const { serverUuid, tools } = serverData;
+
+        // Get INACTIVE tool UUIDs for this server to preserve them
+        const preserveToolUuids = Array.from(
+          inactiveToolUuidsByServer.get(serverUuid) || []
+        );
 
         // Bulk upsert tools to the tools table with the actual tool names
         const upsertedTools = await toolsRepository.bulkUpsert({
@@ -859,6 +883,7 @@ export const namespacesImplementations = {
             inputSchema: tool.inputSchema,
             annotations: tool.annotations,
           })),
+          preserveToolUuids, // Preserve INACTIVE tools from this namespace
         });
 
         totalToolsCreated += upsertedTools.length;

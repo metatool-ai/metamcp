@@ -111,6 +111,9 @@ export const ToolUpsertInputSchema = z.object({
     }),
   ),
   mcpServerUuid: z.string(),
+  // Optional: UUIDs of tools to preserve even if they're not in the tools list
+  // Used to prevent deletion of INACTIVE tools during refresh
+  preserveToolUuids: z.array(z.string()).optional(),
 });
 
 export type ToolCreateInput = z.infer<typeof ToolCreateInputSchema>;
