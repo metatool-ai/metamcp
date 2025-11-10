@@ -99,7 +99,18 @@ export const oauthImplementations = {
       const clients = await oauthRepository.getAllClients();
 
       // Get statistics for all clients
-      const statistics = await oauthRepository.getClientStatistics();
+      let statistics: Array<{
+        client_id: string;
+        total_requests: number;
+        last_request_at: Date | null;
+      }> = [];
+
+      try {
+        statistics = await oauthRepository.getClientStatistics();
+      } catch (statsError) {
+        console.error("Error fetching client statistics, continuing without stats:", statsError);
+        // Continue without statistics if there's an error
+      }
 
       // Create a map of statistics by client_id for quick lookup
       const statsMap = new Map(
