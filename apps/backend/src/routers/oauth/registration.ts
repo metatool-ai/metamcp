@@ -39,10 +39,12 @@ registrationRouter.post(
     let userId: string | null = null;
     let userEmail: string | null = null;
 
+    // Get base URL for endpoint information in response
+    const baseUrl = getBaseUrl(req);
+
     // Optionally check for authenticated session to link client to user
     if (req.headers.cookie) {
       try {
-        const baseUrl = getBaseUrl(req);
         const sessionUrl = new URL("/api/auth/get-session", baseUrl);
         const headers = new Headers();
         headers.set("cookie", req.headers.cookie);
