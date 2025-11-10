@@ -277,7 +277,7 @@ export class OAuthRepository {
     const [result] = await db
       .select({
         total_requests: sql<number>`count(*)`,
-        last_request_at: sql<Date>`max(${oauthRequestLogsTable.created_at})`,
+        last_request_at: sql<Date | null>`max(${oauthRequestLogsTable.created_at})`,
       })
       .from(oauthRequestLogsTable)
       .where(eq(oauthRequestLogsTable.client_id, clientId));
