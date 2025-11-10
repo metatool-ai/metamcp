@@ -30,25 +30,10 @@ export class ToolsRepository {
 
     // Use a transaction to ensure atomicity
     return await db.transaction(async (tx) => {
-      // Get all current tools for this MCP server
-      const currentTools = await tx
-        .select()
-        .from(toolsTable)
-        .where(eq(toolsTable.mcp_server_uuid, input.mcpServerUuid));
-
-      // Get the names of tools that should exist
-      const newToolNames = new Set(input.tools.map((t) => t.name));
-
-      // Delete tools that are no longer in the new list
-      const toolsToDelete = currentTools.filter(
-        (tool) => !newToolNames.has(tool.name),
-      );
-
-      if (toolsToDelete.length > 0) {
-        for (const tool of toolsToDelete) {
-          await tx.delete(toolsTable).where(eq(toolsTable.uuid, tool.uuid));
-        }
-      }
+      // NOTE: We no longer delete tools that are missing from the input list
+      // This is because tools may be filtered out by middleware (e.g., INACTIVE tools)
+      // and we don't want to delete them from the database just because they're filtered.
+      // If a tool truly needs to be removed, it should be done explicitly via deleteByUuid.
 
       // Format tools for database insertion
       const toolsToInsert = input.tools.map((tool) => ({
