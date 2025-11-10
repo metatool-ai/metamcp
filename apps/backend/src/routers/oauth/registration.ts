@@ -33,47 +33,42 @@ registrationRouter.post(
       });
     }
 
-    // Verify user authentication by checking session cookies
-    if (!req.headers.cookie) {
-      return res.status(401).json({
-        error: "unauthorized",
-        error_description: "User must be authenticated to register OAuth clients",
-      });
+    // OAuth client registration is now public - no authentication required
+    // This allows external applications to register dynamically
+    // User ID will be null for public registrations
+    let userId: string | null = null;
+    let userEmail: string | null = null;
+
+    // Optionally check for authenticated session to link client to user
+    if (req.headers.cookie) {
+      try {
+        const baseUrl = getBaseUrl(req);
+        const sessionUrl = new URL("/api/auth/get-session", baseUrl);
+        const headers = new Headers();
+        headers.set("cookie", req.headers.cookie);
+
+        const sessionRequest = new Request(sessionUrl.toString(), {
+          method: "GET",
+          headers,
+        });
+
+        const sessionResponse = await auth.handler(sessionRequest);
+
+        if (sessionResponse.ok) {
+          const sessionData = (await sessionResponse.json()) as {
+            user?: { id: string; email?: string };
+          };
+
+          if (sessionData?.user?.id) {
+            userId = sessionData.user.id;
+            userEmail = sessionData.user.email || null;
+          }
+        }
+      } catch (error) {
+        // Session check failed, continue as public registration
+        console.log("Session check failed, registering as public client");
+      }
     }
-
-    // Verify the session using better-auth
-    const baseUrl = getBaseUrl(req);
-    const sessionUrl = new URL("/api/auth/get-session", baseUrl);
-    const headers = new Headers();
-    headers.set("cookie", req.headers.cookie);
-
-    const sessionRequest = new Request(sessionUrl.toString(), {
-      method: "GET",
-      headers,
-    });
-
-    const sessionResponse = await auth.handler(sessionRequest);
-
-    if (!sessionResponse.ok) {
-      return res.status(401).json({
-        error: "unauthorized",
-        error_description: "Invalid or expired session",
-      });
-    }
-
-    const sessionData = (await sessionResponse.json()) as {
-      user?: { id: string; email?: string };
-    };
-
-    if (!sessionData?.user?.id) {
-      return res.status(401).json({
-        error: "unauthorized",
-        error_description: "User must be authenticated to register OAuth clients",
-      });
-    }
-
-    const userId = sessionData.user.id;
-    const userEmail = sessionData.user.email;
 
     const {
       redirect_uris,
