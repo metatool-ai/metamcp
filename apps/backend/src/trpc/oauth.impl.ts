@@ -98,37 +98,13 @@ export const oauthImplementations = {
     try {
       const clients = await oauthRepository.getAllClients();
 
-      // Get statistics for all clients
-      let statistics: Array<{
-        client_id: string;
-        total_requests: number;
-        last_request_at: Date | null;
-      }> = [];
-
-      try {
-        statistics = await oauthRepository.getClientStatistics();
-      } catch (statsError) {
-        console.error("Error fetching client statistics, continuing without stats:", statsError);
-        // Continue without statistics if there's an error
-      }
-
-      // Create a map of statistics by client_id for quick lookup
-      const statsMap = new Map(
-        statistics.map((stat) => [stat.client_id, stat])
-      );
-
       return {
         success: true,
-        data: clients.map((client) => {
-          const stats = statsMap.get(client.client_id);
-          return {
-            ...client,
-            created_at: client.created_at.toISOString(),
-            updated_at: client.updated_at?.toISOString(),
-            total_requests: stats?.total_requests || 0,
-            last_request_at: stats?.last_request_at?.toISOString() || null,
-          };
-        }),
+        data: clients.map((client) => ({
+          ...client,
+          created_at: client.created_at.toISOString(),
+          updated_at: client.updated_at?.toISOString(),
+        })),
       };
     } catch (error) {
       console.error("Error fetching OAuth clients:", error);

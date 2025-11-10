@@ -5,7 +5,6 @@ import {
   Activity,
   Calendar,
   CheckCircle,
-  Clock,
   Eye,
   ExternalLink,
   Key,
@@ -236,8 +235,6 @@ export default function OAuthClientsPage() {
                   <TableHead>{t("oauth-clients:email")}</TableHead>
                   <TableHead>{t("oauth-clients:clientId")}</TableHead>
                   <TableHead>{t("oauth-clients:adminAccess")}</TableHead>
-                  <TableHead>Requests</TableHead>
-                  <TableHead>Last Request</TableHead>
                   <TableHead>{t("oauth-clients:created")}</TableHead>
                   <TableHead className="w-[40px]"></TableHead>
                 </TableRow>
@@ -292,28 +289,6 @@ export default function OAuthClientsPage() {
                           </Badge>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Activity className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-sm font-medium">
-                          {(client as any).total_requests || 0}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {(client as any).last_request_at ? (
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            {formatDate((client as any).last_request_at)}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground italic">
-                          Never
-                        </span>
-                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">

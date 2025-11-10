@@ -236,57 +236,6 @@ export class OAuthRepository {
     ]);
   }
 
-  // ===== Statistics =====
-
-  /**
-   * Get statistics for all OAuth clients
-   * Returns request counts and last request time for each client
-   */
-  async getClientStatistics(): Promise<
-    Array<{
-      client_id: string;
-      total_requests: number;
-      last_request_at: Date | null;
-    }>
-  > {
-    // Get stats from oauth_request_logs table
-    const stats = await db
-      .select({
-        client_id: oauthRequestLogsTable.client_id,
-        total_requests: sql<number>`count(*)`,
-        last_request_at: sql<Date | null>`max(${oauthRequestLogsTable.created_at})`,
-      })
-      .from(oauthRequestLogsTable)
-      .where(sql`${oauthRequestLogsTable.client_id} IS NOT NULL`)
-      .groupBy(oauthRequestLogsTable.client_id);
-
-    return stats.map((stat) => ({
-      client_id: stat.client_id!,
-      total_requests: Number(stat.total_requests),
-      last_request_at: stat.last_request_at || null,
-    }));
-  }
-
-  /**
-   * Get statistics for a specific OAuth client
-   */
-  async getClientStatistic(clientId: string): Promise<{
-    total_requests: number;
-    last_request_at: Date | null;
-  }> {
-    const [result] = await db
-      .select({
-        total_requests: sql<number>`count(*)`,
-        last_request_at: sql<Date | null>`max(${oauthRequestLogsTable.created_at})`,
-      })
-      .from(oauthRequestLogsTable)
-      .where(eq(oauthRequestLogsTable.client_id, clientId));
-
-    return {
-      total_requests: result ? Number(result.total_requests) : 0,
-      last_request_at: result?.last_request_at || null,
-    };
-  }
 }
 
 export const oauthRepository = new OAuthRepository();

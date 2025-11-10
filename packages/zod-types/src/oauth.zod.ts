@@ -214,9 +214,6 @@ export const GetAllOAuthClientsResponseSchema = z.object({
     OAuthClientSchema.extend({
       created_at: z.string().datetime(),
       updated_at: z.string().datetime().optional(),
-      // Statistics from oauth_request_logs
-      total_requests: z.number().optional().default(0),
-      last_request_at: z.string().datetime().nullish(),
     }),
   ),
   message: z.string().optional(),
