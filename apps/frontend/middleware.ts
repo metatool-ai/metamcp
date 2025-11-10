@@ -37,24 +37,7 @@ function getLocale(request: NextRequest): string {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // Skip middleware for static files and API routes
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/trpc") ||
-    pathname.startsWith("/mcp-proxy") ||
-    pathname.startsWith("/metamcp") ||
-    pathname.startsWith("/oauth") ||
-    pathname.startsWith("/.well-known") ||
-    pathname.startsWith("/service") ||
-    pathname.startsWith("/health") ||
-    pathname.startsWith("/fe-oauth") ||
-    pathname.includes(".")
-  ) {
-    return NextResponse.next();
-  }
-
-  // Handle i18n routing first
+  // Extract pathname without locale first
   const pathnameHasLocale = locales.some(
     (locale) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`,
   );
@@ -65,8 +48,29 @@ export async function middleware(request: NextRequest) {
   if (pathnameHasLocale) {
     locale = pathname.split("/")[1] || defaultLocale;
     pathnameWithoutLocale = pathname.slice(locale.length + 1) || "/";
-  } else {
-    // Redirect to the appropriate locale
+  }
+
+  // Skip middleware for static files and API routes
+  // Check against pathname WITHOUT locale to catch /oauth and /en/oauth
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/trpc") ||
+    pathname.startsWith("/mcp-proxy") ||
+    pathname.startsWith("/metamcp") ||
+    pathname.startsWith("/oauth") ||
+    pathnameWithoutLocale.startsWith("/oauth") || // Also check without locale
+    pathname.startsWith("/.well-known") ||
+    pathname.startsWith("/service") ||
+    pathname.startsWith("/health") ||
+    pathname.startsWith("/fe-oauth") ||
+    pathname.includes(".")
+  ) {
+    return NextResponse.next();
+  }
+
+  // Handle i18n routing - redirect if no locale present
+  if (!pathnameHasLocale) {
     locale = getLocale(request);
     const newUrl = new URL(`/${locale}${pathname}`, request.url);
     // Preserve query parameters during redirect

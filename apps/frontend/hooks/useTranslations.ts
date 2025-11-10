@@ -1,25 +1,13 @@
-import { useEffect, useState } from "react";
+import { getTranslation } from "@/lib/i18n";
 
-import { getTranslation, loadTranslations, Translations } from "@/lib/i18n";
-
-import { useLocale } from "./useLocale";
+import { useTranslationsContext } from "../context/TranslationsContext";
 
 export function useTranslations() {
-  const locale = useLocale();
-  const [translations, setTranslations] = useState<Translations | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    setIsLoading(true);
-    loadTranslations(locale)
-      .then(setTranslations)
-      .finally(() => setIsLoading(false));
-  }, [locale]);
+  const { translations, locale } = useTranslationsContext();
 
   const t = (key: string, params?: Record<string, string | number>) => {
-    if (!translations) return key;
     return getTranslation(translations, key, params);
   };
 
-  return { t, isLoading, locale };
+  return { t, locale };
 }

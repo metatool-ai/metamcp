@@ -2,6 +2,7 @@ import express from "express";
 
 import { auth } from "../../auth";
 import { oauthRepository } from "../../db/repositories";
+import { logAuthorizationRequest } from "./logging-middleware";
 import {
   generateSecureAuthCode,
   getBaseUrl,
@@ -16,7 +17,11 @@ const authorizationRouter = express.Router();
  * OAuth 2.0 Authorization Endpoint
  * Handles authorization requests from MCP clients
  */
-authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
+authorizationRouter.get(
+  "/oauth/authorize",
+  logAuthorizationRequest,
+  rateLimitAuth,
+  async (req, res) => {
   try {
     const {
       response_type,
@@ -157,6 +162,13 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
               expires_at: Date.now() + 10 * 60 * 1000, // 10 minutes
             });
 
+            // Update the OAuth client's user_id if not already set
+            // This links the client to the first user who authorized it
+            await oauthRepository.setClientUserIdIfNotSet(
+              oauthParams.client_id,
+              sessionData.user.id,
+            );
+
             // Redirect back to the MCP client with authorization code
             const redirectUrl = new URL(oauthParams.redirect_uri);
             redirectUrl.searchParams.set("code", code);
@@ -199,7 +211,10 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
  * Handles the callback from frontend login and redirects back to the OAuth client
  * Verifies user authentication before issuing authorization code
  */
-authorizationRouter.get("/oauth/callback", async (req, res) => {
+authorizationRouter.get(
+  "/oauth/callback",
+  logAuthorizationRequest,
+  async (req, res) => {
   try {
     let oauthParams: OAuthParams;
 
@@ -336,6 +351,13 @@ Content-Type: application/json
       code_challenge_method: oauthParams.code_challenge_method || null,
       expires_at: Date.now() + 10 * 60 * 1000, // 10 minutes
     });
+
+    // Update the OAuth client's user_id if not already set
+    // This links the client to the first user who authorized it
+    await oauthRepository.setClientUserIdIfNotSet(
+      client_id,
+      sessionData.user.id,
+    );
 
     // Redirect back to the MCP client with authorization code
     const redirectUrl = new URL(redirect_uri);

@@ -22,11 +22,14 @@ export const OAuthClientSchema = z.object({
   client_id: z.string(),
   client_secret: z.string().nullable(),
   client_name: z.string(),
+  email: z.string().nullable(),
+  user_id: z.string().nullable(),
   redirect_uris: z.array(z.string()),
   grant_types: z.array(z.string()),
   response_types: z.array(z.string()),
   token_endpoint_auth_method: z.string(),
   scope: z.string().nullable(),
+  can_access_admin: z.boolean().default(false),
   client_uri: z.string().nullable(),
   logo_uri: z.string().nullable(),
   contacts: z.array(z.string()).nullable(),
@@ -66,11 +69,14 @@ export const OAuthClientCreateInputSchema = z.object({
   client_id: z.string(),
   client_secret: z.string().nullable(),
   client_name: z.string(),
+  email: z.string().nullable().optional(),
+  user_id: z.string().nullable().optional(),
   redirect_uris: z.array(z.string()),
   grant_types: z.array(z.string()),
   response_types: z.array(z.string()),
   token_endpoint_auth_method: z.string(),
   scope: z.string().nullable(),
+  can_access_admin: z.boolean().default(false),
   client_uri: z.string().nullable().optional(),
   logo_uri: z.string().nullable().optional(),
   contacts: z.array(z.string()).nullable().optional(),
@@ -200,3 +206,279 @@ export type OAuthAccessToken = z.infer<typeof OAuthAccessTokenSchema>;
 export type OAuthAccessTokenCreateInput = z.infer<
   typeof OAuthAccessTokenCreateInputSchema
 >;
+
+// API response schemas
+export const GetAllOAuthClientsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    OAuthClientSchema.extend({
+      created_at: z.string().datetime(),
+      updated_at: z.string().datetime().optional(),
+    }),
+  ),
+  message: z.string().optional(),
+});
+
+export const UpdateOAuthClientAdminAccessRequestSchema = z.object({
+  clientId: z.string(),
+  canAccessAdmin: z.boolean(),
+});
+
+export const UpdateOAuthClientAdminAccessResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+});
+
+export const DeleteOAuthClientRequestSchema = z.object({
+  clientId: z.string(),
+});
+
+export const DeleteOAuthClientResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+});
+
+export const GetOAuthClientsByUserIdRequestSchema = z.object({
+  userId: z.string(),
+});
+
+export const GetOAuthClientsByUserIdResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    OAuthClientSchema.extend({
+      created_at: z.string().datetime(),
+      updated_at: z.string().datetime().optional(),
+    }),
+  ),
+  message: z.string().optional(),
+});
+
+export type GetAllOAuthClientsResponse = z.infer<typeof GetAllOAuthClientsResponseSchema>;
+export type UpdateOAuthClientAdminAccessRequest = z.infer<typeof UpdateOAuthClientAdminAccessRequestSchema>;
+export type UpdateOAuthClientAdminAccessResponse = z.infer<typeof UpdateOAuthClientAdminAccessResponseSchema>;
+export type DeleteOAuthClientRequest = z.infer<typeof DeleteOAuthClientRequestSchema>;
+export type DeleteOAuthClientResponse = z.infer<typeof DeleteOAuthClientResponseSchema>;
+export type GetOAuthClientsByUserIdRequest = z.infer<typeof GetOAuthClientsByUserIdRequestSchema>;
+export type GetOAuthClientsByUserIdResponse = z.infer<typeof GetOAuthClientsByUserIdResponseSchema>;
+
+// OAuth Request Logs schemas
+export const OAuthRequestLogSchema = z.object({
+  uuid: z.string().uuid(),
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  request_type: z.string(), // 'authorization', 'token', 'refresh', 'userinfo', etc
+  request_method: z.string(), // GET, POST, etc
+  request_path: z.string(),
+  request_query: z.record(z.string()).nullable(),
+  request_headers: z.record(z.string()).nullable(),
+  request_body: z.record(z.any()).nullable(),
+  response_status: z.string(), // '200', '400', '401', etc
+  response_body: z.record(z.any()).nullable(),
+  error_message: z.string().nullable(),
+  ip_address: z.string().nullable(),
+  user_agent: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+  created_at: z.date(),
+});
+
+export const OAuthRequestLogCreateInputSchema = z.object({
+  client_id: z.string().nullable().optional(),
+  user_id: z.string().nullable().optional(),
+  request_type: z.string(),
+  request_method: z.string(),
+  request_path: z.string(),
+  request_query: z.record(z.string()).nullable().optional(),
+  request_headers: z.record(z.string()).nullable().optional(),
+  request_body: z.record(z.any()).nullable().optional(),
+  response_status: z.string(),
+  response_body: z.record(z.any()).nullable().optional(),
+  error_message: z.string().nullable().optional(),
+  ip_address: z.string().nullable().optional(),
+  user_agent: z.string().nullable().optional(),
+  duration_ms: z.string().nullable().optional(),
+});
+
+export const DatabaseOAuthRequestLogSchema = OAuthRequestLogSchema;
+
+export const GetOAuthRequestLogsRequestSchema = z.object({
+  clientId: z.string().optional(),
+  limit: z.number().int().positive().max(100).default(50),
+  offset: z.number().int().nonnegative().default(0),
+});
+
+export const GetOAuthRequestLogsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    OAuthRequestLogSchema.extend({
+      created_at: z.string().datetime(),
+    }),
+  ),
+  total: z.number(),
+  message: z.string().optional(),
+});
+
+export type OAuthRequestLog = z.infer<typeof OAuthRequestLogSchema>;
+export type OAuthRequestLogCreateInput = z.infer<typeof OAuthRequestLogCreateInputSchema>;
+export type DatabaseOAuthRequestLog = z.infer<typeof DatabaseOAuthRequestLogSchema>;
+export type GetOAuthRequestLogsRequest = z.infer<typeof GetOAuthRequestLogsRequestSchema>;
+export type GetOAuthRequestLogsResponse = z.infer<typeof GetOAuthRequestLogsResponseSchema>;
+
+// ============================================================
+// MCP Request Logs Schemas
+// ============================================================
+
+export const McpRequestLogSchema = z.object({
+  uuid: z.string().uuid(),
+  clientId: z.string().nullable(),
+  userId: z.string().nullable(),
+  sessionId: z.string().nullable(),
+  endpointName: z.string().nullable(),
+  namespaceUuid: z.string().nullable(),
+  requestType: z.string(),
+  requestParams: z.record(z.any()).nullable(),
+  responseResult: z.record(z.any()).nullable(),
+  responseStatus: z.string(),
+  errorMessage: z.string().nullable(),
+  toolName: z.string().nullable(),
+  durationMs: z.string().nullable(),
+  createdAt: z.date(),
+});
+
+export const McpRequestLogCreateInputSchema = z.object({
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  session_id: z.string().nullable(),
+  endpoint_name: z.string().nullable(),
+  namespace_uuid: z.string().nullable(),
+  request_type: z.string(),
+  request_params: z.record(z.any()).nullable(),
+  response_result: z.record(z.any()).nullable(),
+  response_status: z.string(),
+  error_message: z.string().nullable(),
+  tool_name: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+});
+
+export const DatabaseMcpRequestLogSchema = z.object({
+  uuid: z.string().uuid(),
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  session_id: z.string().nullable(),
+  endpoint_name: z.string().nullable(),
+  namespace_uuid: z.string().nullable(),
+  request_type: z.string(),
+  request_params: z.record(z.any()).nullable(),
+  response_result: z.record(z.any()).nullable(),
+  response_status: z.string(),
+  error_message: z.string().nullable(),
+  tool_name: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+  created_at: z.date(),
+});
+
+export const GetMcpRequestLogsRequestSchema = z.object({
+  clientId: z.string().optional(),
+  sessionId: z.string().optional(),
+  requestType: z.string().optional(),
+  limit: z.number().int().positive().max(100).default(50),
+  offset: z.number().int().nonnegative().default(0),
+});
+
+export const GetMcpRequestLogsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    McpRequestLogSchema.extend({
+      createdAt: z.string(),
+    }),
+  ),
+  total: z.number(),
+  message: z.string().optional(),
+});
+
+export type McpRequestLog = z.infer<typeof McpRequestLogSchema>;
+export type McpRequestLogCreateInput = z.infer<typeof McpRequestLogCreateInputSchema>;
+export type DatabaseMcpRequestLog = z.infer<typeof DatabaseMcpRequestLogSchema>;
+export type GetMcpRequestLogsRequest = z.infer<typeof GetMcpRequestLogsRequestSchema>;
+export type GetMcpRequestLogsResponse = z.infer<typeof GetMcpRequestLogsResponseSchema>;
+
+// ============================================================
+// MCP Server Call Logs Schemas (MetaMCP -> Real MCP Server calls)
+// ============================================================
+
+export const McpServerCallLogSchema = z.object({
+  uuid: z.string().uuid(),
+  clientId: z.string().nullable(),
+  userId: z.string().nullable(),
+  sessionId: z.string().nullable(),
+  endpointName: z.string().nullable(),
+  namespaceUuid: z.string().nullable(),
+  mcpServerUuid: z.string().nullable(),
+  mcpServerName: z.string().nullable(),
+  toolName: z.string(),
+  toolArguments: z.record(z.any()).nullable(),
+  result: z.record(z.any()).nullable(),
+  status: z.string(),
+  errorMessage: z.string().nullable(),
+  durationMs: z.string().nullable(),
+  createdAt: z.date(),
+});
+
+export const McpServerCallLogCreateInputSchema = z.object({
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  session_id: z.string().nullable(),
+  endpoint_name: z.string().nullable(),
+  namespace_uuid: z.string().nullable(),
+  mcp_server_uuid: z.string().nullable(),
+  mcp_server_name: z.string().nullable(),
+  tool_name: z.string(),
+  tool_arguments: z.record(z.any()).nullable(),
+  result: z.record(z.any()).nullable(),
+  status: z.string(),
+  error_message: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+});
+
+export const DatabaseMcpServerCallLogSchema = z.object({
+  uuid: z.string().uuid(),
+  client_id: z.string().nullable(),
+  user_id: z.string().nullable(),
+  session_id: z.string().nullable(),
+  endpoint_name: z.string().nullable(),
+  namespace_uuid: z.string().nullable(),
+  mcp_server_uuid: z.string().nullable(),
+  mcp_server_name: z.string().nullable(),
+  tool_name: z.string(),
+  tool_arguments: z.record(z.any()).nullable(),
+  result: z.record(z.any()).nullable(),
+  status: z.string(),
+  error_message: z.string().nullable(),
+  duration_ms: z.string().nullable(),
+  created_at: z.date(),
+});
+
+export const GetMcpServerCallLogsRequestSchema = z.object({
+  clientId: z.string().optional(),
+  sessionId: z.string().optional(),
+  mcpServerUuid: z.string().optional(),
+  toolName: z.string().optional(),
+  limit: z.number().int().positive().max(100).default(50),
+  offset: z.number().int().nonnegative().default(0),
+});
+
+export const GetMcpServerCallLogsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(
+    DatabaseMcpServerCallLogSchema.extend({
+      createdAt: z.string(),
+    }),
+  ),
+  total: z.number(),
+  message: z.string().optional(),
+});
+
+export type McpServerCallLog = z.infer<typeof McpServerCallLogSchema>;
+export type McpServerCallLogCreateInput = z.infer<typeof McpServerCallLogCreateInputSchema>;
+export type DatabaseMcpServerCallLog = z.infer<typeof DatabaseMcpServerCallLogSchema>;
+export type GetMcpServerCallLogsRequest = z.infer<typeof GetMcpServerCallLogsRequestSchema>;
+export type GetMcpServerCallLogsResponse = z.infer<typeof GetMcpServerCallLogsResponseSchema>;

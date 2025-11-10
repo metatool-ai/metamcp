@@ -51,5 +51,19 @@
   "resetToDefaults": "重置为默认值",
   "confirmReset": "您确定要将所有设置重置为默认值吗？",
   "resetConfirmation": "此操作无法撤消。所有自定义设置都将丢失。",
-  "reset": "重置"
+  "reset": "重置",
+  "emailDomainWhitelist": "邮箱域名白名单",
+  "emailDomainWhitelistDescription": "控制哪些邮箱域名允许注册和登录",
+  "allowedEmailDomains": "允许的邮箱域名",
+  "allowedEmailDomainsDescription": "输入允许注册和登录的邮箱域名列表，用逗号分隔。例如：example.com, company.com",
+  "leaveEmptyToAllowAll": "留空以允许所有邮箱域名",
+  "emailDomainsUpdated": "邮箱域名白名单更新成功",
+  "emailDomainsUpdateFailed": "邮箱域名白名单更新失败",
+  "oauthClientDomainWhitelist": "OAuth 客户端域名白名单",
+  "oauthClientDomainWhitelistDescription": "控制哪些域名允许通过动态客户端注册来注册 OAuth 客户端",
+  "allowedOAuthClientDomains": "允许的 OAuth 客户端域名",
+  "allowedOAuthClientDomainsDescription": "输入允许注册 OAuth 客户端的域名列表，用逗号分隔。例如：example.com, myapp.com。支持精确匹配和子域名。",
+  "leaveEmptyToAllowAllDomains": "留空以允许所有域名",
+  "oauthClientDomainsUpdated": "OAuth 客户端域名白名单更新成功",
+  "oauthClientDomainsUpdateFailed": "OAuth 客户端域名白名单更新失败"
 }

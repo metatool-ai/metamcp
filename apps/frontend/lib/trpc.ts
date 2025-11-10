@@ -1,9 +1,6 @@
-import { createAppRouter } from "@repo/trpc";
+import type { AppRouter } from "@repo/trpc";
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 import { type CreateTRPCReact, createTRPCReact } from "@trpc/react-query";
-
-// Create a type that matches the backend router
-type AppRouter = ReturnType<typeof createAppRouter>;
 
 // Create the tRPC client
 export const trpc: CreateTRPCReact<AppRouter, unknown> =
@@ -25,10 +22,26 @@ export const reactTrpcClient = trpc.createClient({
   ],
 });
 
+// Get the base URL for tRPC
+function getTrpcUrl() {
+  // Server-side: use internal URL or fallback to localhost
+  if (typeof window === "undefined") {
+    // Check if APP_URL is set in environment
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
+    if (appUrl) {
+      return `${appUrl}/trpc`;
+    }
+    // Fallback to localhost
+    return `http://localhost:${process.env.PORT || 3000}/trpc`;
+  }
+  // Client-side: use relative URL
+  return "/trpc";
+}
+
 export const vanillaTrpcClient = createTRPCProxyClient<AppRouter>({
   links: [
     httpBatchLink({
-      url: "/trpc",
+      url: getTrpcUrl(),
       // Include credentials (cookies) in requests for better-auth
       fetch(url, options) {
         return fetch(url, {

@@ -3,12 +3,13 @@ import {
   NamespaceToolOverridesUpdate,
   NamespaceToolStatusUpdate,
 } from "@repo/zod-types";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../index";
 import {
   namespaceServerMappingsTable,
   namespaceToolMappingsTable,
+  toolsTable,
 } from "../schema";
 
 export class NamespaceMappingsRepository {
@@ -53,6 +54,7 @@ export class NamespaceMappingsRepository {
       .set({
         override_name: input.overrideName,
         override_description: input.overrideDescription,
+        override_annotations: input.overrideAnnotations,
       })
       .where(
         and(
@@ -141,11 +143,27 @@ export class NamespaceMappingsRepository {
       return [];
     }
 
+    // First, get the annotations from tools table for each tool
+    const toolUuids = input.toolMappings.map(m => m.toolUuid);
+    const toolAnnotations = await db
+      .select({
+        uuid: toolsTable.uuid,
+        annotations: toolsTable.annotations,
+      })
+      .from(toolsTable)
+      .where(inArray(toolsTable.uuid, toolUuids));
+
+    const annotationsMap = new Map(
+      toolAnnotations.map(t => [t.uuid, t.annotations])
+    );
+
     const mappingsToInsert = input.toolMappings.map((mapping) => ({
       namespace_uuid: input.namespaceUuid,
       tool_uuid: mapping.toolUuid,
       mcp_server_uuid: mapping.serverUuid,
       status: (mapping.status || "ACTIVE") as "ACTIVE" | "INACTIVE",
+      // Initialize override_annotations with annotations from tools table
+      override_annotations: annotationsMap.get(mapping.toolUuid) || {},
     }));
 
     // Upsert the mappings - if they exist, update the status; if not, insert them
@@ -160,6 +178,7 @@ export class NamespaceMappingsRepository {
         set: {
           status: sql`excluded.status`,
           mcp_server_uuid: sql`excluded.mcp_server_uuid`,
+          // Don't update override_annotations on conflict - preserve user changes
         },
       })
       .returning();

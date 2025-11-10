@@ -1,9 +1,13 @@
 import express from "express";
 
+import { auth } from "../../auth";
 import { oauthRepository } from "../../db/repositories";
+import { configService } from "../../lib/config.service";
+import { logRegistrationRequest } from "./logging-middleware";
 import {
   generateSecureClientId,
   generateSecureClientSecret,
+  getBaseUrl,
   rateLimitToken,
   validateRedirectUri,
 } from "./utils";
@@ -15,7 +19,11 @@ const registrationRouter = express.Router();
  * Allows clients to dynamically register with the authorization server
  * Implementation follows RFC 7591 with OAuth 2.1 security enhancements
  */
-registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
+registrationRouter.post(
+  "/oauth/register",
+  logRegistrationRequest,
+  rateLimitToken,
+  async (req, res) => {
   try {
     // Check if body was parsed correctly
     if (!req.body || typeof req.body !== "object") {
@@ -24,6 +32,48 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
         error_description: "Request body is missing or malformed",
       });
     }
+
+    // Verify user authentication by checking session cookies
+    if (!req.headers.cookie) {
+      return res.status(401).json({
+        error: "unauthorized",
+        error_description: "User must be authenticated to register OAuth clients",
+      });
+    }
+
+    // Verify the session using better-auth
+    const baseUrl = getBaseUrl(req);
+    const sessionUrl = new URL("/api/auth/get-session", baseUrl);
+    const headers = new Headers();
+    headers.set("cookie", req.headers.cookie);
+
+    const sessionRequest = new Request(sessionUrl.toString(), {
+      method: "GET",
+      headers,
+    });
+
+    const sessionResponse = await auth.handler(sessionRequest);
+
+    if (!sessionResponse.ok) {
+      return res.status(401).json({
+        error: "unauthorized",
+        error_description: "Invalid or expired session",
+      });
+    }
+
+    const sessionData = (await sessionResponse.json()) as {
+      user?: { id: string; email?: string };
+    };
+
+    if (!sessionData?.user?.id) {
+      return res.status(401).json({
+        error: "unauthorized",
+        error_description: "User must be authenticated to register OAuth clients",
+      });
+    }
+
+    const userId = sessionData.user.id;
+    const userEmail = sessionData.user.email;
 
     const {
       redirect_uris,
@@ -34,6 +84,7 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
       logo_uri,
       scope,
       contacts,
+      email,
       tos_uri,
       policy_uri,
       token_endpoint_auth_method,
@@ -60,6 +111,17 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
         return res.status(400).json({
           error: "invalid_redirect_uri",
           error_description: `Invalid redirect URI: ${uri}. Must use secure scheme and valid format.`,
+        });
+      }
+    }
+
+    // Check if redirect URI domains are allowed (domain whitelist)
+    for (const uri of redirect_uris) {
+      const isAllowed = await configService.isOAuthClientDomainAllowed(uri);
+      if (!isAllowed) {
+        return res.status(403).json({
+          error: "unauthorized_client",
+          error_description: `Redirect URI domain not allowed: ${uri}. Please contact the administrator to whitelist your domain.`,
         });
       }
     }
@@ -126,16 +188,36 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
       clientSecret = generateSecureClientSecret();
     }
 
+    // Extract email from email field or first contact
+    let clientEmail: string | null = null;
+    if (email && typeof email === "string") {
+      clientEmail = email;
+    } else if (contacts && Array.isArray(contacts) && contacts.length > 0) {
+      // Use first contact as email if it looks like an email
+      const firstContact = contacts[0];
+      if (
+        typeof firstContact === "string" &&
+        firstContact.includes("@") &&
+        firstContact.includes(".")
+      ) {
+        clientEmail = firstContact;
+      }
+    }
+
     // Create client registration
+    // MCP clients registered via Dynamic Client Registration do not get admin panel access by default
     const clientRegistration = {
       client_id: clientId,
       client_secret: clientSecret,
       client_name: client_name || "Unnamed MCP Client",
+      email: clientEmail,
+      user_id: userId, // Link client to the authenticated user
       redirect_uris: redirect_uris,
       grant_types: clientGrantTypes,
       response_types: clientResponseTypes,
       token_endpoint_auth_method: clientTokenEndpointAuthMethod,
       scope: scope || "admin",
+      can_access_admin: false, // MCP clients cannot access admin panel
       client_uri: client_uri || null,
       logo_uri: logo_uri || null,
       contacts: contacts && Array.isArray(contacts) ? contacts : null,
@@ -150,7 +232,6 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
     await oauthRepository.upsertClient(clientRegistration);
 
     // Prepare response according to RFC 7591 with OAuth 2.1 guidance
-    const baseUrl = req.protocol + "://" + req.get("host");
     const response: any = {
       client_id: clientId,
       client_name: clientRegistration.client_name,
@@ -221,6 +302,7 @@ registrationRouter.get("/oauth/register", async (req, res) => {
 
       optional_parameters: {
         client_name: "Human-readable name for your application",
+        email: "Contact email for the client (or use contacts array)",
         grant_types: "OAuth grant types (default: ['authorization_code'])",
         response_types: "OAuth response types (default: ['code'])",
         token_endpoint_auth_method:

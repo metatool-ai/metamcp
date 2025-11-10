@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import { ReactNode } from "react";
 
-import { SUPPORTED_LOCALES, SupportedLocale } from "../../lib/i18n";
+import { TranslationsProvider } from "@/context/TranslationsContext";
+import {
+  loadTranslations,
+  SUPPORTED_LOCALES,
+  SupportedLocale,
+} from "../../lib/i18n";
 
 interface LocaleLayoutProps {
   children: ReactNode;
@@ -19,5 +24,14 @@ export default async function LocaleLayout({
     notFound();
   }
 
-  return <div lang={locale}>{children}</div>;
+  // Load translations on the server
+  const translations = await loadTranslations(locale as SupportedLocale);
+
+  return (
+    <div lang={locale}>
+      <TranslationsProvider translations={translations} locale={locale as SupportedLocale}>
+        {children}
+      </TranslationsProvider>
+    </div>
+  );
 }

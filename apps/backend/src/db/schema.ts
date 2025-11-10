@@ -4,6 +4,7 @@ import {
   McpServerErrorStatusEnum,
   McpServerStatusEnum,
   McpServerTypeEnum,
+  ToolAccessTypeEnum,
 } from "@repo/zod-types";
 import { sql } from "drizzle-orm";
 import {
@@ -29,6 +30,11 @@ export const mcpServerStatusEnum = pgEnum(
 export const mcpServerErrorStatusEnum = pgEnum(
   "mcp_server_error_status",
   McpServerErrorStatusEnum.options,
+);
+// Legacy enum - will be removed in future migration
+export const toolAccessTypeEnum = pgEnum(
+  "tool_access_type",
+  ToolAccessTypeEnum.options,
 );
 
 export const mcpServersTable = pgTable(
@@ -118,6 +124,16 @@ export const toolsTable = pgTable(
         required?: string[];
       }>()
       .notNull(),
+    annotations: jsonb("annotations")
+      .$type<{
+        title?: string;
+        readOnlyHint?: boolean;
+        destructiveHint?: boolean;
+        idempotentHint?: boolean;
+        openWorldHint?: boolean;
+      }>()
+      .notNull()
+      .default({}),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -144,6 +160,7 @@ export const usersTable = pgTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -323,6 +340,13 @@ export const namespaceToolMappingsTable = pgTable(
       .default(McpServerStatusEnum.Enum.ACTIVE),
     override_name: text("override_name"),
     override_description: text("override_description"),
+    override_annotations: jsonb("override_annotations").$type<{
+      title?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    }>(),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -384,6 +408,10 @@ export const oauthClientsTable = pgTable("oauth_clients", {
   client_id: text("client_id").primaryKey(),
   client_secret: text("client_secret"),
   client_name: text("client_name").notNull(),
+  email: text("email"), // Email from OIDC or manual registration
+  user_id: text("user_id").references(() => usersTable.id, {
+    onDelete: "set null",
+  }), // User who registered this OAuth client
   redirect_uris: text("redirect_uris")
     .array()
     .notNull()
@@ -400,6 +428,7 @@ export const oauthClientsTable = pgTable("oauth_clients", {
     .notNull()
     .default("none"),
   scope: text("scope").default("admin"),
+  can_access_admin: boolean("can_access_admin").notNull().default(false),
   client_uri: text("client_uri"),
   logo_uri: text("logo_uri"),
   contacts: text("contacts").array(),
@@ -463,5 +492,112 @@ export const oauthAccessTokensTable = pgTable(
     index("oauth_access_tokens_client_id_idx").on(table.client_id),
     index("oauth_access_tokens_user_id_idx").on(table.user_id),
     index("oauth_access_tokens_expires_at_idx").on(table.expires_at),
+  ],
+);
+
+// OAuth Request Logs table - for auditing and debugging OAuth flows
+export const oauthRequestLogsTable = pgTable(
+  "oauth_request_logs",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    client_id: text("client_id").references(() => oauthClientsTable.client_id, {
+      onDelete: "set null",
+    }),
+    user_id: text("user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    request_type: text("request_type").notNull(), // 'authorization', 'token', 'refresh', 'userinfo', etc
+    request_method: text("request_method").notNull(), // GET, POST, etc
+    request_path: text("request_path").notNull(),
+    request_query: jsonb("request_query").$type<Record<string, string>>(),
+    request_headers: jsonb("request_headers").$type<Record<string, string>>(),
+    request_body: jsonb("request_body").$type<Record<string, any>>(),
+    response_status: text("response_status").notNull(), // '200', '400', '401', etc
+    response_body: jsonb("response_body").$type<Record<string, any>>(),
+    error_message: text("error_message"),
+    ip_address: text("ip_address"),
+    user_agent: text("user_agent"),
+    duration_ms: text("duration_ms"), // Duration in milliseconds
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("oauth_request_logs_client_id_idx").on(table.client_id),
+    index("oauth_request_logs_user_id_idx").on(table.user_id),
+    index("oauth_request_logs_request_type_idx").on(table.request_type),
+    index("oauth_request_logs_created_at_idx").on(table.created_at),
+  ],
+);
+
+// MCP Request Logs table - for auditing MCP requests from OAuth clients
+export const mcpRequestLogsTable = pgTable(
+  "mcp_request_logs",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    client_id: text("client_id").references(() => oauthClientsTable.client_id, {
+      onDelete: "set null",
+    }),
+    user_id: text("user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    session_id: text("session_id"), // SSE session ID
+    endpoint_name: text("endpoint_name"), // MetaMCP endpoint name
+    namespace_uuid: text("namespace_uuid"), // Namespace UUID
+    request_type: text("request_type").notNull(), // 'list_tools', 'call_tool', 'list_prompts', etc
+    request_params: jsonb("request_params").$type<Record<string, any>>(), // MCP request parameters
+    response_result: jsonb("response_result").$type<Record<string, any>>(), // MCP response result
+    response_status: text("response_status").notNull(), // 'success', 'error'
+    error_message: text("error_message"),
+    tool_name: text("tool_name"), // For call_tool requests
+    duration_ms: text("duration_ms"), // Duration in milliseconds
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("mcp_request_logs_client_id_idx").on(table.client_id),
+    index("mcp_request_logs_user_id_idx").on(table.user_id),
+    index("mcp_request_logs_session_id_idx").on(table.session_id),
+    index("mcp_request_logs_endpoint_name_idx").on(table.endpoint_name),
+    index("mcp_request_logs_request_type_idx").on(table.request_type),
+    index("mcp_request_logs_tool_name_idx").on(table.tool_name),
+    index("mcp_request_logs_created_at_idx").on(table.created_at),
+  ],
+);
+
+// MCP Server Call Logs table - for auditing calls from MetaMCP to real MCP servers
+export const mcpServerCallLogsTable = pgTable(
+  "mcp_server_call_logs",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    client_id: text("client_id").references(() => oauthClientsTable.client_id, {
+      onDelete: "set null",
+    }),
+    user_id: text("user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    session_id: text("session_id"), // SSE session ID that initiated this call
+    endpoint_name: text("endpoint_name"), // MetaMCP endpoint name
+    namespace_uuid: text("namespace_uuid"), // Namespace UUID
+    mcp_server_uuid: text("mcp_server_uuid"), // UUID of the MCP server that was called
+    mcp_server_name: text("mcp_server_name"), // Name of the MCP server
+    tool_name: text("tool_name").notNull(), // Tool that was called on the MCP server
+    tool_arguments: jsonb("tool_arguments").$type<Record<string, any>>(), // Arguments passed to the tool
+    result: jsonb("result").$type<Record<string, any>>(), // Result from the tool execution
+    status: text("status").notNull(), // 'success', 'error'
+    error_message: text("error_message"),
+    duration_ms: text("duration_ms"), // Duration in milliseconds
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("mcp_server_call_logs_client_id_idx").on(table.client_id),
+    index("mcp_server_call_logs_user_id_idx").on(table.user_id),
+    index("mcp_server_call_logs_session_id_idx").on(table.session_id),
+    index("mcp_server_call_logs_mcp_server_uuid_idx").on(table.mcp_server_uuid),
+    index("mcp_server_call_logs_tool_name_idx").on(table.tool_name),
+    index("mcp_server_call_logs_created_at_idx").on(table.created_at),
   ],
 );

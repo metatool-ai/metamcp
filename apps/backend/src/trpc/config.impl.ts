@@ -107,4 +107,49 @@ export const configImplementations = {
   > => {
     return await configService.getAuthProviders();
   },
+
+  getAuthConfig: async (): Promise<{
+    isSignupDisabled: boolean;
+    isBasicAuthDisabled: boolean;
+    isOidcEnabled: boolean;
+  }> => {
+    const [isSignupDisabled, isBasicAuthDisabled, authProviders] =
+      await Promise.all([
+        configService.isSignupDisabled(),
+        configService.isBasicAuthDisabled(),
+        configService.getAuthProviders(),
+      ]);
+
+    const isOidcEnabled = authProviders.some(
+      (provider) => provider.id === "oidc" && provider.enabled,
+    );
+
+    return {
+      isSignupDisabled,
+      isBasicAuthDisabled,
+      isOidcEnabled,
+    };
+  },
+
+  getAllowedEmailDomains: async (): Promise<string> => {
+    return await configService.getAllowedEmailDomainsString();
+  },
+
+  setAllowedEmailDomains: async (input: {
+    domains: string;
+  }): Promise<{ success: boolean }> => {
+    await configService.setAllowedEmailDomainsString(input.domains);
+    return { success: true };
+  },
+
+  getAllowedOAuthClientDomains: async (): Promise<string> => {
+    return await configService.getAllowedOAuthClientDomainsString();
+  },
+
+  setAllowedOAuthClientDomains: async (input: {
+    domains: string;
+  }): Promise<{ success: boolean }> => {
+    await configService.setAllowedOAuthClientDomainsString(input.domains);
+    return { success: true };
+  },
 };

@@ -11,7 +11,7 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
-import { protectedProcedure, router } from "../../trpc";
+import { adminProcedure, router } from "../../trpc";
 
 // Define the MCP servers router with procedure definitions
 // The actual implementation will be provided by the backend
@@ -48,47 +48,47 @@ export const createMcpServersRouter = (
   },
 ) => {
   return router({
-    // Protected: List all MCP servers
-    list: protectedProcedure
+    // Admin only: List all MCP servers
+    list: adminProcedure
       .output(ListMcpServersResponseSchema)
       .query(async ({ ctx }) => {
         return await implementations.list(ctx.user.id);
       }),
 
-    // Protected: Get single MCP server by UUID
-    get: protectedProcedure
+    // Admin only: Get single MCP server by UUID
+    get: adminProcedure
       .input(z.object({ uuid: z.string() }))
       .output(GetMcpServerResponseSchema)
       .query(async ({ input, ctx }) => {
         return await implementations.get(input, ctx.user.id);
       }),
 
-    // Protected: Create MCP server
-    create: protectedProcedure
+    // Admin only: Create MCP server
+    create: adminProcedure
       .input(CreateMcpServerRequestSchema)
       .output(CreateMcpServerResponseSchema)
       .mutation(async ({ input, ctx }) => {
         return await implementations.create(input, ctx.user.id);
       }),
 
-    // Protected: Bulk import MCP servers
-    bulkImport: protectedProcedure
+    // Admin only: Bulk import MCP servers
+    bulkImport: adminProcedure
       .input(BulkImportMcpServersRequestSchema)
       .output(BulkImportMcpServersResponseSchema)
       .mutation(async ({ input, ctx }) => {
         return await implementations.bulkImport(input, ctx.user.id);
       }),
 
-    // Protected: Delete MCP server
-    delete: protectedProcedure
+    // Admin only: Delete MCP server
+    delete: adminProcedure
       .input(z.object({ uuid: z.string() }))
       .output(DeleteMcpServerResponseSchema)
       .mutation(async ({ input, ctx }) => {
         return await implementations.delete(input, ctx.user.id);
       }),
 
-    // Protected: Update MCP server
-    update: protectedProcedure
+    // Admin only: Update MCP server
+    update: adminProcedure
       .input(UpdateMcpServerRequestSchema)
       .output(UpdateMcpServerResponseSchema)
       .mutation(async ({ input, ctx }) => {

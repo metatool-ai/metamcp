@@ -59,6 +59,7 @@ export class NamespacesSerializer {
       name: dbTool.name,
       description: dbTool.description,
       toolSchema: dbTool.toolSchema,
+      annotations: dbTool.annotations,
       created_at: dbTool.created_at.toISOString(),
       updated_at: dbTool.updated_at.toISOString(),
       mcp_server_uuid: dbTool.mcp_server_uuid,
@@ -67,6 +68,7 @@ export class NamespacesSerializer {
       serverUuid: dbTool.serverUuid,
       overrideName: dbTool.overrideName,
       overrideDescription: dbTool.overrideDescription,
+      overrideAnnotations: dbTool.overrideAnnotations,
     };
   }
 

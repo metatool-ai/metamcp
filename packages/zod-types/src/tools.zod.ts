@@ -4,6 +4,21 @@ import { z } from "zod";
 export const ToolStatusEnum = z.enum(["ACTIVE", "INACTIVE"]);
 export type ToolStatus = z.infer<typeof ToolStatusEnum>;
 
+// MCP Tool Annotations (2025-06-18 spec)
+export const ToolAnnotationsSchema = z.object({
+  title: z.string().optional(),
+  readOnlyHint: z.boolean().optional(),
+  destructiveHint: z.boolean().optional(),
+  idempotentHint: z.boolean().optional(),
+  openWorldHint: z.boolean().optional(),
+});
+
+export type ToolAnnotations = z.infer<typeof ToolAnnotationsSchema>;
+
+// Legacy: Keep for migration purposes
+export const ToolAccessTypeEnum = z.enum(["read", "write"]);
+export type ToolAccessType = z.infer<typeof ToolAccessTypeEnum>;
+
 // Tool schema
 export const ToolSchema = z.object({
   uuid: z.string().uuid(),
@@ -14,6 +29,7 @@ export const ToolSchema = z.object({
     properties: z.record(z.any()).optional(),
     required: z.array(z.string()).optional(),
   }),
+  annotations: ToolAnnotationsSchema.default({}),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
   mcp_server_uuid: z.string().uuid(),
@@ -44,6 +60,7 @@ export const CreateToolRequestSchema = z.object({
         properties: z.record(z.any()).optional(),
         required: z.array(z.string()).optional(),
       }),
+      annotations: ToolAnnotationsSchema.optional(),
     }),
   ),
 });
@@ -75,6 +92,7 @@ export const ToolCreateInputSchema = z.object({
     properties: z.record(z.any()).optional(),
     required: z.array(z.string()).optional(),
   }),
+  annotations: ToolAnnotationsSchema.default({}),
   mcp_server_uuid: z.string(),
 });
 
@@ -89,6 +107,7 @@ export const ToolUpsertInputSchema = z.object({
           required: z.array(z.string()).optional(),
         })
         .optional(),
+      annotations: ToolAnnotationsSchema.optional(),
     }),
   ),
   mcpServerUuid: z.string(),
@@ -107,9 +126,28 @@ export const DatabaseToolSchema = z.object({
     properties: z.record(z.any()).optional(),
     required: z.array(z.string()).optional(),
   }),
+  annotations: ToolAnnotationsSchema.default({}),
   created_at: z.date(),
   updated_at: z.date(),
   mcp_server_uuid: z.string(),
 });
 
 export type DatabaseTool = z.infer<typeof DatabaseToolSchema>;
+
+// Update tool annotations
+export const UpdateToolAnnotationsRequestSchema = z.object({
+  toolUuid: z.string().uuid(),
+  annotations: ToolAnnotationsSchema,
+});
+
+export const UpdateToolAnnotationsResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+});
+
+export type UpdateToolAnnotationsRequest = z.infer<
+  typeof UpdateToolAnnotationsRequestSchema
+>;
+export type UpdateToolAnnotationsResponse = z.infer<
+  typeof UpdateToolAnnotationsResponseSchema
+>;

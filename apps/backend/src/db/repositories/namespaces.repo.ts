@@ -49,6 +49,7 @@ export class NamespacesRepository {
           .select({
             uuid: toolsTable.uuid,
             mcp_server_uuid: toolsTable.mcp_server_uuid,
+            annotations: toolsTable.annotations,
           })
           .from(toolsTable)
           .where(inArray(toolsTable.mcp_server_uuid, input.mcpServerUuids));
@@ -59,6 +60,8 @@ export class NamespacesRepository {
             tool_uuid: tool.uuid,
             mcp_server_uuid: tool.mcp_server_uuid,
             status: "ACTIVE" as const,
+            // Initialize override_annotations with annotations from tools table
+            override_annotations: tool.annotations || {},
           }));
 
           await tx.insert(namespaceToolMappingsTable).values(toolMappings);
@@ -247,6 +250,7 @@ export class NamespacesRepository {
         name: toolsTable.name,
         description: toolsTable.description,
         toolSchema: toolsTable.toolSchema,
+        annotations: toolsTable.annotations,
         created_at: toolsTable.created_at,
         updated_at: toolsTable.updated_at,
         mcp_server_uuid: toolsTable.mcp_server_uuid,
@@ -257,6 +261,7 @@ export class NamespacesRepository {
         status: namespaceToolMappingsTable.status,
         overrideName: namespaceToolMappingsTable.override_name,
         overrideDescription: namespaceToolMappingsTable.override_description,
+        overrideAnnotations: namespaceToolMappingsTable.override_annotations,
       })
       .from(toolsTable)
       .innerJoin(
@@ -339,6 +344,7 @@ export class NamespacesRepository {
             .select({
               uuid: toolsTable.uuid,
               mcp_server_uuid: toolsTable.mcp_server_uuid,
+              annotations: toolsTable.annotations,
             })
             .from(toolsTable)
             .where(inArray(toolsTable.mcp_server_uuid, input.mcpServerUuids));
@@ -351,6 +357,8 @@ export class NamespacesRepository {
               // Preserve existing status if tool was previously mapped, otherwise default to ACTIVE
               status:
                 existingToolStatusMap.get(tool.uuid) || ("ACTIVE" as const),
+              // Initialize override_annotations with annotations from tools table
+              override_annotations: tool.annotations || {},
             }));
 
             await tx.insert(namespaceToolMappingsTable).values(toolMappings);

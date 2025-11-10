@@ -28,6 +28,13 @@ export interface ToolOverridesConfig {
 interface ToolOverride {
   overrideName?: string | null;
   overrideDescription?: string | null;
+  overrideAnnotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  } | null;
 }
 
 /**
@@ -181,6 +188,7 @@ async function getToolOverrides(
       .select({
         overrideName: namespaceToolMappingsTable.override_name,
         overrideDescription: namespaceToolMappingsTable.override_description,
+        overrideAnnotations: namespaceToolMappingsTable.override_annotations,
       })
       .from(namespaceToolMappingsTable)
       .innerJoin(
@@ -198,6 +206,7 @@ async function getToolOverrides(
     const override: ToolOverride = {
       overrideName: toolMapping?.overrideName || null,
       overrideDescription: toolMapping?.overrideDescription || null,
+      overrideAnnotations: toolMapping?.overrideAnnotations || null,
     };
 
     // Cache the result if found and caching is enabled
@@ -276,10 +285,19 @@ async function applyToolOverrides(
             ? override.overrideDescription
             : tool.description;
 
+        // For annotations: use override annotations if present, else use from MCP server
+        // overrideAnnotations is initialized with tool.annotations during mapping creation
+        // Priority: overrideAnnotations (from DB) > annotations from live MCP server
+        const finalAnnotations =
+          override.overrideAnnotations !== null && override.overrideAnnotations !== undefined
+            ? override.overrideAnnotations
+            : tool.annotations;
+
         const overriddenTool: Tool = {
           ...tool,
           name: overriddenName,
           description: overriddenDescription,
+          annotations: finalAnnotations,
         };
 
         // Update reverse mapping cache for the new full override name

@@ -15,6 +15,7 @@ export interface ApiKeyAuthenticatedRequest extends express.Request {
   apiKeyUserId?: string;
   apiKeyUuid?: string;
   oauthUserId?: string; // For OAuth-authenticated requests
+  oauthClientId?: string; // OAuth client ID for logging
   authMethod?: "api_key" | "oauth"; // Track which auth method was used
 }
 
@@ -55,6 +56,7 @@ async function validateOAuthToken(
 ): Promise<{
   valid: boolean;
   user_id?: string;
+  client_id?: string;
   scopes?: string[];
   error?: string;
 }> {
@@ -84,20 +86,37 @@ async function validateOAuthToken(
         const introspectData = (await introspectResponse.json()) as {
           active?: boolean;
           sub?: string;
+          client_id?: string;
           scope?: string;
         };
+
+        console.log("[OAuth Middleware] Token introspection result:", {
+          active: introspectData.active,
+          user_id: introspectData.sub,
+          client_id: introspectData.client_id,
+          hasScope: !!introspectData.scope,
+        });
 
         if (!introspectData.active) {
           return { valid: false, error: "Token is not active" };
         }
 
-        return {
+        const result = {
           valid: true,
           user_id: introspectData.sub,
+          client_id: introspectData.client_id,
           scopes: introspectData.scope
             ? introspectData.scope.split(" ")
             : ["admin"],
         };
+
+        console.log("[OAuth Middleware] Returning validation result:", {
+          valid: result.valid,
+          user_id: result.user_id,
+          client_id: result.client_id,
+        });
+
+        return result;
       } catch (error) {
         console.error("Error introspecting MCP token:", error);
         return { valid: false, error: "Token validation failed" };
@@ -243,7 +262,14 @@ export const authenticateApiKey = async (
         if (oauthResult.valid) {
           // OAuth token valid - perform access control and pass
           authReq.oauthUserId = oauthResult.user_id;
+          authReq.oauthClientId = oauthResult.client_id;
           authReq.authMethod = "oauth";
+
+          console.log("[OAuth Middleware] OAuth authentication successful (CONDITION 3):", {
+            userId: authReq.oauthUserId,
+            clientId: authReq.oauthClientId,
+            endpoint: authReq.endpointName,
+          });
 
           const accessCheckResult = checkOAuthAccess(oauthResult, endpoint);
           if (!accessCheckResult.allowed) {
@@ -313,7 +339,14 @@ export const authenticateApiKey = async (
       if (oauthResult.valid) {
         // OAuth token valid - perform access control and pass
         authReq.oauthUserId = oauthResult.user_id;
+        authReq.oauthClientId = oauthResult.client_id;
         authReq.authMethod = "oauth";
+
+        console.log("[OAuth Middleware] OAuth authentication successful (CONDITION 4):", {
+          userId: authReq.oauthUserId,
+          clientId: authReq.oauthClientId,
+          endpoint: authReq.endpointName,
+        });
 
         const accessCheckResult = checkOAuthAccess(oauthResult, endpoint);
         if (!accessCheckResult.allowed) {
@@ -322,7 +355,7 @@ export const authenticateApiKey = async (
             error_description: accessCheckResult.message,
             timestamp: new Date().toISOString(),
           });
-        }
+          }
 
         return next();
       } else {

@@ -49,6 +49,7 @@
   "creating": "Creating...",
   "updating": "Updating...",
   "deleting": "Deleting...",
+  "saving": "Saving...",
   "unexpectedError": "An unexpected error occurred",
   "corsError": {
     "title": "CORS Policy Violation",
@@ -73,6 +74,7 @@
     "next": "Next",
     "page": "Page",
     "of": "of",
+    "showing": "Showing",
     "goToPage": "Go to page {{page}}",
     "morePages": "More pages"
   }

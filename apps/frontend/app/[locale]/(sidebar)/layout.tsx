@@ -9,8 +9,9 @@ import {
   SearchCode,
   Server,
   Settings,
+  Shield,
+  Users,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -35,50 +36,79 @@ import {
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTranslations } from "@/hooks/useTranslations";
-import { authClient } from "@/lib/auth-client";
+import { authClient, User, SessionResponse } from "@/lib/auth-client";
 import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
 
-// Menu items function - now takes locale parameter
-const getMenuItems = (t: (key: string) => string, locale: SupportedLocale) => [
-  {
-    title: t("navigation:exploreMcpServers"),
-    url: getLocalizedPath("/search", locale),
-    icon: Search,
-  },
-  {
-    title: t("navigation:mcpServers"),
-    url: getLocalizedPath("/mcp-servers", locale),
-    icon: Server,
-  },
-  {
-    title: t("navigation:metamcpNamespaces"),
-    url: getLocalizedPath("/namespaces", locale),
-    icon: Package,
-  },
-  {
-    title: t("navigation:metamcpEndpoints"),
-    url: getLocalizedPath("/endpoints", locale),
-    icon: LinkIcon,
-  },
-  {
-    title: t("navigation:mcpInspector"),
-    url: getLocalizedPath("/mcp-inspector", locale),
-    icon: SearchCode,
-  },
-  {
-    title: t("navigation:apiKeys"),
-    url: getLocalizedPath("/api-keys", locale),
-    icon: Key,
-  },
-  {
-    title: t("navigation:settings"),
-    url: getLocalizedPath("/settings", locale),
-    icon: Settings,
-  },
-];
+// Menu items function - now takes locale and isAdmin parameters
+const getMenuItems = (t: (key: string) => string, locale: SupportedLocale, isAdmin: boolean = true) => {
+  const allItems = [
+    {
+      title: t("navigation:exploreMcpServers"),
+      url: getLocalizedPath("/search", locale),
+      icon: Search,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:mcpServers"),
+      url: getLocalizedPath("/mcp-servers", locale),
+      icon: Server,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:metamcpNamespaces"),
+      url: getLocalizedPath("/namespaces", locale),
+      icon: Package,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:metamcpEndpoints"),
+      url: getLocalizedPath("/endpoints", locale),
+      icon: LinkIcon,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:mcpInspector"),
+      url: getLocalizedPath("/mcp-inspector", locale),
+      icon: SearchCode,
+      adminOnly: true,
+    },
+    {
+      title: t("navigation:apiKeys"),
+      url: getLocalizedPath("/api-keys", locale),
+      icon: Key,
+      adminOnly: true, // Only admins can manage API keys
+    },
+    {
+      title: t("navigation:oauthClients"),
+      url: getLocalizedPath("/oauth-clients", locale),
+      icon: Shield,
+      adminOnly: true, // Only admins can manage OAuth clients
+    },
+    {
+      title: t("navigation:users"),
+      url: getLocalizedPath("/users", locale),
+      icon: Users,
+      adminOnly: true, // Only admins can manage users
+    },
+    {
+      title: t("navigation:settings"),
+      url: getLocalizedPath("/settings", locale),
+      icon: Settings,
+      adminOnly: true, // Only admins can access settings
+    },
+  ];
 
-function LiveLogsMenuItem() {
+  // Filter items based on admin status
+  return allItems.filter(item => !item.adminOnly || isAdmin);
+};
+
+function LiveLogsMenuItem({ isAdmin }: { isAdmin: boolean }) {
   const { t, locale } = useTranslations();
+
+  // Only show for admins
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <SidebarMenuItem>
@@ -95,13 +125,13 @@ function LiveLogsMenuItem() {
 
 function UserInfoFooter() {
   const { t } = useTranslations();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   // Get user info
   useEffect(() => {
-    authClient.getSession().then((session) => {
+    authClient.getSession().then((session: SessionResponse) => {
       if (session?.data?.user) {
-        setUser(session.data.user);
+        setUser(session.data.user as User);
       }
     });
   }, []);
@@ -153,29 +183,45 @@ export default function SidebarLayout({
   children: React.ReactNode;
 }) {
   const { t, locale } = useTranslations();
-  const items = getMenuItems(t, locale);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Get user info to determine admin status
+  useEffect(() => {
+    authClient.getSession().then((session: SessionResponse) => {
+      if (session?.data?.user) {
+        setUser(session.data.user as User);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+  }, []);
+
+  // If loading, show nothing (or a loader)
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">{t("common:loading")}</div>;
+  }
+
+  // If user is not authenticated, render children without sidebar
+  if (!user) {
+    return (
+      <div className="flex min-h-screen">
+        <div className="flex flex-1 flex-col">
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  // User is authenticated, show sidebar with filtered menu items
+  const items = getMenuItems(t, locale, user.isAdmin);
 
   return (
     <SidebarProvider>
       <Sidebar>
-        <SidebarHeader className="flex flex-col justify-center items-center px-2 py-4">
-          <div className="flex items-center justify-center w-full mb-2">
-            <div className="flex items-center gap-4">
-              <Image
-                src="/favicon.ico"
-                alt="MetaMCP Logo"
-                width={256}
-                height={256}
-                className="h-12 w-12"
-              />
-              <h2 className="text-2xl font-semibold">MetaMCP</h2>
-            </div>
-          </div>
-        </SidebarHeader>
-
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>{t("navigation:application")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {items.map((item) => (
@@ -188,7 +234,7 @@ export default function SidebarLayout({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
-                <LiveLogsMenuItem />
+                <LiveLogsMenuItem isAdmin={user.isAdmin} />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

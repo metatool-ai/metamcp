@@ -5,5 +5,8 @@ export * from "./mcp-servers.repo";
 export * from "./tools.repo";
 export * from "./oauth-sessions.repo";
 export * from "./oauth.repo";
+export * from "./oauth-request-logs.repo";
+export * from "./mcp-request-logs.repo";
 export * from "./api-keys.repo";
 export { configRepo } from "./config.repo";
+export { usersRepo } from "./users.repo";

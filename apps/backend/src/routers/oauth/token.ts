@@ -1,6 +1,7 @@
 import express from "express";
 
 import { oauthRepository } from "../../db/repositories";
+import { logTokenRequest } from "./logging-middleware";
 import { generateSecureAccessToken, rateLimitToken } from "./utils";
 
 const tokenRouter = express.Router();
@@ -10,7 +11,7 @@ const tokenRouter = express.Router();
  * Handles token exchange requests from MCP clients
  * Implements proper PKCE verification and code validation
  */
-tokenRouter.post("/oauth/token", rateLimitToken, async (req, res) => {
+tokenRouter.post("/oauth/token", logTokenRequest, rateLimitToken, async (req, res) => {
   try {
     // Check if body was parsed correctly
     if (!req.body || typeof req.body !== "object") {
@@ -239,7 +240,7 @@ tokenRouter.post("/oauth/introspect", async (req, res) => {
     res.json({
       active: true,
       scope: tokenData.scope,
-      client_id: "mcp_client", // In production, store and return actual client_id
+      client_id: tokenData.client_id,
       token_type: "Bearer",
       exp: Math.floor(tokenData.expires_at.getTime() / 1000),
       iat: Math.floor((tokenData.expires_at.getTime() - 3600 * 1000) / 1000), // Issued 1 hour before expiry

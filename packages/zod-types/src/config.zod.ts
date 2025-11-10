@@ -10,6 +10,8 @@ export const ConfigKeyEnum = z.enum([
   "MCP_MAX_TOTAL_TIMEOUT",
   "MCP_MAX_ATTEMPTS",
   "SESSION_LIFETIME",
+  "ALLOWED_EMAIL_DOMAINS", // Comma-separated list of allowed email domains
+  "ALLOWED_OAUTH_CLIENT_DOMAINS", // Comma-separated list of allowed OAuth client redirect URI domains
 ]);
 
 // Config schema

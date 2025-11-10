@@ -8,6 +8,7 @@ import {
 } from "@/middleware/api-key-oauth.middleware";
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 
+import { mcpSessionStorage } from "../../lib/mcp-session-storage";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
 import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
 
@@ -35,6 +36,9 @@ const cleanupSession = async (sessionId: string, transport?: Transport) => {
     // Remove from session manager
     sessionManager.removeSession(sessionId);
 
+    // Remove from MCP session storage
+    mcpSessionStorage.removeSession(sessionId);
+
     // Clean up MetaMCP server pool session
     await metaMcpServerPool.cleanupSession(sessionId);
 
@@ -43,6 +47,7 @@ const cleanupSession = async (sessionId: string, transport?: Transport) => {
     console.error(`Error during cleanup of session ${sessionId}:`, error);
     // Even if cleanup fails, remove the session from manager to prevent memory leaks
     sessionManager.removeSession(sessionId);
+    mcpSessionStorage.removeSession(sessionId);
     console.log(`Removed orphaned session ${sessionId} due to cleanup error`);
     throw error;
   }
@@ -83,6 +88,26 @@ sseRouter.get(
       );
 
       sessionManager.addSession(sessionId, webAppTransport);
+
+      // Store OAuth client information for this session
+      const sessionInfo = {
+        clientId: authReq.oauthClientId || null,
+        userId: authReq.oauthUserId || authReq.apiKeyUserId || null,
+        authMethod: authReq.authMethod || null,
+        endpointName,
+        namespaceUuid,
+        createdAt: Date.now(),
+      };
+
+      mcpSessionStorage.setSession(sessionId, sessionInfo);
+
+      console.log("[SSE] Stored session info:", {
+        sessionId,
+        clientId: sessionInfo.clientId,
+        userId: sessionInfo.userId,
+        authMethod: sessionInfo.authMethod,
+        endpointName: sessionInfo.endpointName,
+      });
 
       // Handle cleanup when connection closes
       res.on("close", async () => {

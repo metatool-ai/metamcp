@@ -615,6 +615,7 @@ export const namespacesImplementations = {
           serverUuid: input.serverUuid,
           overrideName: input.overrideName,
           overrideDescription: input.overrideDescription,
+          overrideAnnotations: input.overrideAnnotations,
         });
 
       if (!updatedMapping) {
@@ -687,6 +688,13 @@ export const namespacesImplementations = {
         toolName: string;
         description: string;
         inputSchema: Record<string, unknown>;
+        annotations?: {
+          title?: string;
+          readOnlyHint?: boolean;
+          destructiveHint?: boolean;
+          idempotentHint?: boolean;
+          openWorldHint?: boolean;
+        };
       }> = [];
 
       for (const tool of input.tools) {
@@ -738,6 +746,7 @@ export const namespacesImplementations = {
           toolName,
           description: tool.description || "",
           inputSchema: tool.inputSchema,
+          annotations: tool.annotations,
         });
       }
 
@@ -759,6 +768,13 @@ export const namespacesImplementations = {
             toolName: string;
             description: string;
             inputSchema: Record<string, unknown>;
+            annotations?: {
+              title?: string;
+              readOnlyHint?: boolean;
+              destructiveHint?: boolean;
+              idempotentHint?: boolean;
+              openWorldHint?: boolean;
+            };
           }>;
         }
       > = {};
@@ -814,6 +830,7 @@ export const namespacesImplementations = {
           toolName: parsedTool.toolName,
           description: parsedTool.description,
           inputSchema: parsedTool.inputSchema,
+          annotations: parsedTool.annotations,
         });
       }
 
@@ -840,6 +857,7 @@ export const namespacesImplementations = {
             name: tool.toolName, // Use the actual tool name, not the prefixed name
             description: tool.description,
             inputSchema: tool.inputSchema,
+            annotations: tool.annotations,
           })),
         });
 

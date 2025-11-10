@@ -6,13 +6,14 @@ import {
   OAuthClient,
   OAuthClientCreateInput,
 } from "@repo/zod-types";
-import { eq, lt } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 
 import { db } from "../index";
 import {
   oauthAccessTokensTable,
   oauthAuthorizationCodesTable,
   oauthClientsTable,
+  usersTable,
 } from "../schema";
 
 export class OAuthRepository {
@@ -35,9 +36,111 @@ export class OAuthRepository {
         target: oauthClientsTable.client_id,
         set: {
           redirect_uris: clientData.redirect_uris,
+          user_id: clientData.user_id,
           updated_at: new Date(),
         },
       });
+  }
+
+  async getAllClients(): Promise<OAuthClient[]> {
+    const result = await db
+      .select({
+        client_id: oauthClientsTable.client_id,
+        client_secret: oauthClientsTable.client_secret,
+        client_name: oauthClientsTable.client_name,
+        email: usersTable.email, // Get email from users table
+        user_id: oauthClientsTable.user_id,
+        redirect_uris: oauthClientsTable.redirect_uris,
+        grant_types: oauthClientsTable.grant_types,
+        response_types: oauthClientsTable.response_types,
+        token_endpoint_auth_method: oauthClientsTable.token_endpoint_auth_method,
+        scope: oauthClientsTable.scope,
+        can_access_admin: oauthClientsTable.can_access_admin,
+        client_uri: oauthClientsTable.client_uri,
+        logo_uri: oauthClientsTable.logo_uri,
+        contacts: oauthClientsTable.contacts,
+        tos_uri: oauthClientsTable.tos_uri,
+        policy_uri: oauthClientsTable.policy_uri,
+        software_id: oauthClientsTable.software_id,
+        software_version: oauthClientsTable.software_version,
+        created_at: oauthClientsTable.created_at,
+        updated_at: oauthClientsTable.updated_at,
+      })
+      .from(oauthClientsTable)
+      .leftJoin(usersTable, eq(oauthClientsTable.user_id, usersTable.id));
+    return result as OAuthClient[];
+  }
+
+  async getClientsByUserId(userId: string): Promise<OAuthClient[]> {
+    const result = await db
+      .select({
+        client_id: oauthClientsTable.client_id,
+        client_secret: oauthClientsTable.client_secret,
+        client_name: oauthClientsTable.client_name,
+        email: usersTable.email,
+        user_id: oauthClientsTable.user_id,
+        redirect_uris: oauthClientsTable.redirect_uris,
+        grant_types: oauthClientsTable.grant_types,
+        response_types: oauthClientsTable.response_types,
+        token_endpoint_auth_method: oauthClientsTable.token_endpoint_auth_method,
+        scope: oauthClientsTable.scope,
+        can_access_admin: oauthClientsTable.can_access_admin,
+        client_uri: oauthClientsTable.client_uri,
+        logo_uri: oauthClientsTable.logo_uri,
+        contacts: oauthClientsTable.contacts,
+        tos_uri: oauthClientsTable.tos_uri,
+        policy_uri: oauthClientsTable.policy_uri,
+        software_id: oauthClientsTable.software_id,
+        software_version: oauthClientsTable.software_version,
+        created_at: oauthClientsTable.created_at,
+        updated_at: oauthClientsTable.updated_at,
+      })
+      .from(oauthClientsTable)
+      .leftJoin(usersTable, eq(oauthClientsTable.user_id, usersTable.id))
+      .where(eq(oauthClientsTable.user_id, userId));
+    return result as OAuthClient[];
+  }
+
+  async updateClientAdminAccess(
+    clientId: string,
+    canAccessAdmin: boolean,
+  ): Promise<void> {
+    await db
+      .update(oauthClientsTable)
+      .set({ can_access_admin: canAccessAdmin, updated_at: new Date() })
+      .where(eq(oauthClientsTable.client_id, clientId));
+  }
+
+  async deleteClient(clientId: string): Promise<void> {
+    await db
+      .delete(oauthClientsTable)
+      .where(eq(oauthClientsTable.client_id, clientId));
+  }
+
+  async updateClientUserId(
+    clientId: string,
+    userId: string,
+  ): Promise<void> {
+    await db
+      .update(oauthClientsTable)
+      .set({ user_id: userId, updated_at: new Date() })
+      .where(eq(oauthClientsTable.client_id, clientId));
+  }
+
+  async setClientUserIdIfNotSet(
+    clientId: string,
+    userId: string,
+  ): Promise<void> {
+    // Only update if user_id is not already set
+    await db
+      .update(oauthClientsTable)
+      .set({ user_id: userId, updated_at: new Date() })
+      .where(
+        and(
+          eq(oauthClientsTable.client_id, clientId),
+          isNull(oauthClientsTable.user_id)
+        )
+      );
   }
 
   // ===== Authorization Codes =====

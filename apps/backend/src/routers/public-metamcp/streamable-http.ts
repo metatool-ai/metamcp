@@ -9,6 +9,7 @@ import {
 } from "@/middleware/api-key-oauth.middleware";
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 
+import { mcpSessionStorage } from "../../lib/mcp-session-storage";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
 import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
 
@@ -42,6 +43,9 @@ const cleanupSession = async (
     // Remove from session manager
     sessionManager.removeSession(sessionId);
 
+    // Remove from MCP session storage
+    mcpSessionStorage.removeSession(sessionId);
+
     // Clean up MetaMCP server pool session
     await metaMcpServerPool.cleanupSession(sessionId);
 
@@ -50,6 +54,7 @@ const cleanupSession = async (
     console.error(`Error during cleanup of session ${sessionId}:`, error);
     // Even if cleanup fails, remove the session from manager to prevent memory leaks
     sessionManager.removeSession(sessionId);
+    mcpSessionStorage.removeSession(sessionId);
     console.log(`Removed orphaned session ${sessionId} due to cleanup error`);
     throw error;
   }
@@ -167,6 +172,26 @@ streamableHttpRouter.post(
 
         // Store transport reference
         sessionManager.addSession(newSessionId, transport);
+
+        // Store OAuth client information for this session
+        const sessionInfo = {
+          clientId: authReq.oauthClientId || null,
+          userId: authReq.oauthUserId || authReq.apiKeyUserId || null,
+          authMethod: authReq.authMethod || null,
+          endpointName,
+          namespaceUuid,
+          createdAt: Date.now(),
+        };
+
+        mcpSessionStorage.setSession(newSessionId, sessionInfo);
+
+        console.log("[StreamableHttp] Stored session info:", {
+          sessionId: newSessionId,
+          clientId: sessionInfo.clientId,
+          userId: sessionInfo.userId,
+          authMethod: sessionInfo.authMethod,
+          endpointName: sessionInfo.endpointName,
+        });
 
         console.log(
           `Public Endpoint Client <-> Proxy sessionId: ${newSessionId} for endpoint ${endpointName} -> namespace ${namespaceUuid}`,

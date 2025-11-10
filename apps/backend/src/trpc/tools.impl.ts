@@ -3,6 +3,8 @@ import {
   CreateToolResponseSchema,
   GetToolsByMcpServerUuidRequestSchema,
   GetToolsByMcpServerUuidResponseSchema,
+  UpdateToolAnnotationsRequestSchema,
+  UpdateToolAnnotationsResponseSchema,
 } from "@repo/zod-types";
 import { z } from "zod";
 
@@ -61,6 +63,36 @@ export const toolsImplementations = {
         success: false as const,
         count: 0,
         error: error instanceof Error ? error.message : "Internal server error",
+      };
+    }
+  },
+
+  updateAnnotations: async (
+    input: z.infer<typeof UpdateToolAnnotationsRequestSchema>,
+  ): Promise<z.infer<typeof UpdateToolAnnotationsResponseSchema>> => {
+    try {
+      const updatedTool = await toolsRepository.updateAnnotations(
+        input.toolUuid,
+        input.annotations,
+      );
+
+      if (!updatedTool) {
+        return {
+          success: false,
+          message: "Tool not found",
+        };
+      }
+
+      return {
+        success: true,
+        message: "Annotations updated successfully",
+      };
+    } catch (error) {
+      console.error("Error updating tool annotations:", error);
+      return {
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to update annotations",
       };
     }
   },

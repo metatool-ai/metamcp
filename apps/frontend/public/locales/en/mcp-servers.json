@@ -206,6 +206,25 @@
     "foundToolsFromMcp": "Found {{count}} tools from MCP server",
     "noToolsFromMcp": "No tools found on MCP server",
     "failedToFetchTools": "Failed to fetch tools from MCP server",
-    "failedToSaveTools": "Failed to save tools"
+    "failedToSaveTools": "Failed to save tools",
+    "annotations": "Annotations",
+    "editAnnotations": "Edit Tool Annotations",
+    "annotationsDescription": "Configure MCP tool annotations according to 2025-06-18 specification",
+    "title": "Title",
+    "readOnly": "Read Only",
+    "destructive": "Destructive",
+    "idempotent": "Idempotent",
+    "openWorld": "Open World",
+    "default": "Default",
+    "readOnlyHint": "Read-Only Tool",
+    "readOnlyHintDesc": "Tool does not modify its environment",
+    "destructiveHint": "Destructive Updates",
+    "destructiveHintDesc": "Tool may perform destructive updates (only when not read-only)",
+    "idempotentHint": "Idempotent Operations",
+    "idempotentHintDesc": "Calling repeatedly with same args has no additional effect",
+    "openWorldHint": "Open World Interaction",
+    "openWorldHintDesc": "Tool interacts with external entities (e.g. web search)",
+    "annotationsUpdated": "Annotations updated successfully",
+    "updateFailed": "Failed to update annotations"
   }
 }
