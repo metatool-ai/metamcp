@@ -36,15 +36,22 @@ export class ToolsRepository {
         .from(toolsTable)
         .where(eq(toolsTable.mcp_server_uuid, input.mcpServerUuid));
 
-      // Get the names of tools that should exist
+      // Get the names and UUIDs of tools that should exist
       const newToolNames = new Set(input.tools.map((t) => t.name));
+      const preserveToolUuids = new Set(input.preserveToolUuids || []);
 
-      // Delete tools that are no longer in the new list
+      // Delete tools that are:
+      // 1. Not in the new list AND
+      // 2. Not in the preserve list (e.g., INACTIVE tools from a specific namespace)
       const toolsToDelete = currentTools.filter(
-        (tool) => !newToolNames.has(tool.name),
+        (tool) =>
+          !newToolNames.has(tool.name) && !preserveToolUuids.has(tool.uuid),
       );
 
       if (toolsToDelete.length > 0) {
+        console.log(
+          `Deleting ${toolsToDelete.length} tools that are no longer available from server ${input.mcpServerUuid}`,
+        );
         for (const tool of toolsToDelete) {
           await tx.delete(toolsTable).where(eq(toolsTable.uuid, tool.uuid));
         }

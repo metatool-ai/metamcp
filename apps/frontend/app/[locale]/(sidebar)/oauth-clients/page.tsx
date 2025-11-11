@@ -235,7 +235,6 @@ export default function OAuthClientsPage() {
                   <TableHead>{t("oauth-clients:email")}</TableHead>
                   <TableHead>{t("oauth-clients:clientId")}</TableHead>
                   <TableHead>{t("oauth-clients:adminAccess")}</TableHead>
-                  <TableHead>{t("oauth-clients:grantTypes")}</TableHead>
                   <TableHead>{t("oauth-clients:created")}</TableHead>
                   <TableHead className="w-[40px]"></TableHead>
                 </TableRow>
@@ -289,15 +288,6 @@ export default function OAuthClientsPage() {
                             {t("oauth-clients:disabled")}
                           </Badge>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {client.grant_types.map((gt) => (
-                          <Badge key={gt} variant="outline" className="text-xs">
-                            {gt}
-                          </Badge>
-                        ))}
                       </div>
                     </TableCell>
                     <TableCell>

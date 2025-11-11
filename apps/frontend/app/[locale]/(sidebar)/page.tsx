@@ -27,9 +27,8 @@ export default function RootPage() {
           setLoading(false);
         }
       } else {
-        // User is not authenticated
-        setUser(null);
-        setLoading(false);
+        // User is not authenticated - redirect directly to login page
+        router.replace("/login");
       }
     });
   }, [router]);

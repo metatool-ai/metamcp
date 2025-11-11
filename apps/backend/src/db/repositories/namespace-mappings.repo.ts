@@ -166,7 +166,7 @@ export class NamespaceMappingsRepository {
       override_annotations: annotationsMap.get(mapping.toolUuid) || {},
     }));
 
-    // Upsert the mappings - if they exist, update the status; if not, insert them
+    // Upsert the mappings - if they exist, preserve their status; if not, insert them with provided status
     return await db
       .insert(namespaceToolMappingsTable)
       .values(mappingsToInsert)
@@ -176,7 +176,7 @@ export class NamespaceMappingsRepository {
           namespaceToolMappingsTable.tool_uuid,
         ],
         set: {
-          status: sql`excluded.status`,
+          // Don't update status on conflict - preserve user's visibility settings
           mcp_server_uuid: sql`excluded.mcp_server_uuid`,
           // Don't update override_annotations on conflict - preserve user changes
         },

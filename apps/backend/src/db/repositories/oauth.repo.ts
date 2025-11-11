@@ -6,13 +6,14 @@ import {
   OAuthClient,
   OAuthClientCreateInput,
 } from "@repo/zod-types";
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, eq, isNull, lt, sql } from "drizzle-orm";
 
 import { db } from "../index";
 import {
   oauthAccessTokensTable,
   oauthAuthorizationCodesTable,
   oauthClientsTable,
+  oauthRequestLogsTable,
   usersTable,
 } from "../schema";
 
@@ -112,9 +113,24 @@ export class OAuthRepository {
   }
 
   async deleteClient(clientId: string): Promise<void> {
-    await db
-      .delete(oauthClientsTable)
-      .where(eq(oauthClientsTable.client_id, clientId));
+    // Explicitly delete all related records to ensure clean deletion
+    // (CASCADE DELETE should handle this, but we explicitly clean up to be safe)
+    await db.transaction(async (tx) => {
+      // Delete all access tokens for this client
+      await tx
+        .delete(oauthAccessTokensTable)
+        .where(eq(oauthAccessTokensTable.client_id, clientId));
+
+      // Delete all authorization codes for this client
+      await tx
+        .delete(oauthAuthorizationCodesTable)
+        .where(eq(oauthAuthorizationCodesTable.client_id, clientId));
+
+      // Finally, delete the client itself
+      await tx
+        .delete(oauthClientsTable)
+        .where(eq(oauthClientsTable.client_id, clientId));
+    });
   }
 
   async updateClientUserId(
@@ -219,6 +235,7 @@ export class OAuthRepository {
         .where(lt(oauthAccessTokensTable.expires_at, now)),
     ]);
   }
+
 }
 
 export const oauthRepository = new OAuthRepository();
