@@ -435,10 +435,10 @@ export function useConnection({
                 },
                 // Use maxTotalTimeout from database for reconnection delay, with fallback to 30s
                 reconnectionOptions: {
-                  maxReconnectionDelay: mcpMaxTotalTimeout ?? 30000,
+                  maxReconnectionDelay: mcpMaxTotalTimeout ?? 8640000,
                   initialReconnectionDelay: 1000,
                   reconnectionDelayGrowFactor: 1.5,
-                  maxRetries: 2,
+                  maxRetries: 100,
                 },
               };
               break;
@@ -464,10 +464,10 @@ export function useConnection({
                 },
                 // Use maxTotalTimeout from database for reconnection delay, with fallback to 30s
                 reconnectionOptions: {
-                  maxReconnectionDelay: mcpMaxTotalTimeout ?? 30000,
+                  maxReconnectionDelay: mcpMaxTotalTimeout ?? 8640000,
                   initialReconnectionDelay: 1000,
                   reconnectionDelayGrowFactor: 1.5,
-                  maxRetries: 2,
+                  maxRetries: 100,
                 },
               };
               break;
@@ -494,10 +494,10 @@ export function useConnection({
                 },
                 // Use maxTotalTimeout from database for reconnection delay, with fallback to 30s
                 reconnectionOptions: {
-                  maxReconnectionDelay: mcpMaxTotalTimeout ?? 30000,
+                  maxReconnectionDelay: mcpMaxTotalTimeout ?? 8640000,
                   initialReconnectionDelay: 1000,
                   reconnectionDelayGrowFactor: 1.5,
-                  maxRetries: 2,
+                  maxRetries: 100,
                 },
               };
               break;
