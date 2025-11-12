@@ -143,9 +143,9 @@ export function useConnection({
             options?.resetTimeoutOnProgress ??
             mcpResetTimeoutOnProgress ??
             true,
-          timeout: options?.timeout ?? mcpTimeout ?? 60000,
+          timeout: options?.timeout ?? mcpTimeout ?? 86400000,
           maxTotalTimeout:
-            options?.maxTotalTimeout ?? mcpMaxTotalTimeout ?? 60000,
+            options?.maxTotalTimeout ?? mcpMaxTotalTimeout ?? 86400000,
         };
 
         // If progress notifications are enabled, add an onprogress hook to the MCP Client request options

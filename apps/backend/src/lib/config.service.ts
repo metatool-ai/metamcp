@@ -65,8 +65,7 @@ export const configService = {
 
   async getMcpTimeout(): Promise<number> {
     const config = await configRepo.getConfig(ConfigKeyEnum.Enum.MCP_TIMEOUT);
-    return config?.value ? parseInt(config.value, 10) : 60000;
-  },
+00000  },
 
   async setMcpTimeout(timeout: number): Promise<void> {
     await configRepo.setConfig(
@@ -80,7 +79,7 @@ export const configService = {
     const config = await configRepo.getConfig(
       ConfigKeyEnum.Enum.MCP_MAX_TOTAL_TIMEOUT,
     );
-    return config?.value ? parseInt(config.value, 10) : 60000;
+    return config?.value ? parseInt(config.value, 10) : 86400000;
   },
 
   async setMcpMaxTotalTimeout(timeout: number): Promise<void> {
