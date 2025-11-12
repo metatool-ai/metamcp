@@ -35,8 +35,8 @@ export default function SettingsPage() {
   const form = useForm<SettingsFormData>({
     resolver: zodResolver(SettingsFormSchema),
     defaultValues: {
-      mcpTimeout: 60000,
-      mcpMaxTotalTimeout: 60000,
+      mcpTimeout: 86400000,
+      mcpMaxTotalTimeout: 86400000,
       mcpMaxAttempts: 1,
       sessionLifetime: null, // Default to infinite (null)
     },
@@ -238,7 +238,7 @@ export default function SettingsPage() {
       setIsSessionLifetimeEnabled(hasLifetime);
       // Convert milliseconds to minutes for display
       const lifetimeInMinutes = sessionLifetimeData
-        ? Math.round(sessionLifetimeData / 60000)
+        ? Math.round(sessionLifetimeData / 86400000)
         : null;
       form.setValue("sessionLifetime", lifetimeInMinutes);
     }
@@ -254,7 +254,7 @@ export default function SettingsPage() {
     ) {
       // Convert milliseconds to minutes for session lifetime
       const lifetimeInMinutes = sessionLifetimeData
-        ? Math.round(sessionLifetimeData / 60000)
+        ? Math.round(sessionLifetimeData / 86400000)
         : null;
       form.reset({
         mcpTimeout: mcpTimeoutData,
@@ -374,7 +374,7 @@ export default function SettingsPage() {
         setSessionLifetimeMutation.mutateAsync({
           lifetime:
             isSessionLifetimeEnabled && data.sessionLifetime
-              ? data.sessionLifetime * 60000
+              ? data.sessionLifetime * 86400000
               : null,
         }),
       ]);
