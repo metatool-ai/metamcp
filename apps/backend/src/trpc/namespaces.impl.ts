@@ -614,6 +614,7 @@ export const namespacesImplementations = {
           toolUuid: input.toolUuid,
           serverUuid: input.serverUuid,
           overrideName: input.overrideName,
+          overrideTitle: input.overrideTitle,
           overrideDescription: input.overrideDescription,
         });
 
