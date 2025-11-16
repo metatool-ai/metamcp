@@ -61,7 +61,32 @@ export const DEFAULT_INHERITED_ENV_VARS =
         "PROGRAMFILES",
       ]
     : /* list inspired by the default env inheritance of sudo */
-      ["HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"];
+      [
+        "HOME",
+        "LOGNAME",
+        "PATH",
+        "SHELL",
+        "TERM",
+        "USER",
+        // SSL/Certificate variables for corporate proxies and custom CA certificates
+        "NODE_EXTRA_CA_CERTS",
+        "NODE_TLS_REJECT_UNAUTHORIZED",
+        "SSL_CERT_FILE",
+        "CERT_FILE",
+        "REQUESTS_CA_BUNDLE",
+        "REQUESTS_CERT_FILE",
+        "CURL_CA_BUNDLE",
+        "PIP_CERT",
+        "UV_CERT",
+        "PYTHONHTTPSVERIFY",
+        // Proxy variables
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+      ];
 
 /**
  * Returns a default environment object including only environment variables deemed safe to inherit.
