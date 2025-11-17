@@ -54,6 +54,7 @@ export const NamespaceToolSchema = ToolSchema.extend({
   serverUuid: z.string(),
   status: ToolStatusEnum, // Status from namespace tool mapping
   overrideName: z.string().nullable().optional(),
+  overrideTitle: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
 });
 
@@ -144,6 +145,7 @@ export const UpdateNamespaceToolOverridesRequestSchema = z.object({
   toolUuid: z.string().uuid(),
   serverUuid: z.string().uuid(),
   overrideName: z.string().nullable().optional(),
+  overrideTitle: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
 });
 
@@ -258,6 +260,7 @@ export const NamespaceToolOverridesUpdateSchema = z.object({
   toolUuid: z.string(),
   serverUuid: z.string(),
   overrideName: z.string().nullable().optional(),
+  overrideTitle: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
 });
 
@@ -318,6 +321,7 @@ export const DatabaseNamespaceToolSchema = z.object({
   serverName: z.string(),
   serverUuid: z.string(),
   overrideName: z.string().nullable().optional(),
+  overrideTitle: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
 });
 

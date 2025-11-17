@@ -27,6 +27,7 @@ export interface ToolOverridesConfig {
  */
 interface ToolOverride {
   overrideName?: string | null;
+  overrideTitle?: string | null;
   overrideDescription?: string | null;
 }
 
@@ -177,9 +178,10 @@ async function getToolOverrides(
     }
 
     // Query database for tool overrides
-    const [toolMapping] = await db
+  const [toolMapping] = await db
       .select({
         overrideName: namespaceToolMappingsTable.override_name,
+        overrideTitle: namespaceToolMappingsTable.override_title,
         overrideDescription: namespaceToolMappingsTable.override_description,
       })
       .from(namespaceToolMappingsTable)
@@ -197,6 +199,10 @@ async function getToolOverrides(
 
     const override: ToolOverride = {
       overrideName: toolMapping?.overrideName || null,
+      overrideTitle:
+        typeof toolMapping?.overrideTitle !== "undefined"
+          ? toolMapping.overrideTitle
+          : undefined,
       overrideDescription: toolMapping?.overrideDescription || null,
     };
 
@@ -276,9 +282,33 @@ async function applyToolOverrides(
             ? override.overrideDescription
             : tool.description;
 
+        // For title: apply override if provided (null means no override)
+        let overriddenTitle: string | undefined = tool.title;
+        let overriddenAnnotations =
+          tool.annotations && Object.keys(tool.annotations).length > 0
+            ? { ...tool.annotations }
+            : undefined;
+
+        if (typeof override.overrideTitle !== "undefined") {
+          overriddenTitle =
+            override.overrideTitle === null
+              ? undefined
+              : override.overrideTitle;
+        }
+
+        if (overriddenAnnotations && "title" in overriddenAnnotations) {
+          // Strip legacy title hint to avoid conflicting with top-level title
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars -- remove only the title key
+          const { title: _removed, ...rest } = overriddenAnnotations;
+          overriddenAnnotations =
+            Object.keys(rest).length > 0 ? rest : undefined;
+        }
+
         const overriddenTool: Tool = {
           ...tool,
           name: overriddenName,
+          title: overriddenTitle,
+          annotations: overriddenAnnotations,
           description: overriddenDescription,
         };
 

@@ -71,6 +71,13 @@
       "when": 1757529812218,
       "tag": "0009_stormy_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1757529815220,
+      "tag": "0010_tool_title_override",
+      "breakpoints": true
     }
   ]
 }
