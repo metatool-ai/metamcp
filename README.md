@@ -41,6 +41,7 @@ English | [中文](./README_cn.md)
   - [🔍 Inspector](#-inspector)
 - [🚀 Quick Start](#-quick-start)
   - [🐳 Run with Docker Compose (Recommended)](#-run-with-docker-compose-recommended)
+  - [📦 Build development environment with Dev Containers (VSCode/Cursor)](#-build-development-environment-with-dev-containers-vscodecursor)
   - [💻 Local Development](#-local-development)
 - [🔌 MCP Protocol Compatibility](#-mcp-protocol-compatibility)
 - [🔗 Connect to MetaMCP](#-connect-to-metamcp)
@@ -152,6 +153,31 @@ volumes:
   metamcp_postgres_data:
     driver: local
 ```
+
+### **📦 Build development environment with Dev Containers (VSCode/Cursor)**
+
+You can use the VSCode/Cursor extension to build the development environment in a container.
+
+It only requires that you have an environment running Docker or a similar alternative (the `docker`/`docker compose` command is required), and no other dependent components need to be installed on your host machine.
+
+1. First, clone the MetaMCP source code, open project in Visual Studio Code.
+```bash
+git clone https://github.com/metatool-ai/metamcp.git
+cd metamcp
+code .
+```
+2. Switch to Dev Containers. Open the VSCode Command Palette, and execute `Dev Containers: Reopen in Container`.
+
+VSCode will open the Dev Containers project in a new window, where it will build the runtime and install the toolchain according to the `Dockerfile` before starting the connection and finally installing the APISIX dependencies.
+
+> **note**
+> This process requires a reliable network connection, and it will access Docker Hub, GitHub, and some other sites. You will need to ensure the network connection yourself, otherwise the container build may fail.
+
+<img width="895" height="153" alt="image" src="https://github.com/user-attachments/assets/d3e1420d-43c1-4ed6-9229-b91ea09c142a" />
+
+Wait some minutes, depending on the internet connection or computer performance, it may take from a few minutes to tens of minutes, you can click on the Progress Bar in the bottom right corner to view a live log where you will be able to check unusual stuck.
+<img width="732" height="173" alt="image" src="https://github.com/user-attachments/assets/6e5752f8-7353-4a8f-b489-c13daef6700e" />
+
 
 ### **💻 Local Development**
 
