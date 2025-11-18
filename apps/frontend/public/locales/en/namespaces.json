@@ -124,7 +124,7 @@
     "invalidAnnotationsJson": "Invalid annotations JSON",
     "invalidAnnotationsJsonDescription": "Please provide valid JSON text for annotations.",
     "annotationsMustBeObject": "Annotations must be a JSON object.",
-    "overridesBadge": "Overrided",
+    "overridesBadge": "Overridden",
     "overridesTooltip": "Custom tool title or description is set for this namespace",
     "annotationsBadge": "Annotations",
     "annotationsTooltip": "Custom annotations are set for this namespace",
