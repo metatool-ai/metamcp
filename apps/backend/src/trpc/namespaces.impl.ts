@@ -616,6 +616,7 @@ export const namespacesImplementations = {
           overrideName: input.overrideName,
           overrideTitle: input.overrideTitle,
           overrideDescription: input.overrideDescription,
+          overrideAnnotations: input.overrideAnnotations,
         });
 
       if (!updatedMapping) {
