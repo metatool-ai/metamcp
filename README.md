@@ -118,6 +118,7 @@ DATABASE_URL=${DB_CONNECTION_STRING}
 - Group one or more MCP servers into a namespace
 - Enable/disable MCP servers or at tool level
 - Apply middlewares to MCP requests and responses
+- Override tool names/titles/descriptions per namespace and attach custom MCP annotations (e.g. `{ "annotations": { "readOnlyHint": false } }`)
 
 ### 🌐 **MetaMCP Endpoint**
 - Create endpoints and assign namespace to endpoints
@@ -132,6 +133,12 @@ DATABASE_URL=${DB_CONNECTION_STRING}
 
 ### 🔍 **Inspector**
 Similar to the official MCP inspector, but with **saved server configs** - MetaMCP automatically creates configurations so you can debug MetaMCP endpoints immediately.
+
+### ✏️ **Tool Overrides & Annotations**
+- Open a namespace → **Tools** tab to see every tool coming from connected MCP servers.
+- Each saved tool can be expanded and edited inline: update the display **name/title/description** or provide a JSON blob with namespace-specific annotations (for example `{ "annotations": { "readOnlyHint": false } }`).
+- Badges in the table ("Overrided", "Annotations") show which tools currently have custom metadata. Hover them to read a tooltip describing what was overridden.
+- Annotation overrides are merged with whatever the upstream MCP server returns, so you can safely add custom UI hints without losing provider metadata.
 
 ## 🚀 Quick Start
 

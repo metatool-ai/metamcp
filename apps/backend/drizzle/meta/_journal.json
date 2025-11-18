@@ -78,6 +78,13 @@
       "when": 1757529815220,
       "tag": "0010_tool_title_override",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1763452681793,
+      "tag": "0011_goofy_photon",
+      "breakpoints": true
     }
   ]
 }

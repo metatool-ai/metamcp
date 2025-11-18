@@ -324,6 +324,9 @@ export const namespaceToolMappingsTable = pgTable(
     override_name: text("override_name"),
     override_title: text("override_title"),
     override_description: text("override_description"),
+    override_annotations: jsonb("override_annotations")
+      .$type<Record<string, unknown> | null>()
+      .default(sql`NULL`),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
