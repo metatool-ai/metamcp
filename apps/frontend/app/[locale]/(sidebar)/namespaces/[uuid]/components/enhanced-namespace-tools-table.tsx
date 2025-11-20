@@ -2,6 +2,7 @@
 
 import { NamespaceTool, ToolStatusEnum } from "@repo/zod-types";
 import {
+  Braces,
   Calendar,
   Check,
   ChevronDownIcon,
@@ -12,6 +13,7 @@ import {
   EyeOff,
   Hash,
   MoreHorizontal,
+  PenSquare,
   RefreshCw,
   RotateCcw,
   Search,
@@ -43,6 +45,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useTranslations } from "@/hooks/useTranslations";
 import { parseToolName } from "@/lib/tool-name-parser";
 import { trpc } from "@/lib/trpc";
@@ -63,6 +70,7 @@ interface EnhancedNamespaceTool {
   title?: string | null;
   toolSchema?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
+  annotations?: Record<string, unknown> | null;
 
   // Saved tool specific fields
   uuid?: string;
@@ -77,6 +85,7 @@ interface EnhancedNamespaceTool {
   overrideName?: string | null;
   overrideTitle?: string | null;
   overrideDescription?: string | null;
+  overrideAnnotations?: Record<string, unknown> | null;
 
   // Source tracking
   sources: {
@@ -109,6 +118,17 @@ type SortField =
   | "updated_at";
 type SortDirection = "asc" | "desc";
 
+type OverrideDraft = {
+  name?: string;
+  title?: string;
+  description?: string;
+  annotations?: string;
+};
+
+const formatAnnotations = (annotations?: Record<string, unknown> | null) => {
+  return annotations ? JSON.stringify(annotations, null, 2) : "";
+};
+
 export function EnhancedNamespaceToolsTable({
   savedTools,
   mcpTools,
@@ -127,7 +147,7 @@ export function EnhancedNamespaceToolsTable({
     new Set(),
   );
   const [tempOverrides, setTempOverrides] = useState<
-    Map<string, { name?: string; title?: string; description?: string }>
+    Map<string, OverrideDraft>
   >(new Map());
 
   // Get translations
@@ -357,6 +377,7 @@ export function EnhancedNamespaceToolsTable({
     overrideName?: string | null,
     overrideTitle?: string | null,
     overrideDescription?: string | null,
+    overrideAnnotations?: Record<string, unknown> | null,
   ) => {
     if (!tool.sources.saved || !tool.uuid || !tool.serverUuid) {
       toast.error(t("namespaces:enhancedToolsTable.cannotUpdateOverrides"));
@@ -375,6 +396,7 @@ export function EnhancedNamespaceToolsTable({
       overrideName,
       overrideTitle,
       overrideDescription,
+      overrideAnnotations,
     });
   };
 
@@ -389,6 +411,7 @@ export function EnhancedNamespaceToolsTable({
         name: tool.overrideName ?? tool.name ?? "",
         title: tool.overrideTitle ?? tool.title ?? tool.name ?? "",
         description: tool.overrideDescription ?? tool.description ?? "",
+        annotations: formatAnnotations(tool.overrideAnnotations),
       }),
     );
 
@@ -428,11 +451,72 @@ export function EnhancedNamespaceToolsTable({
     // This allows users to set empty string as an override (to remove description)
     const shouldClearDescription = overrides.description === tool.description;
 
+    const originalAnnotationsText = formatAnnotations(tool.annotations);
+    const initialAnnotationsText = formatAnnotations(
+      tool.overrideAnnotations,
+    );
+    const currentAnnotationsText =
+      overrides.annotations ?? initialAnnotationsText;
+    const annotationsChanged =
+      currentAnnotationsText !== initialAnnotationsText;
+    const matchesOriginalAnnotations =
+      currentAnnotationsText === originalAnnotationsText;
+
+    let overrideAnnotationsPayload:
+      | Record<string, unknown>
+      | null
+      | undefined = undefined;
+
+        if (annotationsChanged) {
+          if (
+            currentAnnotationsText.trim() === "" ||
+            matchesOriginalAnnotations
+          ) {
+            overrideAnnotationsPayload = null;
+          } else {
+            try {
+              const parsed = JSON.parse(currentAnnotationsText);
+
+          if (
+            typeof parsed !== "object" ||
+            parsed === null ||
+            Array.isArray(parsed)
+          ) {
+            toast.error(
+              t("namespaces:enhancedToolsTable.invalidAnnotationsJson"),
+              {
+                description: t(
+                  "namespaces:enhancedToolsTable.annotationsMustBeObject",
+                ),
+              },
+            );
+            return;
+          }
+
+          overrideAnnotationsPayload = parsed as Record<string, unknown>;
+        } catch (error) {
+          toast.error(
+            t("namespaces:enhancedToolsTable.invalidAnnotationsJson"),
+            {
+              description:
+                error instanceof Error
+                  ? error.message
+                  : t(
+                      "namespaces:enhancedToolsTable.invalidAnnotationsJsonDescription",
+                    ),
+            },
+          );
+          return;
+        }
+      }
+    }
+
     await handleOverridesUpdate(
       tool,
       shouldClearName ? null : trimmedName,
       shouldClearTitle ? null : trimmedTitle,
       shouldClearDescription ? null : overrides.description,
+      overrideAnnotationsPayload,
     );
 
     // Clear editing state
@@ -441,7 +525,7 @@ export function EnhancedNamespaceToolsTable({
 
   const updateTempOverride = (
     toolId: string,
-    field: "name" | "title" | "description",
+    field: "name" | "title" | "description" | "annotations",
     value: string,
   ) => {
     setTempOverrides((prev) => {
@@ -517,15 +601,37 @@ export function EnhancedNamespaceToolsTable({
 
   // Toggle row expansion
   const toggleRowExpansion = (toolId: string) => {
+    let collapsed = false;
     setExpandedRows((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(toolId)) {
         newSet.delete(toolId);
+        collapsed = true;
       } else {
         newSet.add(toolId);
       }
       return newSet;
     });
+
+    if (collapsed) {
+      setEditingOverrides((prev) => {
+        if (!prev.has(toolId)) {
+          return prev;
+        }
+        const newSet = new Set(prev);
+        newSet.delete(toolId);
+        return newSet;
+      });
+
+      setTempOverrides((prev) => {
+        if (!prev.has(toolId)) {
+          return prev;
+        }
+        const newMap = new Map(prev);
+        newMap.delete(toolId);
+        return newMap;
+      });
+    }
   };
 
   // Get source badge(s)
@@ -798,6 +904,50 @@ export function EnhancedNamespaceToolsTable({
                 const displayTitle = tool.overrideTitle ?? tool.title;
                 const originalTitle = tool.title ?? tool.name ?? "";
                 const hasAnyOverride = hasNameOverride || hasTitleOverride;
+                const hasAnnotationOverrides =
+                  tool.overrideAnnotations &&
+                  Object.keys(tool.overrideAnnotations).length > 0;
+
+                const indicatorBadges: React.ReactNode[] = [];
+                if (hasAnyOverride) {
+                  indicatorBadges.push(
+                    <Tooltip key="override-indicator">
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="bg-muted/30 text-muted-foreground border-muted/40 px-2 py-0.5 cursor-default"
+                        >
+                          <PenSquare className="h-3 w-3" />
+                          {t("namespaces:enhancedToolsTable.overridesBadge")}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {t("namespaces:enhancedToolsTable.overridesTooltip")}
+                      </TooltipContent>
+                    </Tooltip>,
+                  );
+                }
+
+                if (hasAnnotationOverrides) {
+                  indicatorBadges.push(
+                    <Tooltip key="annotation-indicator">
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="bg-muted/30 text-muted-foreground border-muted/40 px-2 py-0.5 cursor-default"
+                        >
+                          <Braces className="h-3 w-3" />
+                          {t("namespaces:enhancedToolsTable.annotationsBadge")}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {t(
+                          "namespaces:enhancedToolsTable.annotationsTooltip",
+                        )}
+                      </TooltipContent>
+                    </Tooltip>,
+                  );
+                }
 
                 return (
                   <React.Fragment key={toolId}>
@@ -818,9 +968,9 @@ export function EnhancedNamespaceToolsTable({
                         </Button>
                       </TableCell>
                       <TableCell className="font-medium min-w-[150px] w-[200px]">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-start gap-3">
                           <Wrench className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                          <div className="flex flex-col">
+                          <div className="flex flex-col flex-1 min-w-0">
                             <span className="truncate font-medium">
                               {tool.overrideName || tool.name}
                             </span>
@@ -840,13 +990,10 @@ export function EnhancedNamespaceToolsTable({
                               </span>
                             )}
                           </div>
-                          {hasAnyOverride && (
-                            <Badge
-                              variant="secondary"
-                              className="text-xs flex-shrink-0"
-                            >
-                              Override
-                            </Badge>
+                          {indicatorBadges.length > 0 && (
+                            <div className="flex flex-col gap-1 flex-shrink-0 min-w-[110px]">
+                              {indicatorBadges}
+                            </div>
                           )}
                         </div>
                       </TableCell>
@@ -1068,6 +1215,34 @@ export function EnhancedNamespaceToolsTable({
                                         {tool.description || "No description"}
                                       </p> */}
                                     </div>
+                                    <div>
+                                      <label className="text-xs font-medium text-muted-foreground">
+                                        {t(
+                                          "namespaces:enhancedToolsTable.annotationsLabel",
+                                        )}
+                                      </label>
+                                      <Textarea
+                                        value={
+                                          tempOverrides.get(toolId)?.annotations || ""
+                                        }
+                                        onChange={(e) =>
+                                          updateTempOverride(
+                                            toolId,
+                                            "annotations",
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder={t(
+                                          "namespaces:enhancedToolsTable.annotationsPlaceholder",
+                                        )}
+                                        className="mt-1 font-mono text-xs min-h-[80px] max-h-[160px]"
+                                      />
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        {t(
+                                          "namespaces:enhancedToolsTable.annotationsHelper",
+                                        )}
+                                      </p>
+                                    </div>
                                     <div className="flex gap-2">
                                       <Button
                                         size="sm"
@@ -1110,8 +1285,13 @@ export function EnhancedNamespaceToolsTable({
                                             "description",
                                             tool.description || "",
                                           );
-                                        }}
-                                      >
+                                      updateTempOverride(
+                                        toolId,
+                                        "annotations",
+                                        formatAnnotations(tool.annotations),
+                                      );
+                                    }}
+                                  >
                                         <RotateCcw className="h-3 w-3 mr-1" />
                                         Reset to Original
                                       </Button>
@@ -1210,6 +1390,25 @@ export function EnhancedNamespaceToolsTable({
                                 </div>
                               </div>
                             )}
+
+                            {tool.overrideAnnotations &&
+                              Object.keys(tool.overrideAnnotations).length >
+                                0 && (
+                                <div className="p-4 border rounded-lg">
+                                  <h5 className="text-sm font-medium mb-2">
+                                    {t(
+                                      "namespaces:enhancedToolsTable.annotationsPreview",
+                                    )}
+                                  </h5>
+                                  <CodeBlock language="json">
+                                    {JSON.stringify(
+                                      tool.overrideAnnotations,
+                                      null,
+                                      2,
+                                    )}
+                                  </CodeBlock>
+                                </div>
+                              )}
 
                             {/* Tool Schema */}
                             <div>
