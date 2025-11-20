@@ -122,7 +122,7 @@ DATABASE_URL=${DB_CONNECTION_STRING}
 ### 🌐 **MetaMCP Endpoint**
 - Create endpoints and assign namespace to endpoints
 - Multiple MCP servers in the namespace will be aggregated and emitted as a MetaMCP endpoint
-- Choose between API-Key Auth (in header or query param) or standard OAuth in MCP Spec 2025-06-18
+- Choose between API-Key Auth (in header or query param), standard OAuth in MCP Spec 2025-06-18, or OAuth 2.0 Token Exchange for SSO integration
 - Host through **SSE** or **Streamable HTTP** transports in MCP and **OpenAPI** endpoints for clients like [Open WebUI](https://github.com/open-webui/open-webui)
 
 ### ⚙️ **Middleware**
@@ -285,7 +285,7 @@ For more details and alternative approaches, see [issue #76](https://github.com/
 - 🛡️ **Better Auth** for frontend & backend (TRPC procedures)
 - 🍪 **Session cookies** enforce secure internal MCP proxy connections
 - 🔑 **API key authentication** for external access via `Authorization: Bearer <api-key>` header
-- 🪪 **MCP OAuth**: Exposed endpoints have options to use standard OAuth in MCP Spec 2025-06-18, easy to connect.
+- 🪪 **MCP OAuth**: Exposed endpoints support standard OAuth in MCP Spec 2025-06-18 plus OAuth 2.0 Token Exchange for Supabase SSO integration
 - 🏢 **Multi-tenancy**: Designed for organizations to deploy on their own machines. Supports both private and public access scopes. Users can create MCPs, namespaces, endpoints, and API keys for themselves or for everyone. Public API keys cannot access private MetaMCPs.
 - ⚙️ **Separate Registration Controls**: Administrators can independently control UI registration and SSO/OAuth registration through the settings page, allowing for flexible enterprise deployment scenarios.
 
@@ -359,6 +359,10 @@ Access the **Settings** page in the MetaMCP admin interface to configure these c
 3. Toggle **"Disable SSO Registration"** to control OAuth/OIDC signups
 
 Both controls work independently, giving you full flexibility over your registration policy.
+
+## 🔐 OAuth 2.0 Token Exchange (Supabase SSO)
+
+MetaMCP supports OAuth 2.0 Token Exchange for Supabase SSO integration. See [README-oauth.md](./README-oauth.md) for configuration and usage details.
 
 ## 🌐 Custom Deployment and SSE conf for Nginx
 
