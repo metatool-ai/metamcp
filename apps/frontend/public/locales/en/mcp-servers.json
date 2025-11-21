@@ -19,6 +19,8 @@
   "urlPlaceholder": "https://example.com/sse|mcp",
   "bearerToken": "Bearer Token",
   "bearerTokenPlaceholder": "Enter bearer token",
+  "headers": "Custom Headers",
+  "headersPlaceholder": "KEY=value (one per line)",
   "ownership": "Ownership",
   "ownershipHelp": "Private servers are only accessible to you. Public servers are accessible to all users.",
   "stdio": "STDIO",

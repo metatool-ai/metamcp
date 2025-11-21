@@ -20,6 +20,7 @@ export const ServerParametersSchema = z.object({
   error_status: z.string().optional(),
   oauth_tokens: OAuthTokensSchema.nullable().optional(),
   bearerToken: z.string().nullable().optional(),
+  headers: z.record(z.string()).nullable().optional(),
 });
 
 export type ServerParameters = z.infer<typeof ServerParametersSchema>;

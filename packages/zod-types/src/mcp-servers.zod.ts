@@ -22,6 +22,7 @@ export const createServerFormSchema = z
     args: z.string().optional(),
     url: z.string().optional(),
     bearerToken: z.string().optional(),
+    headers: z.string().optional(),
     env: z.string().optional(),
     user_id: z.string().nullable().optional(),
   })
@@ -83,6 +84,7 @@ export const EditServerFormSchema = z
     args: z.string().optional(),
     url: z.string().optional(),
     bearerToken: z.string().optional(),
+    headers: z.string().optional(),
     env: z.string().optional(),
     user_id: z.string().nullable().optional(),
   })
@@ -147,6 +149,7 @@ export const CreateMcpServerRequestSchema = z
     env: z.record(z.string()).optional(),
     url: z.string().optional(),
     bearerToken: z.string().optional(),
+    headers: z.record(z.string()).optional(),
     user_id: z.string().nullable().optional(),
   })
   .refine(
@@ -185,6 +188,7 @@ export const McpServerSchema = z.object({
   url: z.string().nullable(),
   created_at: z.string(),
   bearerToken: z.string().nullable(),
+  headers: z.record(z.string()).nullable(),
   user_id: z.string().nullable(),
   error_status: McpServerErrorStatusEnum.optional(),
 });
@@ -214,6 +218,7 @@ export const BulkImportMcpServerSchema = z
     args: z.array(z.string()).optional(),
     env: z.record(z.string()).optional(),
     url: z.string().optional(),
+    headers: z.record(z.string()).optional(),
     description: z.string().optional(),
     type: z
       .string()
@@ -326,6 +331,7 @@ export const UpdateMcpServerRequestSchema = z
     env: z.record(z.string()).optional(),
     url: z.string().optional(),
     bearerToken: z.string().optional(),
+    headers: z.record(z.string()).optional(),
     user_id: z.string().nullable().optional(),
   })
   .refine(
@@ -395,6 +401,7 @@ export const McpServerCreateInputSchema = z.object({
   env: z.record(z.string()).optional(),
   url: z.string().nullable().optional(),
   bearerToken: z.string().nullable().optional(),
+  headers: z.record(z.string()).nullable().optional(),
   user_id: z.string().nullable().optional(),
 });
 
@@ -418,6 +425,7 @@ export const McpServerUpdateInputSchema = z.object({
   env: z.record(z.string()).optional(),
   url: z.string().nullable().optional(),
   bearerToken: z.string().nullable().optional(),
+  headers: z.record(z.string()).nullable().optional(),
   user_id: z.string().nullable().optional(),
 });
 
@@ -437,6 +445,7 @@ export const DatabaseMcpServerSchema = z.object({
   error_status: McpServerErrorStatusEnum,
   created_at: z.date(),
   bearerToken: z.string().nullable(),
+  headers: z.record(z.string()).nullable(),
   user_id: z.string().nullable(),
 });
 
