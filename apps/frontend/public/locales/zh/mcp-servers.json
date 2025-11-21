@@ -19,6 +19,8 @@
   "urlPlaceholder": "https://example.com/sse|mcp",
   "bearerToken": "Bearer 令牌",
   "bearerTokenPlaceholder": "Bearer 令牌",
+  "headers": "自定义请求头",
+  "headersPlaceholder": "KEY=value（每行一个）",
   "ownership": "所有权",
   "ownershipHelp": "私有服务器只有您可以访问。公共服务器所有用户都可以访问。",
   "stdio": "STDIO",
