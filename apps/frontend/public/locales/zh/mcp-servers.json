@@ -158,6 +158,7 @@
     "arguments": "参数",
     "url": "URL",
     "authBearerToken": "认证 Bearer 令牌",
+    "customHeaders": "自定义请求头",
     "environmentVariables": "环境变量",
     "hideToken": "隐藏令牌",
     "showToken": "显示令牌",

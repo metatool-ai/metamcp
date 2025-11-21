@@ -156,6 +156,7 @@
     "arguments": "Arguments",
     "url": "URL",
     "authBearerToken": "Auth Bearer Token",
+    "customHeaders": "Custom Headers",
     "environmentVariables": "Environment Variables",
     "hideToken": "Hide token",
     "showToken": "Show token",
