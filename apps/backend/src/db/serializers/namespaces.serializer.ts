@@ -68,6 +68,7 @@ export class NamespacesSerializer {
       overrideName: dbTool.overrideName,
       overrideTitle: dbTool.overrideTitle,
       overrideDescription: dbTool.overrideDescription,
+      overrideAnnotations: dbTool.overrideAnnotations,
     };
   }
 

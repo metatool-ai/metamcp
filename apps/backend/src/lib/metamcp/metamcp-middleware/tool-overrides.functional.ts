@@ -29,6 +29,27 @@ interface ToolOverride {
   overrideName?: string | null;
   overrideTitle?: string | null;
   overrideDescription?: string | null;
+  overrideAnnotations?: Record<string, unknown> | null;
+}
+
+function mergeAnnotations(
+  original: Tool["annotations"],
+  namespaceOverrides?: Record<string, unknown> | null,
+): Tool["annotations"] | undefined {
+  if (!namespaceOverrides || Object.keys(namespaceOverrides).length === 0) {
+    return original;
+  }
+
+  const baseAnnotations = (original ? { ...original } : {}) as Record<
+    string,
+    unknown
+  >;
+
+  for (const [key, value] of Object.entries(namespaceOverrides)) {
+    baseAnnotations[key] = value;
+  }
+
+  return baseAnnotations as Tool["annotations"];
 }
 
 /**
@@ -183,6 +204,7 @@ async function getToolOverrides(
         overrideName: namespaceToolMappingsTable.override_name,
         overrideTitle: namespaceToolMappingsTable.override_title,
         overrideDescription: namespaceToolMappingsTable.override_description,
+        overrideAnnotations: namespaceToolMappingsTable.override_annotations,
       })
       .from(namespaceToolMappingsTable)
       .innerJoin(
@@ -204,6 +226,7 @@ async function getToolOverrides(
           ? toolMapping.overrideTitle
           : undefined,
       overrideDescription: toolMapping?.overrideDescription || null,
+      overrideAnnotations: toolMapping?.overrideAnnotations || null,
     };
 
     // Cache the result if found and caching is enabled
@@ -284,17 +307,17 @@ async function applyToolOverrides(
 
         // For title: apply override if provided (null means no override)
         let overriddenTitle: string | undefined = tool.title;
-        let overriddenAnnotations =
-          tool.annotations && Object.keys(tool.annotations).length > 0
-            ? { ...tool.annotations }
-            : undefined;
-
         if (typeof override.overrideTitle !== "undefined") {
           overriddenTitle =
             override.overrideTitle === null
               ? undefined
               : override.overrideTitle;
         }
+
+        let overriddenAnnotations =
+          tool.annotations && Object.keys(tool.annotations).length > 0
+            ? { ...tool.annotations }
+            : undefined;
 
         if (overriddenAnnotations && "title" in overriddenAnnotations) {
           // Strip legacy title hint to avoid conflicting with top-level title
@@ -304,12 +327,17 @@ async function applyToolOverrides(
             Object.keys(rest).length > 0 ? rest : undefined;
         }
 
+        overriddenAnnotations = mergeAnnotations(
+          overriddenAnnotations,
+          override.overrideAnnotations,
+        );
+
         const overriddenTool: Tool = {
           ...tool,
           name: overriddenName,
           title: overriddenTitle,
-          annotations: overriddenAnnotations,
           description: overriddenDescription,
+          annotations: overriddenAnnotations,
         };
 
         // Update reverse mapping cache for the new full override name

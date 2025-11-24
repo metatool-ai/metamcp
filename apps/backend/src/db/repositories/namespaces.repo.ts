@@ -258,6 +258,7 @@ export class NamespacesRepository {
         overrideName: namespaceToolMappingsTable.override_name,
         overrideTitle: namespaceToolMappingsTable.override_title,
         overrideDescription: namespaceToolMappingsTable.override_description,
+        overrideAnnotations: namespaceToolMappingsTable.override_annotations,
       })
       .from(toolsTable)
       .innerJoin(
