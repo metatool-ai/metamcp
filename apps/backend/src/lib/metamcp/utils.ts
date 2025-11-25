@@ -114,7 +114,7 @@ export async function convertDbServerToParams(
       stderr: "inherit" as const,
       oauth_tokens: oauthTokens,
       bearerToken: server.bearerToken,
-      headers: server.headers,
+      headers: server.headers || {},
     };
 
     // Process based on server type

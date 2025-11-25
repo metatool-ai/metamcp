@@ -134,8 +134,7 @@ export default function McpServersPage() {
       env: envObject,
       url: data.url,
       bearerToken: data.bearerToken,
-      headers:
-        Object.keys(headersObject).length > 0 ? headersObject : undefined,
+      headers: headersObject,
       user_id: data.user_id,
     };
 
