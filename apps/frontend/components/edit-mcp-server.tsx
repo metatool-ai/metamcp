@@ -196,11 +196,9 @@ export function EditMcpServer({
         args: server.args.join(" "),
         url: server.url || "",
         bearerToken: server.bearerToken || "",
-        headers: server.headers
-          ? Object.entries(server.headers)
-              .map(([key, value]) => `${key}=${value}`)
-              .join("\n")
-          : "",
+        headers: Object.entries(server.headers)
+          .map(([key, value]) => `${key}=${value}`)
+          .join("\n"),
         env: Object.entries(server.env)
           .map(([key, value]) => `${key}=${value}`)
           .join("\n"),
@@ -266,8 +264,7 @@ export function EditMcpServer({
         env: envObject,
         url: data.url,
         bearerToken: data.bearerToken,
-        headers:
-          Object.keys(headersObject).length > 0 ? headersObject : undefined,
+        headers: headersObject,
         user_id: data.user_id,
       };
 

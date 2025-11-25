@@ -585,7 +585,7 @@ export default function McpServerDetailPage({
                     </div>
                   </div>
                 )}
-                {server.headers && Object.keys(server.headers).length > 0 && (
+                {Object.keys(server.headers).length > 0 && (
                   <div className="space-y-2">
                     <span className="text-sm font-medium text-muted-foreground">
                       {t("mcp-servers:detail.customHeaders")}:
