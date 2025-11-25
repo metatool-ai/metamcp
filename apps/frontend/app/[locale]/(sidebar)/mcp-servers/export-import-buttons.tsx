@@ -125,6 +125,9 @@ export function ExportImportButtons() {
         if (server.bearerToken) {
           config.bearerToken = server.bearerToken;
         }
+        if (server.headers && Object.keys(server.headers).length > 0) {
+          config.headers = server.headers;
+        }
       }
 
       mcpServersConfig[server.name] = config;
@@ -268,11 +271,18 @@ export function ExportImportButtons() {
     },
     "UrlBasedServerName": {
       "url": "https://example.com/sse",
+      "bearerToken": "optional-bearer-token",
+      "headers": {
+        "X-Custom-Header": "value"
+      },
       "description": "Optional description",
       "type": "sse" // optional, defaults to "stdio" (case-insensitive)
     },
     "StreamableHttpServerName": {
       "url": "https://example.com/mcp",
+      "headers": {
+        "X-Custom-Header": "value"
+      },
       "description": "Optional description",
       "type": "streamable_http" // case-insensitive
     }
