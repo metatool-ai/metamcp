@@ -386,6 +386,9 @@ export function NamespaceServersTable({
             if (server.bearerToken) {
               config.bearerToken = server.bearerToken;
             }
+            if (server.headers && Object.keys(server.headers).length > 0) {
+              config.headers = server.headers;
+            }
           }
 
           const exportFormat = {
