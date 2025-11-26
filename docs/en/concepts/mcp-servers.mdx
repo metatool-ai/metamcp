@@ -53,12 +53,15 @@ MetaMCP supports three types of MCP servers:
 
   <Accordion icon="globe" title="SSE Servers">
     **Server-Sent Events** - Communicates via SSE (Server-Sent Events)
-    
+
     ```json
     {
       "type": "SSE",
       "url": "https://api.example.com/sse",
-      "bearerToken": "your-bearer-token"
+      "bearerToken": "your-bearer-token",
+      "headers": {
+        "X-Custom-Header": "value"
+      }
     }
     ```
 
@@ -67,12 +70,15 @@ MetaMCP supports three types of MCP servers:
 
   <Accordion icon="globe" title="Streamable HTTP Servers">
     **HTTP-based streaming** - Streamable HTTP is now the standard for remote MCP
-    
+
     ```json
     {
       "type": "STREAMABLE_HTTP",
       "url": "https://api.example.com/mcp",
-      "bearerToken": "your-bearer-token"
+      "bearerToken": "your-bearer-token",
+      "headers": {
+        "X-Custom-Header": "value"
+      }
     }
     ```
 
@@ -101,7 +107,10 @@ MetaMCP supports three types of MCP servers:
   "env": {
     "KEY": "value"
   },
-  "bearerToken": "auth-token"   // SSE/STREAMABLE_HTTP only
+  "bearerToken": "auth-token",  // SSE/STREAMABLE_HTTP only
+  "headers": {                  // SSE/STREAMABLE_HTTP only
+    "X-Custom-Header": "value"
+  }
 }
 ```
 </CodeGroup>
@@ -169,6 +178,29 @@ For servers requiring authentication:
 ```
 </CodeGroup>
 
+### Custom Headers
+
+Add custom HTTP headers to **SSE and Streamable HTTP servers**:
+
+```json
+{
+  "type": "SSE",
+  "url": "https://api.example.com/sse",
+  "headers": {
+    "X-API-Key": "your-api-key",
+    "X-API-Version": "v2",
+    "Organization-ID": "org-123"
+  }
+}
+```
+
+<Tip>
+Useful when your server requires:
+- Multiple authentication headers (API keys + bearer tokens)
+- Gateway or proxy authentication
+- Organization-specific headers
+</Tip>
+
 ## Managing MCP Servers
 
 ### Adding Servers
@@ -214,6 +246,9 @@ Export all your configured MCP servers to a JSON file:
       "type": "streamable_http",
       "url": "https://api.example.com/mcp",
       "bearerToken": "your-bearer-token",
+      "headers": {
+        "X-API-Version": "v2"
+      },
       "description": "Remote MCP server via HTTP"
     }
   }
@@ -247,13 +282,16 @@ Import multiple MCP servers from a JSON configuration:
 }
 ```
 
-```json SSE Server Format  
+```json SSE Server Format
 {
   "mcpServers": {
     "ServerName": {
       "type": "sse",
       "url": "https://api.example.com/sse",
       "bearerToken": "your-token",
+      "headers": {
+        "X-Custom-Header": "value"
+      },
       "description": "Optional description"
     }
   }
@@ -264,9 +302,12 @@ Import multiple MCP servers from a JSON configuration:
 {
   "mcpServers": {
     "ServerName": {
-      "type": "streamable_http", 
+      "type": "streamable_http",
       "url": "https://api.example.com/mcp",
       "bearerToken": "your-token",
+      "headers": {
+        "X-Custom-Header": "value"
+      },
       "description": "Optional description"
     }
   }
