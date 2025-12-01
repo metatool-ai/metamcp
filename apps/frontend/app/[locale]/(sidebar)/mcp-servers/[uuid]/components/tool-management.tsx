@@ -63,8 +63,8 @@ export function ToolManagement({
 
   const dbTools: Tool[] = dbToolsResponse?.success ? dbToolsResponse.data : [];
 
-  // Save tools to database mutation
-  const saveToolsMutation = trpc.frontend.tools.create.useMutation({
+  // Save tools to database mutation (with cleanup)
+  const saveToolsMutation = trpc.frontend.tools.sync.useMutation({
     onSuccess: (response) => {
       if (response.success) {
         const foundCount = mcpTools.length;

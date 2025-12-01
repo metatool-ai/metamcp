@@ -3,7 +3,7 @@ import {
   ToolCreateInput,
   ToolUpsertInput,
 } from "@repo/zod-types";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import { db } from "../index";
 import { toolsTable } from "../schema";
@@ -40,7 +40,7 @@ export class ToolsRepository {
     }));
 
     // Batch insert all tools with upsert
-    return await db
+    const result = await db
       .insert(toolsTable)
       .values(toolsToInsert)
       .onConflictDoUpdate({
@@ -52,6 +52,8 @@ export class ToolsRepository {
         },
       })
       .returning();
+
+    return result;
   }
 
   async findByUuid(uuid: string): Promise<DatabaseTool | undefined> {
@@ -71,6 +73,62 @@ export class ToolsRepository {
       .returning();
 
     return deletedTool;
+  }
+
+  /**
+   * Delete tools that are no longer present in the current tool list
+   * @param mcpServerUuid - UUID of the MCP server
+   * @param currentToolNames - Array of tool names that currently exist in the MCP server
+   * @returns Array of deleted tools
+   */
+  async deleteObsoleteTools(
+    mcpServerUuid: string,
+    currentToolNames: string[],
+  ): Promise<DatabaseTool[]> {
+    if (currentToolNames.length === 0) {
+      // If no tools are provided, delete all tools for this server
+      return await db
+        .delete(toolsTable)
+        .where(eq(toolsTable.mcp_server_uuid, mcpServerUuid))
+        .returning();
+    }
+
+    // Delete tools that are in DB but not in current tool list
+    return await db
+      .delete(toolsTable)
+      .where(
+        and(
+          eq(toolsTable.mcp_server_uuid, mcpServerUuid),
+          notInArray(toolsTable.name, currentToolNames),
+        ),
+      )
+      .returning();
+  }
+
+  /**
+   * Sync tools for a server: upsert current tools and delete obsolete ones
+   * @param input - Tool upsert input containing tools and server UUID
+   * @returns Object with upserted and deleted tools
+   */
+  async syncTools(input: ToolUpsertInput): Promise<{
+    upserted: DatabaseTool[];
+    deleted: DatabaseTool[];
+  }> {
+    const currentToolNames = input.tools.map((tool) => tool.name);
+
+    // First, delete obsolete tools
+    const deleted = await this.deleteObsoleteTools(
+      input.mcpServerUuid,
+      currentToolNames,
+    );
+
+    // Then, upsert current tools
+    let upserted: DatabaseTool[] = [];
+    if (input.tools.length > 0) {
+      upserted = await this.bulkUpsert(input);
+    }
+
+    return { upserted, deleted };
   }
 }
 
