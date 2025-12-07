@@ -37,7 +37,7 @@
     "@trpc/server": "^11.4.1",
     "@types/react-syntax-highlighter": "^15.5.13",
     "ahooks": "^3.9.0",
-    "better-auth": "^1.2.9",
+    "better-auth": "^1.4.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
