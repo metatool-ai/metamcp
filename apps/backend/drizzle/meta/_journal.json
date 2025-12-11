@@ -85,6 +85,13 @@
       "when": 1763452681793,
       "tag": "0011_goofy_photon",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1764122318274,
+      "tag": "0012_crazy_white_queen",
+      "breakpoints": true
     }
   ]
 }

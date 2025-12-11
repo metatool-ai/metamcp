@@ -156,6 +156,7 @@ export function EditMcpServer({
       args: "",
       url: "",
       bearerToken: "",
+      headers: "",
       env: "",
       user_id: undefined,
     },
@@ -166,9 +167,10 @@ export function EditMcpServer({
     const subscription = editForm.watch((value, { name }) => {
       if (name === "type" && value.type) {
         if (value.type === McpServerTypeEnum.Enum.STDIO) {
-          // Clear URL and bearer token when switching to stdio
+          // Clear URL, bearer token, and headers when switching to stdio
           editForm.setValue("url", "");
           editForm.setValue("bearerToken", "");
+          editForm.setValue("headers", "");
         } else if (
           value.type === McpServerTypeEnum.Enum.SSE ||
           value.type === McpServerTypeEnum.Enum.STREAMABLE_HTTP
@@ -194,6 +196,9 @@ export function EditMcpServer({
         args: server.args.join(" "),
         url: server.url || "",
         bearerToken: server.bearerToken || "",
+        headers: Object.entries(server.headers)
+          .map(([key, value]) => `${key}=${value}`)
+          .join("\n"),
         env: Object.entries(server.env)
           .map(([key, value]) => `${key}=${value}`)
           .join("\n"),
@@ -232,6 +237,22 @@ export function EditMcpServer({
         }
       }
 
+      // Parse headers string into object
+      const headersObject: Record<string, string> = {};
+      if (data.headers) {
+        const headersLines = data.headers.trim().split("\n");
+        for (const line of headersLines) {
+          const trimmedLine = line.trim();
+          if (trimmedLine && trimmedLine.includes("=")) {
+            const [key, ...valueParts] = trimmedLine.split("=");
+            const value = valueParts.join("="); // Handle values that contain '='
+            if (key?.trim()) {
+              headersObject[key.trim()] = value;
+            }
+          }
+        }
+      }
+
       // Create the API request payload
       const apiPayload: UpdateMcpServerRequest = {
         uuid: server.uuid,
@@ -243,6 +264,7 @@ export function EditMcpServer({
         env: envObject,
         url: data.url,
         bearerToken: data.bearerToken,
+        headers: headersObject,
         user_id: data.user_id,
       };
 
@@ -471,6 +493,21 @@ export function EditMcpServer({
                   placeholder={t("mcp-servers:bearerTokenPlaceholder")}
                   type="password"
                 />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label htmlFor="edit-headers" className="text-sm font-medium">
+                  {t("mcp-servers:headers")}
+                </label>
+                <Textarea
+                  id="edit-headers"
+                  {...editForm.register("headers")}
+                  placeholder={t("mcp-servers:headersPlaceholder")}
+                  className="h-24 whitespace-pre-wrap break-all overflow-x-hidden"
+                />
+                <p className="text-xs text-muted-foreground">
+                  One header per line in KEY=VALUE format
+                </p>
               </div>
             </>
           )}

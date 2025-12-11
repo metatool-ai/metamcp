@@ -56,6 +56,9 @@ export default function McpServerDetailPage({
   const [revealedEnvVars, setRevealedEnvVars] = useState<Set<string>>(
     new Set(),
   );
+  const [revealedHeaders, setRevealedHeaders] = useState<Set<string>>(
+    new Set(),
+  );
   const [bearerTokenRevealed, setBearerTokenRevealed] =
     useState<boolean>(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState<boolean>(false);
@@ -64,6 +67,19 @@ export default function McpServerDetailPage({
   // Function to toggle env var visibility
   const toggleEnvVarVisibility = (key: string) => {
     setRevealedEnvVars((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
+  // Function to toggle header visibility
+  const toggleHeaderVisibility = (key: string) => {
+    setRevealedHeaders((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
         newSet.delete(key);
@@ -566,6 +582,54 @@ export default function McpServerDetailPage({
                           <Eye className="h-3 w-3" />
                         )}
                       </Button>
+                    </div>
+                  </div>
+                )}
+                {Object.keys(server.headers).length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {t("mcp-servers:detail.customHeaders")}:
+                    </span>
+                    <div className="space-y-2">
+                      {Object.entries(server.headers).map(([key, value]) => {
+                        const isRevealed = revealedHeaders.has(key);
+                        const displayValue = isRevealed
+                          ? value
+                          : maskSensitiveValue(value);
+
+                        return (
+                          <div
+                            key={key}
+                            className="flex items-start gap-2 bg-muted p-2 rounded"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-mono font-medium">
+                                {key}:
+                              </span>
+                              <span className="text-sm font-mono text-muted-foreground ml-2 break-all">
+                                {displayValue}
+                              </span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 flex-shrink-0"
+                              onClick={() => toggleHeaderVisibility(key)}
+                              title={
+                                isRevealed
+                                  ? t("mcp-servers:detail.hideValue")
+                                  : t("mcp-servers:detail.showValue")
+                              }
+                            >
+                              {isRevealed ? (
+                                <EyeOff className="h-3 w-3" />
+                              ) : (
+                                <Eye className="h-3 w-3" />
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
