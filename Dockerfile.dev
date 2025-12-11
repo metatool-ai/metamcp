@@ -35,7 +35,7 @@ ENV CHOKIDAR_USEPOLLING=true
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY turbo.json ./
 
-# Copy package.json files from all workspaces
+# Copy package.json files from all workspaces (needed for dependency installation)
 COPY apps/frontend/package.json ./apps/frontend/
 COPY apps/backend/package.json ./apps/backend/
 COPY packages/eslint-config/package.json ./packages/eslint-config/
@@ -46,8 +46,10 @@ COPY packages/zod-types/package.json ./packages/zod-types/
 # Install all dependencies (including dev dependencies)
 RUN pnpm install
 
-# Create necessary directories for volume mounts
-RUN mkdir -p apps/frontend apps/backend packages/trpc packages/zod-types packages/eslint-config packages/typescript-config
+# Copy source code directories (will be overridden by volume mounts, but ensures structure exists)
+# This ensures the directory structure is present even if volumes don't mount correctly
+COPY apps ./apps
+COPY packages ./packages
 
 # Expose ports
 EXPOSE 12008 12009
