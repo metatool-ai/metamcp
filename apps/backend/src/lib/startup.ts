@@ -1,8 +1,36 @@
 import { ServerParameters } from "@repo/zod-types";
 
 import { mcpServersRepository, namespacesRepository } from "../db/repositories";
+import { initializeEnvironmentConfiguration } from "./bootstrap.service";
 import { metaMcpServerPool } from "./metamcp";
 import { convertDbServerToParams } from "./metamcp/utils";
+
+/**
+ * Startup initialization that must happen before the HTTP server begins listening.
+ *
+ * IMPORTANT: This function does not prevent the app from starting unless BOOTSTRAP_FAIL_HARD=true.
+ */
+export async function initializeOnStartup(): Promise<void> {
+  const enableEnvBootstrap =
+    process.env.BOOTSTRAP_ENABLE !== "false";
+  const failHard =
+    process.env.BOOTSTRAP_FAIL_HARD === "true";
+
+  if (enableEnvBootstrap) {
+    try {
+      await initializeEnvironmentConfiguration();
+    } catch (err) {
+      console.error("❌ Error initializing environment-based configuration (ignored):", err);
+      if (failHard) {
+        throw err;
+      }
+    }
+  } else {
+    console.log(
+      "Environment bootstrap disabled via BOOTSTRAP_ENABLE=false",
+    );
+  }
+}
 
 /**
  * Startup function to initialize idle servers for all namespaces and all MCP servers
