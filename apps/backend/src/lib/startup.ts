@@ -12,7 +12,7 @@ import { convertDbServerToParams } from "./metamcp/utils";
  */
 export async function initializeOnStartup(): Promise<void> {
   const enableEnvBootstrap =
-    process.env.BOOTSTRAP_ENABLE !== "false";
+    process.env.BOOTSTRAP_ENABLE === "true";
   const failHard =
     process.env.BOOTSTRAP_FAIL_HARD === "true";
 
