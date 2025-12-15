@@ -27,6 +27,45 @@ services:
       
       # Docker networking fix
       TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL:-true}
+      
+      # Bootstrap configuration - Arrays are defined as JSON strings
+      # API Keys: Define multiple API keys with different visibility levels
+      # BOOTSTRAP_API_KEYS: |
+      #   [
+      #     {"name": "Public", "is_public": true},
+      #     {"name": "Private", "is_public": false}
+      #   ]
+      
+      # Namespaces: Define multiple namespaces with descriptions and visibility
+      # BOOTSTRAP_NAMESPACES: |
+      #   [
+      #     {"name": "Namespace 1", "description": "This is bootstrapped namespace 1", "is_public": false, "update": true},
+      #     {"name": "Namespace 2", "description": "This is bootstrapped namespace 2", "is_public": true, "update": true}
+      #   ]
+      
+      # Endpoints: Define multiple endpoints with authentication settings
+      # Note: Endpoints will be created in the first available namespace
+      # BOOTSTRAP_ENDPOINTS: |
+      #   [
+      #     {
+      #       "name": "Endpoint1",
+      #       "description": "This is bootstrapped endpoint 1",
+      #       "enable_auth": false,
+      #       "enable_auth_query": false,
+      #       "enable_auth_oauth": false,
+      #       "is_public": true,
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "Endpoint2",
+      #       "description": "This is bootstrapped endpoint 2",
+      #       "enable_auth": true,
+      #       "enable_auth_query": false,
+      #       "enable_auth_oauth": false,
+      #       "is_public": false,
+      #       "update": true
+      #     }
+      #   ]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

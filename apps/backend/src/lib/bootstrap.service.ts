@@ -15,43 +15,52 @@ import {
 
 /**
  * Environment-based bootstrap for MetaMCP.
- * - No new dependencies
- * - Use Better Auth sign-up endpoint for password hashing
- * - Optional hard-fail on startup (warn + continue by default)
+ * Supports arrays of API Keys, Namespaces, and Endpoints via JSON environment variables.
  */
+
+type ApiKeyConfig = {
+  name: string;
+  is_public?: boolean;
+};
+
+type NamespaceConfig = {
+  name: string;
+  description?: string;
+  is_public?: boolean;
+  update?: boolean;
+};
+
+type EndpointConfig = {
+  name: string;
+  description?: string;
+  enable_auth?: boolean;
+  enable_auth_query?: boolean;
+  enable_auth_oauth?: boolean;
+  is_public?: boolean;
+  update?: boolean;
+};
 
 type EnvConfig = {
   // Default user
   defaultUserEmail?: string;
   defaultUserPassword?: string;
   defaultUserName: string;
-  defaultUserCreateApiKeys: boolean;
   deleteOtherUsers: boolean;
 
   // User lifecycle / safety
-  recreateDefaultUser: boolean; // delete + recreate user to apply password
-  preserveApiKeysOnRecreate: boolean; // keep user-scoped keys across recreate
-  warnOnPasswordChange: boolean; // compare fingerprint + warn if changed
-  bootstrapOnlyOnFirstRun: boolean; // one-time bootstrap mode
+  recreateDefaultUser: boolean;
+  preserveApiKeysOnRecreate: boolean;
+  warnOnPasswordChange: boolean;
+  bootstrapOnlyOnFirstRun: boolean;
 
   // Registration controls
   disableUiRegistration: boolean;
   disableSsoRegistration: boolean;
 
-  // Namespace
-  defaultNamespaceName?: string;
-  defaultNamespaceDescription?: string;
-  defaultNamespaceIsPublic: boolean;
-  defaultNamespaceUpdateIfExists: boolean;
-
-  // Endpoint
-  defaultEndpointName?: string;
-  defaultEndpointDescription?: string;
-  defaultEndpointEnableApiKeyAuth: boolean;
-  defaultEndpointUseQueryParamAuth: boolean;
-  defaultEndpointEnableOauth: boolean;
-  defaultEndpointIsPublic: boolean;
-  defaultEndpointUpdateIfExists: boolean;
+  // Array configurations
+  apiKeys: ApiKeyConfig[];
+  namespaces: NamespaceConfig[];
+  endpoints: EndpointConfig[];
 };
 
 const BOOTSTRAP_COMPLETE_KEY = "BOOTSTRAP_COMPLETE";
@@ -84,16 +93,28 @@ function sha256Hex(input: string): string {
   return crypto.createHash("sha256").update(input, "utf8").digest("hex");
 }
 
+function parseJsonArray<T>(envVar: string | undefined, defaultValue: T[]): T[] {
+  if (!envVar) return defaultValue;
+  
+  try {
+    const parsed = JSON.parse(envVar);
+    if (!Array.isArray(parsed)) {
+      console.warn(`⚠️ Environment variable is not an array, using default: ${envVar.slice(0, 50)}...`);
+      return defaultValue;
+    }
+    return parsed as T[];
+  } catch (err) {
+    console.warn(`⚠️ Failed to parse JSON array from environment variable: ${err}`);
+    return defaultValue;
+  }
+}
+
 function parseEnvConfig(): EnvConfig {
   return {
     // Default user
     defaultUserEmail: nonEmpty(process.env.BOOTSTRAP_USER_EMAIL),
     defaultUserPassword: nonEmpty(process.env.BOOTSTRAP_USER_PASSWORD),
     defaultUserName: nonEmpty(process.env.BOOTSTRAP_USER_NAME) ?? "Administrator",
-    defaultUserCreateApiKeys: parseBool(
-      process.env.BOOTSTRAP_CREATE_API_KEYS,
-      true,
-    ),
     deleteOtherUsers: parseBool(process.env.BOOTSTRAP_DELETE_OTHER_USERS, false),
 
     recreateDefaultUser: parseBool(process.env.BOOTSTRAP_RECREATE_USER, false),
@@ -114,45 +135,10 @@ function parseEnvConfig(): EnvConfig {
       false,
     ),
 
-    // Namespace
-    defaultNamespaceName: nonEmpty(process.env.BOOTSTRAP_NAMESPACE),
-    defaultNamespaceDescription: nonEmpty(
-      process.env.BOOTSTRAP_NAMESPACE_DESCRIPTION,
-    ),
-    defaultNamespaceIsPublic: parseBool(
-      process.env.BOOTSTRAP_NAMESPACE_IS_PUBLIC,
-      false,
-    ),
-    defaultNamespaceUpdateIfExists: parseBool(
-      process.env.BOOTSTRAP_NAMESPACE_UPDATE,
-      true,
-    ),
-
-    // Endpoint
-    defaultEndpointName: nonEmpty(process.env.BOOTSTRAP_ENDPOINT),
-    defaultEndpointDescription: nonEmpty(
-      process.env.BOOTSTRAP_ENDPOINT_DESCRIPTION,
-    ),
-    defaultEndpointEnableApiKeyAuth: parseBool(
-      process.env.BOOTSTRAP_ENDPOINT_ENABLE_API_KEY,
-      true,
-    ),
-    defaultEndpointUseQueryParamAuth: parseBool(
-      process.env.BOOTSTRAP_ENDPOINT_USE_QUERY_PARAM,
-      false,
-    ),
-    defaultEndpointEnableOauth: parseBool(
-      process.env.BOOTSTRAP_ENDPOINT_ENABLE_OAUTH,
-      false,
-    ),
-    defaultEndpointIsPublic: parseBool(
-      process.env.BOOTSTRAP_ENDPOINT_IS_PUBLIC,
-      true,
-    ),
-    defaultEndpointUpdateIfExists: parseBool(
-      process.env.BOOTSTRAP_ENDPOINT_UPDATE,
-      true,
-    ),
+    // Array configurations
+    apiKeys: parseJsonArray<ApiKeyConfig>(process.env.BOOTSTRAP_API_KEYS, []),
+    namespaces: parseJsonArray<NamespaceConfig>(process.env.BOOTSTRAP_NAMESPACES, []),
+    endpoints: parseJsonArray<EndpointConfig>(process.env.BOOTSTRAP_ENDPOINTS, []),
   };
 }
 
@@ -255,15 +241,6 @@ async function recordPasswordFingerprint(password: string): Promise<void> {
 
 /**
  * Ensure default user exists.
- *
- * - If user exists:
- *   - Warn on password change (if enabled)
- *   - Optionally recreate user if BOOTSTRAP_RECREATE_USER=true
- * - If user does not exist:
- *   - Create via Better Auth signup API
- *
- * IMPORTANT: Password rotation is only possible via delete+recreate (Better Auth
- * sign-up will not overwrite an existing email’s credential).
  */
 async function ensureDefaultUser(
   config: EnvConfig,
@@ -339,7 +316,7 @@ async function ensureDefaultUser(
   }
 
   if (!existing || recreated) {
-    // Create via Better Auth (this is the only supported way to ensure hashing matches)
+    // Create via Better Auth
     const request = new Request("http://internal/api/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -385,7 +362,7 @@ async function ensureDefaultUser(
     console.warn("⚠️ Failed to update user metadata:", err);
   }
 
-  // If we recreated and preserved keys, restore them now to the new user id
+  // Restore preserved keys if recreated
   if (recreated && config.preserveApiKeysOnRecreate && preservedUserApiKeys) {
     for (const k of preservedUserApiKeys) {
       try {
@@ -409,7 +386,7 @@ async function ensureDefaultUser(
     console.log("✓ Restored preserved API keys for recreated user");
   }
 
-  // Record fingerprint only when we actually create/recreate (i.e., when env is authoritative)
+  // Record fingerprint when we actually create/recreate
   if (!existing || recreated) {
     await recordPasswordFingerprint(password);
   }
@@ -443,224 +420,229 @@ async function maybeDeleteOtherUsers(
 }
 
 /**
- * Create default API keys (public + private) if enabled.
- *
- * This includes:
- * - Public key: user_id IS NULL, name="public"
- * - Private key: user_id=<defaultUserId>, name="private"
- *
- * If keys are already present, they are not duplicated.
- * If private key exists and you re-run, we keep it unless you explicitly recreate user
- * and choose not to preserve keys.
+ * Bootstrap API keys from configuration array.
  */
-async function ensureDefaultApiKeys(
+async function bootstrapApiKeys(
   config: EnvConfig,
   defaultUserId: string | undefined,
 ): Promise<void> {
-  if (!config.defaultUserCreateApiKeys) return;
-
-  console.log("🔑 Creating default API keys...");
-
-  // Public key (global)
-  try {
-    const existingPublic = await db.query.apiKeysTable.findFirst({
-      where: and(isNull(apiKeysTable.user_id), eq(apiKeysTable.name, "public")),
-    });
-
-    if (!existingPublic) {
-      const key = generateApiKey();
-      await db.insert(apiKeysTable).values({
-        name: "public",
-        key,
-        user_id: null,
-        is_active: true,
-      });
-      console.log(`✓ Created default public API key: ${maskKey(key)}`);
-    } else {
-      console.log(
-        `✓ Default public API key already exists: ${maskKey(existingPublic.key)}`,
-      );
-    }
-  } catch (err) {
-    console.warn("⚠️ Failed to ensure public API key:", err);
-  }
-
-  // Private key (user-scoped)
-  if (!defaultUserId) {
-    console.warn(
-      "⚠️ Cannot create private API key because default user was not created/resolved.",
-    );
+  if (!config.apiKeys || config.apiKeys.length === 0) {
+    console.log("ℹ️ No API keys configured for bootstrap (BOOTSTRAP_API_KEYS is empty)");
     return;
   }
 
-  try {
-    const existingPrivate = await db.query.apiKeysTable.findFirst({
-      where: and(
-        eq(apiKeysTable.user_id, defaultUserId),
-        eq(apiKeysTable.name, "private"),
-      ),
-    });
+  console.log(`🔑 Bootstrapping ${config.apiKeys.length} API key(s)...`);
 
-    if (!existingPrivate) {
-      const key = generateApiKey();
-      await db.insert(apiKeysTable).values({
-        name: "private",
-        key,
-        user_id: defaultUserId,
-        is_active: true,
-      });
-      console.log(`✓ Created default private API key: ${maskKey(key)}`);
-    } else {
-      console.log(
-        `✓ Default private API key already exists: ${maskKey(existingPrivate.key)}`,
-      );
-    }
-  } catch (err) {
-    console.warn("⚠️ Failed to ensure private API key:", err);
-  }
-}
+  for (const apiKeyConfig of config.apiKeys) {
+    try {
+      const name = apiKeyConfig.name;
+      const isPublic = apiKeyConfig.is_public ?? false;
+      const userId = isPublic ? null : defaultUserId;
 
-async function ensureDefaultNamespace(
-  config: EnvConfig,
-  defaultUserId: string | undefined,
-): Promise<string | undefined> {
-  const name = config.defaultNamespaceName;
-  if (!name) {
-    console.warn(
-      "⚠️ BOOTSTRAP_NAMESPACE not set; skipping namespace initialization.",
-    );
-    return undefined;
-  }
-
-  const ownerUserId = config.defaultNamespaceIsPublic ? null : defaultUserId;
-  if (!config.defaultNamespaceIsPublic && !defaultUserId) {
-    console.warn(
-      "⚠️ BOOTSTRAP_NAMESPACE_IS_PUBLIC=false but default user id is unavailable; skipping namespace initialization.",
-    );
-    return undefined;
-  }
-
-  console.log(`🔧 Initializing default namespace: ${name}`);
-
-  try {
-    // FIXED: Look for namespace by name AND user_id (or NULL for public)
-    const whereCondition = ownerUserId
-      ? and(eq(namespacesTable.name, name), eq(namespacesTable.user_id, ownerUserId))
-      : and(eq(namespacesTable.name, name), isNull(namespacesTable.user_id));
-
-    const existing = await db.query.namespacesTable.findFirst({
-      where: whereCondition,
-    });
-
-    if (!existing) {
-      const inserted = await db
-        .insert(namespacesTable)
-        .values({
-          name,
-          description: config.defaultNamespaceDescription ?? null,
-          user_id: ownerUserId,
-        })
-        .returning({ uuid: namespacesTable.uuid });
-
-      const uuid = inserted?.[0]?.uuid;
-      if (uuid) {
-        console.log(`✓ Created default namespace: ${name} (${ownerUserId ? 'private' : 'public'})`);
-        return uuid;
+      if (!isPublic && !defaultUserId) {
+        console.warn(
+          `⚠️ Skipping private API key "${name}" because default user is not available`,
+        );
+        continue;
       }
 
-      console.warn("⚠️ Namespace insert did not return uuid; continuing.");
-      return undefined;
+      // Check if key already exists
+      const whereCondition = userId
+        ? and(eq(apiKeysTable.user_id, userId), eq(apiKeysTable.name, name))
+        : and(isNull(apiKeysTable.user_id), eq(apiKeysTable.name, name));
+
+      const existing = await db.query.apiKeysTable.findFirst({
+        where: whereCondition,
+      });
+
+      if (!existing) {
+        const key = generateApiKey();
+        await db.insert(apiKeysTable).values({
+          name,
+          key,
+          user_id: userId,
+          is_active: true,
+        });
+        console.log(
+          `✓ Created ${isPublic ? "public" : "private"} API key "${name}": ${maskKey(key)}`,
+        );
+      } else {
+        console.log(
+          `✓ ${isPublic ? "Public" : "Private"} API key "${name}" already exists: ${maskKey(existing.key)}`,
+        );
+      }
+    } catch (err) {
+      console.warn(`⚠️ Failed to bootstrap API key "${apiKeyConfig.name}":`, err);
     }
-
-    if (config.defaultNamespaceUpdateIfExists) {
-      await db
-        .update(namespacesTable)
-        .set({
-          description:
-            config.defaultNamespaceDescription ?? existing.description,
-          updated_at: new Date(),
-          user_id: ownerUserId,
-        })
-        .where(eq(namespacesTable.uuid, existing.uuid));
-
-      console.log(`✓ Updated default namespace: ${name}`);
-    } else {
-      console.log(`✓ Default namespace already exists: ${name}`);
-    }
-
-    return existing.uuid;
-  } catch (err) {
-    console.warn("⚠️ Namespace initialization failed:", err);
-    return undefined;
   }
 }
 
-async function ensureDefaultEndpoint(
+/**
+ * Bootstrap namespaces from configuration array.
+ */
+async function bootstrapNamespaces(
   config: EnvConfig,
-  namespaceUuid: string | undefined,
+  defaultUserId: string | undefined,
+): Promise<Map<string, string>> {
+  const namespaceMap = new Map<string, string>(); // name -> uuid
+  
+  if (!config.namespaces || config.namespaces.length === 0) {
+    console.log("ℹ️ No namespaces configured for bootstrap (BOOTSTRAP_NAMESPACES is empty)");
+    return namespaceMap;
+  }
+
+  console.log(`🔧 Bootstrapping ${config.namespaces.length} namespace(s)...`);
+
+  for (const nsConfig of config.namespaces) {
+    try {
+      const name = nsConfig.name;
+      const description = nsConfig.description ?? null;
+      const isPublic = nsConfig.is_public ?? false;
+      const shouldUpdate = nsConfig.update ?? true;
+      const ownerUserId = isPublic ? null : defaultUserId;
+
+      if (!isPublic && !defaultUserId) {
+        console.warn(
+          `⚠️ Skipping private namespace "${name}" because default user is not available`,
+        );
+        continue;
+      }
+
+      // Look for existing namespace
+      const whereCondition = ownerUserId
+        ? and(eq(namespacesTable.name, name), eq(namespacesTable.user_id, ownerUserId))
+        : and(eq(namespacesTable.name, name), isNull(namespacesTable.user_id));
+
+      const existing = await db.query.namespacesTable.findFirst({
+        where: whereCondition,
+      });
+
+      if (!existing) {
+        const inserted = await db
+          .insert(namespacesTable)
+          .values({
+            name,
+            description,
+            user_id: ownerUserId,
+          })
+          .returning({ uuid: namespacesTable.uuid });
+
+        const uuid = inserted?.[0]?.uuid;
+        if (uuid) {
+          namespaceMap.set(name, uuid);
+          console.log(`✓ Created ${isPublic ? "public" : "private"} namespace "${name}"`);
+        } else {
+          console.warn(`⚠️ Namespace insert for "${name}" did not return uuid`);
+        }
+      } else {
+        namespaceMap.set(name, existing.uuid);
+        
+        if (shouldUpdate) {
+          await db
+            .update(namespacesTable)
+            .set({
+              description: description ?? existing.description,
+              updated_at: new Date(),
+              user_id: ownerUserId,
+            })
+            .where(eq(namespacesTable.uuid, existing.uuid));
+
+          console.log(`✓ Updated namespace "${name}"`);
+        } else {
+          console.log(`✓ Namespace "${name}" already exists (no update)`);
+        }
+      }
+    } catch (err) {
+      console.warn(`⚠️ Failed to bootstrap namespace "${nsConfig.name}":`, err);
+    }
+  }
+
+  return namespaceMap;
+}
+
+/**
+ * Bootstrap endpoints from configuration array.
+ */
+async function bootstrapEndpoints(
+  config: EnvConfig,
+  namespaceMap: Map<string, string>,
   defaultUserId: string | undefined,
 ): Promise<void> {
-  const name = config.defaultEndpointName;
-  if (!name) {
-    console.warn(
-      "⚠️ BOOTSTRAP_ENDPOINT not set; skipping endpoint initialization.",
-    );
-    return;
-  }
-  if (!namespaceUuid) {
-    console.warn(
-      "⚠️ Cannot initialize endpoint because namespace UUID is not available.",
-    );
+  if (!config.endpoints || config.endpoints.length === 0) {
+    console.log("ℹ️ No endpoints configured for bootstrap (BOOTSTRAP_ENDPOINTS is empty)");
     return;
   }
 
-  const ownerUserId = config.defaultEndpointIsPublic ? null : defaultUserId;
-  if (!config.defaultEndpointIsPublic && !defaultUserId) {
-    console.warn(
-      "⚠️ BOOTSTRAP_ENDPOINT_IS_PUBLIC=false but default user id is unavailable; skipping endpoint initialization.",
-    );
-    return;
-  }
+  console.log(`🔧 Bootstrapping ${config.endpoints.length} endpoint(s)...`);
 
-  console.log(`🔧 Initializing default endpoint: ${name}`);
+  for (const epConfig of config.endpoints) {
+    try {
+      const name = epConfig.name;
+      const description = epConfig.description ?? null;
+      const enableAuth = epConfig.enable_auth ?? true;
+      const enableAuthQuery = epConfig.enable_auth_query ?? false;
+      const enableAuthOauth = epConfig.enable_auth_oauth ?? false;
+      const isPublic = epConfig.is_public ?? true;
+      const shouldUpdate = epConfig.update ?? true;
+      const ownerUserId = isPublic ? null : defaultUserId;
 
-  try {
-    // FIXED: Look for endpoint by name AND namespace_uuid
-    const existing = await db.query.endpointsTable.findFirst({
-      where: and(
-        eq(endpointsTable.name, name),
-        eq(endpointsTable.namespace_uuid, namespaceUuid)
-      ),
-    });
+      if (!isPublic && !defaultUserId) {
+        console.warn(
+          `⚠️ Skipping private endpoint "${name}" because default user is not available`,
+        );
+        continue;
+      }
 
-    const values = {
-      name,
-      description: config.defaultEndpointDescription ?? null,
-      namespace_uuid: namespaceUuid,
-      enable_api_key_auth: config.defaultEndpointEnableApiKeyAuth,
-      use_query_param_auth: config.defaultEndpointUseQueryParamAuth,
-      enable_oauth: config.defaultEndpointEnableOauth,
-      user_id: ownerUserId,
-      updated_at: new Date(),
-    };
+      // Find the namespace UUID - endpoints need to specify which namespace they belong to
+      // For now, we'll use the first namespace in the map or skip if no namespaces
+      let namespaceUuid: string | undefined;
+      if (namespaceMap.size > 0) {
+        namespaceUuid = Array.from(namespaceMap.values())[0];
+      }
 
-    if (!existing) {
-      await db.insert(endpointsTable).values(values);
-      console.log(`✓ Created default endpoint: ${name}`);
-      return;
+      if (!namespaceUuid) {
+        console.warn(
+          `⚠️ Skipping endpoint "${name}" because no namespace is available. Bootstrap at least one namespace first.`,
+        );
+        continue;
+      }
+
+      // Look for existing endpoint
+      const existing = await db.query.endpointsTable.findFirst({
+        where: and(
+          eq(endpointsTable.name, name),
+          eq(endpointsTable.namespace_uuid, namespaceUuid)
+        ),
+      });
+
+      const values = {
+        name,
+        description,
+        namespace_uuid: namespaceUuid,
+        enable_api_key_auth: enableAuth,
+        use_query_param_auth: enableAuthQuery,
+        enable_oauth: enableAuthOauth,
+        user_id: ownerUserId,
+        updated_at: new Date(),
+      };
+
+      if (!existing) {
+        await db.insert(endpointsTable).values(values);
+        console.log(`✓ Created ${isPublic ? "public" : "private"} endpoint "${name}"`);
+      } else {
+        if (shouldUpdate) {
+          await db
+            .update(endpointsTable)
+            .set(values)
+            .where(eq(endpointsTable.uuid, existing.uuid));
+          console.log(`✓ Updated endpoint "${name}"`);
+        } else {
+          console.log(`✓ Endpoint "${name}" already exists (no update)`);
+        }
+      }
+    } catch (err) {
+      console.warn(`⚠️ Failed to bootstrap endpoint "${epConfig.name}":`, err);
     }
-
-    if (config.defaultEndpointUpdateIfExists) {
-      await db
-        .update(endpointsTable)
-        .set(values)
-        .where(eq(endpointsTable.uuid, existing.uuid));
-      console.log(`✓ Updated default endpoint: ${name}`);
-    } else {
-      console.log(`✓ Default endpoint already exists: ${name}`);
-    }
-  } catch (err) {
-    console.warn("⚠️ Endpoint initialization failed:", err);
   }
 }
 
@@ -681,7 +663,6 @@ function validateConfig(config: EnvConfig): void {
     );
   }
 
-  // Additional validation warnings
   if (config.defaultUserPassword && config.defaultUserPassword.length < 8) {
     console.warn(
       "⚠️ BOOTSTRAP_USER_PASSWORD is less than 8 characters. Consider using a stronger password.",
@@ -706,12 +687,33 @@ function validateConfig(config: EnvConfig): void {
     );
   }
 
-  if (config.defaultEndpointName && !config.defaultNamespaceName) {
+  // Validate API keys configuration
+  for (const apiKey of config.apiKeys) {
+    if (!apiKey.name || apiKey.name.trim() === "") {
+      console.warn("⚠️ API key configuration is missing 'name' field");
+    }
+  }
+
+  // Validate namespaces configuration
+  for (const ns of config.namespaces) {
+    if (!ns.name || ns.name.trim() === "") {
+      console.warn("⚠️ Namespace configuration is missing 'name' field");
+    }
+  }
+
+  // Validate endpoints configuration
+  for (const ep of config.endpoints) {
+    if (!ep.name || ep.name.trim() === "") {
+      console.warn("⚠️ Endpoint configuration is missing 'name' field");
+    }
+  }
+
+  if (config.endpoints.length > 0 && config.namespaces.length === 0) {
     console.warn(
-      "⚠️ BOOTSTRAP_ENDPOINT is set but BOOTSTRAP_NAMESPACE is not",
+      "⚠️ Endpoints are configured but no namespaces are defined.",
     );
     console.warn(
-      "     Endpoint creation requires a namespace!",
+      "     Endpoints require at least one namespace to be created!",
     );
   }
 }
@@ -724,8 +726,9 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
   if (process.env.BOOTSTRAP_DEBUG === "true") {
     console.log("📋 Bootstrap Configuration:");
     console.log(`   User: ${config.defaultUserEmail ?? '(not set)'}`);
-    console.log(`   Namespace: ${config.defaultNamespaceName ?? '(not set)'}`);
-    console.log(`   Endpoint: ${config.defaultEndpointName ?? '(not set)'}`);
+    console.log(`   API Keys: ${config.apiKeys.length} configured`);
+    console.log(`   Namespaces: ${config.namespaces.length} configured`);
+    console.log(`   Endpoints: ${config.endpoints.length} configured`);
     console.log(`   Recreate User: ${config.recreateDefaultUser}`);
     console.log(`   First Run Only: ${config.bootstrapOnlyOnFirstRun}`);
     console.log(`   Delete Others: ${config.deleteOtherUsers}`);
@@ -733,7 +736,7 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
   
   validateConfig(config);
 
-  // Registration controls should be applied every run (safe and non-destructive)
+  // Registration controls (applied every run)
   console.log("🔧 Setting registration controls...");
   try {
     await upsertConfig(
@@ -759,21 +762,21 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
     `✓ Registration controls set: UI=${!config.disableUiRegistration}, SSO=${!config.disableSsoRegistration}`,
   );
 
-  // One-time bootstrap guard: skips destructive/creation steps after first success
+  // One-time bootstrap guard
   const skipBootstrap = await shouldSkipBootstrap(config);
   if (skipBootstrap) {
     console.log("✅ Environment-based configuration initialized (guarded)");
     return;
   }
 
-  // Optionally delete other users BEFORE ensuring default user (so recreate doesn’t get wiped)
+  // Delete other users before ensuring default user
   try {
     await maybeDeleteOtherUsers(config, config.defaultUserEmail);
   } catch (err) {
     console.warn("⚠️ User cleanup step failed:", err);
   }
 
-  // Default user
+  // Ensure default user
   let defaultUserId: string | undefined;
   let recreated = false;
   try {
@@ -784,36 +787,32 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
     console.warn("⚠️ Default user initialization failed:", err);
   }
 
-  // API keys:
-  // - If user was recreated and BOOTSTRAP_PRESERVE_API_KEYS=true, keys were restored.
-  // - Regardless, if BOOTSTRAP_CREATE_API_KEYS=true, we ensure public/private exist.
-  //   This covers both fresh installs and restores that didn’t include "private".
+  // Bootstrap API keys
   try {
-    await ensureDefaultApiKeys(config, defaultUserId);
+    await bootstrapApiKeys(config, defaultUserId);
   } catch (err) {
-    console.warn("⚠️ API key initialization failed:", err);
+    console.warn("⚠️ API keys bootstrap failed:", err);
   }
 
-  // Namespace + endpoint (optional)
-  let namespaceUuid: string | undefined;
+  // Bootstrap namespaces and collect UUID mappings
+  let namespaceMap: Map<string, string>;
   try {
-    namespaceUuid = await ensureDefaultNamespace(config, defaultUserId);
+    namespaceMap = await bootstrapNamespaces(config, defaultUserId);
   } catch (err) {
-    console.warn("⚠️ Namespace initialization failed:", err);
+    console.warn("⚠️ Namespaces bootstrap failed:", err);
+    namespaceMap = new Map();
   }
 
+  // Bootstrap endpoints
   try {
-    await ensureDefaultEndpoint(config, namespaceUuid, defaultUserId);
+    await bootstrapEndpoints(config, namespaceMap, defaultUserId);
   } catch (err) {
-    console.warn("⚠️ Endpoint initialization failed:", err);
+    console.warn("⚠️ Endpoints bootstrap failed:", err);
   }
 
-  // Mark one-time bootstrap complete only if we actually did the bootstrap pass
-  // (best-effort; do not fail startup)
+  // Mark one-time bootstrap complete
   if (config.bootstrapOnlyOnFirstRun) {
-    // Heuristic: if we have a default user OR we created namespace/endpoint, consider it “complete”.
-    // If you want stricter semantics, we can tighten this.
-    if (defaultUserId || namespaceUuid || recreated) {
+    if (defaultUserId || namespaceMap.size > 0 || recreated) {
       await markBootstrapComplete();
     }
   }
