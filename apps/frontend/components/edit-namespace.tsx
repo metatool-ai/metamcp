@@ -7,7 +7,7 @@ import {
   NamespaceWithServers,
   UpdateNamespaceRequest,
 } from "@repo/zod-types";
-import { Check, ChevronDown, Server } from "lucide-react";
+import { Check, ChevronDown, Search, Server } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -48,6 +48,7 @@ export function EditNamespace({
 }: EditNamespaceProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedServerUuids, setSelectedServerUuids] = useState<string[]>([]);
+  const [serverSearchQuery, setServerSearchQuery] = useState("");
   const { t } = useTranslations();
 
   // Get tRPC utils for cache invalidation
@@ -57,6 +58,18 @@ export function EditNamespace({
   const { data: serversResponse, isLoading: serversLoading } =
     trpc.frontend.mcpServers.list.useQuery();
   const availableServers = serversResponse?.success ? serversResponse.data : [];
+
+  // Filter and sort servers alphabetically
+  const filteredServers = availableServers
+    .filter((server) => {
+      if (!serverSearchQuery.trim()) return true;
+      const query = serverSearchQuery.toLowerCase();
+      return (
+        server.name.toLowerCase().includes(query) ||
+        server.description?.toLowerCase().includes(query)
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   // tRPC mutation for updating namespace
   const updateNamespaceMutation = trpc.frontend.namespaces.update.useMutation({
@@ -269,6 +282,17 @@ export function EditNamespace({
                   count: selectedServerUuids.length,
                 })}
               </label>
+              {/* Search input for filtering servers */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={t("namespaces:searchServers")}
+                  value={serverSearchQuery}
+                  onChange={(e) => setServerSearchQuery(e.target.value)}
+                  className="pl-8"
+                  disabled={isUpdating || serversLoading}
+                />
+              </div>
               <div className="border rounded-md p-3 max-h-[200px] overflow-y-auto">
                 {serversLoading ? (
                   <div className="flex items-center justify-center py-4">
@@ -286,9 +310,16 @@ export function EditNamespace({
                       {t("namespaces:edit.createMcpServersFirst")}
                     </p>
                   </div>
+                ) : filteredServers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <Search className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      {t("namespaces:noServersFound")}
+                    </p>
+                  </div>
                 ) : (
                   <div className="space-y-2">
-                    {availableServers.map((server) => {
+                    {filteredServers.map((server) => {
                       const isSelected = selectedServerUuids.includes(
                         server.uuid,
                       );
