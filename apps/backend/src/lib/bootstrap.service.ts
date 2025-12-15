@@ -1,5 +1,5 @@
 import { ConfigKeyEnum } from "@repo/zod-types";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull, ne, inArray } from "drizzle-orm";
 import crypto from "node:crypto";
 
 import { auth } from "../auth";
@@ -15,18 +15,28 @@ import {
 
 /**
  * Environment-based bootstrap for MetaMCP.
- * Supports arrays of API Keys, Namespaces, and Endpoints via JSON environment variables.
+ * Supports arrays of Users, API Keys, Namespaces, and Endpoints via JSON environment variables.
  */
+
+type UserConfig = {
+  email: string;
+  password: string;
+  name?: string;
+};
 
 type ApiKeyConfig = {
   name: string;
   is_public?: boolean;
+  user_email?: string; // Email of user who owns this key (for private keys)
+  owner?: string; // Alias for user_email
 };
 
 type NamespaceConfig = {
   name: string;
   description?: string;
   is_public?: boolean;
+  user_email?: string; // Email of user who owns this namespace (for private namespaces)
+  owner?: string; // Alias for user_email
   update?: boolean;
 };
 
@@ -37,14 +47,22 @@ type EndpointConfig = {
   enable_auth_query?: boolean;
   enable_auth_oauth?: boolean;
   is_public?: boolean;
+  user_email?: string; // Email of user who owns this endpoint (for private endpoints)
+  owner?: string; // Alias for user_email
+  namespace?: string; // Name of namespace where endpoint should be created (optional, defaults to first available)
   update?: boolean;
 };
 
 type EnvConfig = {
-  // Default user
+  // Single user (legacy support)
   defaultUserEmail?: string;
   defaultUserPassword?: string;
   defaultUserName: string;
+  
+  // Multiple users (new)
+  users: UserConfig[];
+  
+  // User management
   deleteOtherUsers: boolean;
 
   // User lifecycle / safety
@@ -64,7 +82,7 @@ type EnvConfig = {
 };
 
 const BOOTSTRAP_COMPLETE_KEY = "BOOTSTRAP_COMPLETE";
-const BOOTSTRAP_USER_PASSWORD_FP_KEY = "BOOTSTRAP_USER_PASSWORD_FINGERPRINT";
+const BOOTSTRAP_USER_PASSWORD_FP_PREFIX = "BOOTSTRAP_USER_PASSWORD_FINGERPRINT_";
 
 function parseBool(value: string | undefined, def: boolean): boolean {
   if (value === undefined) return def;
@@ -109,12 +127,41 @@ function parseJsonArray<T>(envVar: string | undefined, defaultValue: T[]): T[] {
   }
 }
 
+/**
+ * Get owner email from config object. Supports both "user_email" and "owner" field names.
+ * Returns user_email if present, otherwise returns owner, otherwise returns undefined.
+ */
+function getOwnerEmail(
+  config: { user_email?: string; owner?: string }
+): string | undefined {
+  return config.user_email ?? config.owner;
+}
+
 function parseEnvConfig(): EnvConfig {
+  // Parse users array
+  const usersArray = parseJsonArray<UserConfig>(process.env.BOOTSTRAP_USERS, []);
+  
+  // If single user config exists and users array is empty, add it to array
+  const singleUserEmail = nonEmpty(process.env.BOOTSTRAP_USER_EMAIL);
+  const singleUserPassword = nonEmpty(process.env.BOOTSTRAP_USER_PASSWORD);
+  
+  if (singleUserEmail && singleUserPassword && usersArray.length === 0) {
+    usersArray.push({
+      email: singleUserEmail,
+      password: singleUserPassword,
+      name: nonEmpty(process.env.BOOTSTRAP_USER_NAME) ?? "Administrator",
+    });
+  }
+
   return {
-    // Default user
-    defaultUserEmail: nonEmpty(process.env.BOOTSTRAP_USER_EMAIL),
-    defaultUserPassword: nonEmpty(process.env.BOOTSTRAP_USER_PASSWORD),
+    // Single user (legacy - for backwards compatibility in some contexts)
+    defaultUserEmail: singleUserEmail,
+    defaultUserPassword: singleUserPassword,
     defaultUserName: nonEmpty(process.env.BOOTSTRAP_USER_NAME) ?? "Administrator",
+    
+    // Multiple users
+    users: usersArray,
+    
     deleteOtherUsers: parseBool(process.env.BOOTSTRAP_DELETE_OTHER_USERS, false),
 
     recreateDefaultUser: parseBool(process.env.BOOTSTRAP_RECREATE_USER, false),
@@ -198,22 +245,23 @@ async function markBootstrapComplete(): Promise<void> {
 }
 
 async function warnIfPasswordChanged(
-  config: EnvConfig,
+  email: string,
+  password: string,
+  warnOnChange: boolean,
   hasExistingUser: boolean,
+  recreateUser: boolean,
 ): Promise<void> {
-  const email = config.defaultUserEmail;
-  const password = config.defaultUserPassword;
-  if (!config.warnOnPasswordChange) return;
-  if (!email || !password) return;
+  if (!warnOnChange) return;
   if (!hasExistingUser) return;
 
   try {
     const currentFp = sha256Hex(password);
-    const previousFp = await getConfigValue(BOOTSTRAP_USER_PASSWORD_FP_KEY);
+    const fpKey = `${BOOTSTRAP_USER_PASSWORD_FP_PREFIX}${email}`;
+    const previousFp = await getConfigValue(fpKey);
 
-    if (previousFp && previousFp !== currentFp && !config.recreateDefaultUser) {
+    if (previousFp && previousFp !== currentFp && !recreateUser) {
       console.warn(
-        "⚠️ BOOTSTRAP_USER_PASSWORD appears to have changed since last applied.",
+        `⚠️ Password for ${email} appears to have changed since last applied.`,
       );
       console.warn(
         "⚠️ BOOTSTRAP_RECREATE_USER=false so the existing user's password will NOT be updated.",
@@ -223,47 +271,51 @@ async function warnIfPasswordChanged(
       );
     }
   } catch (err) {
-    console.warn("⚠️ Failed password-change detection (ignored):", err);
+    console.warn(`⚠️ Failed password-change detection for ${email} (ignored):`, err);
   }
 }
 
-async function recordPasswordFingerprint(password: string): Promise<void> {
+async function recordPasswordFingerprint(email: string, password: string): Promise<void> {
   try {
+    const fpKey = `${BOOTSTRAP_USER_PASSWORD_FP_PREFIX}${email}`;
     await upsertConfig(
-      BOOTSTRAP_USER_PASSWORD_FP_KEY,
+      fpKey,
       sha256Hex(password),
-      "Fingerprint of last-applied BOOTSTRAP_USER_PASSWORD",
+      `Fingerprint of last-applied password for ${email}`,
     );
   } catch (err) {
-    console.warn("⚠️ Failed to store password fingerprint:", err);
+    console.warn(`⚠️ Failed to store password fingerprint for ${email}:`, err);
   }
 }
 
 /**
- * Ensure default user exists.
+ * Ensure a single user exists.
  */
-async function ensureDefaultUser(
+async function ensureUser(
+  userConfig: UserConfig,
   config: EnvConfig,
 ): Promise<{
   userId?: string;
+  email: string;
   recreated: boolean;
 }> {
-  const email = config.defaultUserEmail;
-  const password = config.defaultUserPassword;
-  if (!email || !password) {
-    console.warn(
-      "⚠️ BOOTSTRAP_USER_EMAIL/BOOTSTRAP_USER_PASSWORD not set; skipping default user initialization.",
-    );
-    return { recreated: false };
-  }
+  const email = userConfig.email;
+  const password = userConfig.password;
+  const name = userConfig.name ?? "User";
 
-  console.log(`🔧 Initializing default user: ${email}`);
+  console.log(`🔧 Initializing user: ${email}`);
 
   const existing = await db.query.usersTable.findFirst({
     where: eq(usersTable.email, email),
   });
 
-  await warnIfPasswordChanged(config, !!existing);
+  await warnIfPasswordChanged(
+    email,
+    password,
+    config.warnOnPasswordChange,
+    !!existing,
+    config.recreateDefaultUser,
+  );
 
   let preservedUserApiKeys:
     | { name: string; key: string; is_active: boolean }[]
@@ -274,7 +326,7 @@ async function ensureDefaultUser(
   if (existing && config.recreateDefaultUser) {
     recreated = true;
     console.warn(
-      "⚠️ BOOTSTRAP_RECREATE_USER=true — deleting existing user to reapply password via Better Auth",
+      `⚠️ BOOTSTRAP_RECREATE_USER=true — deleting existing user ${email} to reapply password via Better Auth`,
     );
 
     if (config.preserveApiKeysOnRecreate) {
@@ -288,7 +340,7 @@ async function ensureDefaultUser(
           .from(apiKeysTable)
           .where(eq(apiKeysTable.user_id, existing.id));
       } catch (err) {
-        console.warn("⚠️ Failed to preserve user API keys:", err);
+        console.warn(`⚠️ Failed to preserve API keys for ${email}:`, err);
       }
     }
 
@@ -297,7 +349,7 @@ async function ensureDefaultUser(
         .delete(accountsTable)
         .where(eq(accountsTable.userId, existing.id));
     } catch (err) {
-      console.warn("⚠️ Failed to delete accounts for user:", err);
+      console.warn(`⚠️ Failed to delete accounts for ${email}:`, err);
     }
 
     try {
@@ -305,13 +357,13 @@ async function ensureDefaultUser(
         .delete(apiKeysTable)
         .where(eq(apiKeysTable.user_id, existing.id));
     } catch (err) {
-      console.warn("⚠️ Failed to delete user-scoped API keys:", err);
+      console.warn(`⚠️ Failed to delete user-scoped API keys for ${email}:`, err);
     }
 
     try {
       await db.delete(usersTable).where(eq(usersTable.id, existing.id));
     } catch (err) {
-      console.warn("⚠️ Failed to delete existing user:", err);
+      console.warn(`⚠️ Failed to delete existing user ${email}:`, err);
     }
   }
 
@@ -323,7 +375,7 @@ async function ensureDefaultUser(
       body: JSON.stringify({
         email,
         password,
-        name: config.defaultUserName,
+        name,
       }),
     });
 
@@ -331,11 +383,11 @@ async function ensureDefaultUser(
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       console.warn(
-        `⚠️ Better Auth sign-up failed (${response.status}). Continuing startup. ${
+        `⚠️ Better Auth sign-up failed for ${email} (${response.status}). Continuing startup. ${
           body ? `Response: ${body}` : ""
         }`,
       );
-      return { recreated };
+      return { email, recreated };
     }
   }
 
@@ -344,8 +396,8 @@ async function ensureDefaultUser(
   });
 
   if (!user) {
-    console.warn("⚠️ Default user not found after signup; skipping.");
-    return { recreated };
+    console.warn(`⚠️ User ${email} not found after signup; skipping.`);
+    return { email, recreated };
   }
 
   // Keep metadata consistent
@@ -353,13 +405,13 @@ async function ensureDefaultUser(
     await db
       .update(usersTable)
       .set({
-        name: config.defaultUserName,
+        name,
         emailVerified: true,
         updatedAt: new Date(),
       })
       .where(eq(usersTable.id, user.id));
   } catch (err) {
-    console.warn("⚠️ Failed to update user metadata:", err);
+    console.warn(`⚠️ Failed to update user metadata for ${email}:`, err);
   }
 
   // Restore preserved keys if recreated
@@ -379,40 +431,84 @@ async function ensureDefaultUser(
             set: { key: k.key, is_active: k.is_active },
           });
       } catch (err) {
-        console.warn("⚠️ Failed to restore preserved API key:", err);
+        console.warn(`⚠️ Failed to restore preserved API key for ${email}:`, err);
       }
     }
 
-    console.log("✓ Restored preserved API keys for recreated user");
+    console.log(`✓ Restored preserved API keys for recreated user ${email}`);
   }
 
   // Record fingerprint when we actually create/recreate
   if (!existing || recreated) {
-    await recordPasswordFingerprint(password);
+    await recordPasswordFingerprint(email, password);
   }
 
-  console.log(`✓ Default user ready: ${email}`);
-  return { userId: user.id, recreated };
+  console.log(`✓ User ready: ${email}`);
+  return { userId: user.id, email, recreated };
+}
+
+/**
+ * Bootstrap all users from configuration.
+ */
+async function bootstrapUsers(
+  config: EnvConfig,
+): Promise<Map<string, string>> {
+  const userMap = new Map<string, string>(); // email -> userId
+  
+  if (!config.users || config.users.length === 0) {
+    console.warn(
+      "⚠️ No users configured for bootstrap (BOOTSTRAP_USERS is empty and no single user config found)",
+    );
+    return userMap;
+  }
+
+  console.log(`👥 Bootstrapping ${config.users.length} user(s)...`);
+
+  for (const userConfig of config.users) {
+    try {
+      if (!userConfig.email || !userConfig.password) {
+        console.warn("⚠️ User config missing email or password; skipping");
+        continue;
+      }
+
+      const result = await ensureUser(userConfig, config);
+      if (result.userId) {
+        userMap.set(result.email, result.userId);
+      }
+    } catch (err) {
+      console.warn(`⚠️ Failed to bootstrap user ${userConfig.email}:`, err);
+    }
+  }
+
+  return userMap;
 }
 
 async function maybeDeleteOtherUsers(
   config: EnvConfig,
-  defaultUserEmail: string | undefined,
+  bootstrappedEmails: string[],
 ): Promise<void> {
   if (!config.deleteOtherUsers) return;
-  if (!defaultUserEmail) {
+  if (bootstrappedEmails.length === 0) {
     console.warn(
-      "⚠️ BOOTSTRAP_DELETE_OTHER_USERS=true but BOOTSTRAP_USER_EMAIL is not set; skipping to avoid lockout.",
+      "⚠️ BOOTSTRAP_DELETE_OTHER_USERS=true but no bootstrapped users found; skipping to avoid lockout.",
     );
     return;
   }
 
   console.warn(
-    "⚠️ BOOTSTRAP_DELETE_OTHER_USERS=true — deleting all users except BOOTSTRAP_USER_EMAIL",
+    `⚠️ BOOTSTRAP_DELETE_OTHER_USERS=true — deleting all users except bootstrapped users`,
   );
 
   try {
-    await db.delete(usersTable).where(ne(usersTable.email, defaultUserEmail));
+    await db.delete(usersTable).where(
+      and(
+        ne(usersTable.email, bootstrappedEmails[0]),
+        ...(bootstrappedEmails.length > 1 
+          ? [ne(usersTable.email, bootstrappedEmails[1])]
+          : []
+        )
+      )
+    );
     console.log("✓ Deleted other users");
   } catch (err) {
     console.warn("⚠️ Failed to delete other users:", err);
@@ -424,7 +520,7 @@ async function maybeDeleteOtherUsers(
  */
 async function bootstrapApiKeys(
   config: EnvConfig,
-  defaultUserId: string | undefined,
+  userMap: Map<string, string>,
 ): Promise<void> {
   if (!config.apiKeys || config.apiKeys.length === 0) {
     console.log("ℹ️ No API keys configured for bootstrap (BOOTSTRAP_API_KEYS is empty)");
@@ -437,13 +533,31 @@ async function bootstrapApiKeys(
     try {
       const name = apiKeyConfig.name;
       const isPublic = apiKeyConfig.is_public ?? false;
-      const userId = isPublic ? null : defaultUserId;
-
-      if (!isPublic && !defaultUserId) {
-        console.warn(
-          `⚠️ Skipping private API key "${name}" because default user is not available`,
-        );
-        continue;
+      const ownerEmail = getOwnerEmail(apiKeyConfig);
+      
+      let userId: string | null = null;
+      
+      if (!isPublic) {
+        // For private keys, determine the owner
+        if (ownerEmail) {
+          userId = userMap.get(ownerEmail) ?? null;
+          if (!userId) {
+            console.warn(
+              `⚠️ Skipping API key "${name}" because user "${ownerEmail}" was not found`,
+            );
+            continue;
+          }
+        } else {
+          // No user specified, use first user
+          const firstUserId = Array.from(userMap.values())[0];
+          if (!firstUserId) {
+            console.warn(
+              `⚠️ Skipping private API key "${name}" because no users are available`,
+            );
+            continue;
+          }
+          userId = firstUserId;
+        }
       }
 
       // Check if key already exists
@@ -463,12 +577,19 @@ async function bootstrapApiKeys(
           user_id: userId,
           is_active: true,
         });
+        
+        const ownerInfo = userId 
+          ? `for user ${ownerEmail ?? Array.from(userMap.keys())[0]}`
+          : "(public)";
         console.log(
-          `✓ Created ${isPublic ? "public" : "private"} API key "${name}": ${maskKey(key)}`,
+          `✓ Created ${isPublic ? "public" : "private"} API key "${name}" ${ownerInfo}: ${maskKey(key)}`,
         );
       } else {
+        const ownerInfo = userId 
+          ? `for user ${ownerEmail ?? Array.from(userMap.keys())[0]}`
+          : "(public)";
         console.log(
-          `✓ ${isPublic ? "Public" : "Private"} API key "${name}" already exists: ${maskKey(existing.key)}`,
+          `✓ ${isPublic ? "Public" : "Private"} API key "${name}" ${ownerInfo} already exists: ${maskKey(existing.key)}`,
         );
       }
     } catch (err) {
@@ -482,7 +603,7 @@ async function bootstrapApiKeys(
  */
 async function bootstrapNamespaces(
   config: EnvConfig,
-  defaultUserId: string | undefined,
+  userMap: Map<string, string>,
 ): Promise<Map<string, string>> {
   const namespaceMap = new Map<string, string>(); // name -> uuid
   
@@ -499,13 +620,31 @@ async function bootstrapNamespaces(
       const description = nsConfig.description ?? null;
       const isPublic = nsConfig.is_public ?? false;
       const shouldUpdate = nsConfig.update ?? true;
-      const ownerUserId = isPublic ? null : defaultUserId;
+      const ownerEmail = getOwnerEmail(nsConfig);
+      
+      let ownerUserId: string | null = null;
 
-      if (!isPublic && !defaultUserId) {
-        console.warn(
-          `⚠️ Skipping private namespace "${name}" because default user is not available`,
-        );
-        continue;
+      if (!isPublic) {
+        // For private namespaces, determine the owner
+        if (ownerEmail) {
+          ownerUserId = userMap.get(ownerEmail) ?? null;
+          if (!ownerUserId) {
+            console.warn(
+              `⚠️ Skipping namespace "${name}" because user "${ownerEmail}" was not found`,
+            );
+            continue;
+          }
+        } else {
+          // No user specified, use first user
+          const firstUserId = Array.from(userMap.values())[0];
+          if (!firstUserId) {
+            console.warn(
+              `⚠️ Skipping private namespace "${name}" because no users are available`,
+            );
+            continue;
+          }
+          ownerUserId = firstUserId;
+        }
       }
 
       // Look for existing namespace
@@ -530,7 +669,8 @@ async function bootstrapNamespaces(
         const uuid = inserted?.[0]?.uuid;
         if (uuid) {
           namespaceMap.set(name, uuid);
-          console.log(`✓ Created ${isPublic ? "public" : "private"} namespace "${name}"`);
+          const ownerInfo = ownerUserId ? `for user ${ownerEmail ?? Array.from(userMap.keys())[0]}` : "(public)";
+          console.log(`✓ Created ${isPublic ? "public" : "private"} namespace "${name}" ${ownerInfo}`);
         } else {
           console.warn(`⚠️ Namespace insert for "${name}" did not return uuid`);
         }
@@ -566,7 +706,7 @@ async function bootstrapNamespaces(
 async function bootstrapEndpoints(
   config: EnvConfig,
   namespaceMap: Map<string, string>,
-  defaultUserId: string | undefined,
+  userMap: Map<string, string>,
 ): Promise<void> {
   if (!config.endpoints || config.endpoints.length === 0) {
     console.log("ℹ️ No endpoints configured for bootstrap (BOOTSTRAP_ENDPOINTS is empty)");
@@ -584,20 +724,54 @@ async function bootstrapEndpoints(
       const enableAuthOauth = epConfig.enable_auth_oauth ?? false;
       const isPublic = epConfig.is_public ?? true;
       const shouldUpdate = epConfig.update ?? true;
-      const ownerUserId = isPublic ? null : defaultUserId;
+      const ownerEmail = getOwnerEmail(epConfig);
+      
+      let ownerUserId: string | null = null;
 
-      if (!isPublic && !defaultUserId) {
-        console.warn(
-          `⚠️ Skipping private endpoint "${name}" because default user is not available`,
-        );
-        continue;
+      if (!isPublic) {
+        // For private endpoints, determine the owner
+        if (ownerEmail) {
+          ownerUserId = userMap.get(ownerEmail) ?? null;
+          if (!ownerUserId) {
+            console.warn(
+              `⚠️ Skipping endpoint "${name}" because user "${ownerEmail}" was not found`,
+            );
+            continue;
+          }
+        } else {
+          // No user specified, use first user
+          const firstUserId = Array.from(userMap.values())[0];
+          if (!firstUserId) {
+            console.warn(
+              `⚠️ Skipping private endpoint "${name}" because no users are available`,
+            );
+            continue;
+          }
+          ownerUserId = firstUserId;
+        }
       }
 
-      // Find the namespace UUID - endpoints need to specify which namespace they belong to
-      // For now, we'll use the first namespace in the map or skip if no namespaces
+      // Find the namespace UUID
       let namespaceUuid: string | undefined;
-      if (namespaceMap.size > 0) {
-        namespaceUuid = Array.from(namespaceMap.values())[0];
+      let namespaceName: string | undefined;
+      
+      if (epConfig.namespace) {
+        // Specific namespace requested
+        namespaceUuid = namespaceMap.get(epConfig.namespace);
+        namespaceName = epConfig.namespace;
+        
+        if (!namespaceUuid) {
+          console.warn(
+            `⚠️ Skipping endpoint "${name}" because specified namespace "${epConfig.namespace}" was not found. Available namespaces: ${Array.from(namespaceMap.keys()).join(', ')}`,
+          );
+          continue;
+        }
+      } else {
+        // No namespace specified, use first available
+        if (namespaceMap.size > 0) {
+          namespaceUuid = Array.from(namespaceMap.values())[0];
+          namespaceName = Array.from(namespaceMap.keys())[0];
+        }
       }
 
       if (!namespaceUuid) {
@@ -628,14 +802,17 @@ async function bootstrapEndpoints(
 
       if (!existing) {
         await db.insert(endpointsTable).values(values);
-        console.log(`✓ Created ${isPublic ? "public" : "private"} endpoint "${name}"`);
+        const ownerInfo = ownerUserId ? `for user ${ownerEmail ?? Array.from(userMap.keys())[0]}` : "(public)";
+        const namespaceInfo = namespaceName ? ` in namespace "${namespaceName}"` : "";
+        console.log(`✓ Created ${isPublic ? "public" : "private"} endpoint "${name}" ${ownerInfo}${namespaceInfo}`);
       } else {
         if (shouldUpdate) {
           await db
             .update(endpointsTable)
             .set(values)
             .where(eq(endpointsTable.uuid, existing.uuid));
-          console.log(`✓ Updated endpoint "${name}"`);
+          const namespaceInfo = namespaceName ? ` in namespace "${namespaceName}"` : "";
+          console.log(`✓ Updated endpoint "${name}"${namespaceInfo}`);
         } else {
           console.log(`✓ Endpoint "${name}" already exists (no update)`);
         }
@@ -650,23 +827,32 @@ function validateConfig(config: EnvConfig): void {
   if (
     config.disableUiRegistration &&
     config.disableSsoRegistration &&
-    (!config.defaultUserEmail || !config.defaultUserPassword)
+    config.users.length === 0
   ) {
     console.warn(
-      "⚠️ Both UI and SSO registration are disabled, but BOOTSTRAP_USER_EMAIL/BOOTSTRAP_USER_PASSWORD are not set. This may lock you out.",
+      "⚠️ Both UI and SSO registration are disabled, but no users are configured. This may lock you out.",
     );
   }
 
-  if (config.recreateDefaultUser && !config.defaultUserEmail) {
+  if (config.recreateDefaultUser && config.users.length === 0) {
     console.warn(
-      "⚠️ BOOTSTRAP_RECREATE_USER=true but BOOTSTRAP_USER_EMAIL is not set; recreation cannot run.",
+      "⚠️ BOOTSTRAP_RECREATE_USER=true but no users are configured; recreation cannot run.",
     );
   }
 
-  if (config.defaultUserPassword && config.defaultUserPassword.length < 8) {
-    console.warn(
-      "⚠️ BOOTSTRAP_USER_PASSWORD is less than 8 characters. Consider using a stronger password.",
-    );
+  // Validate users
+  for (const user of config.users) {
+    if (!user.email || user.email.trim() === "") {
+      console.warn("⚠️ User configuration is missing 'email' field");
+    }
+    if (!user.password || user.password.trim() === "") {
+      console.warn(`⚠️ User ${user.email} is missing 'password' field`);
+    }
+    if (user.password && user.password.length < 8) {
+      console.warn(
+        `⚠️ Password for ${user.email} is less than 8 characters. Consider using a stronger password.`,
+      );
+    }
   }
 
   if (config.recreateDefaultUser && !config.preserveApiKeysOnRecreate) {
@@ -674,13 +860,13 @@ function validateConfig(config: EnvConfig): void {
       "⚠️ BOOTSTRAP_RECREATE_USER=true and BOOTSTRAP_PRESERVE_API_KEYS=false",
     );
     console.warn(
-      "     This will delete all API keys for the user!",
+      "     This will delete all API keys for the users!",
     );
   }
 
-  if (config.deleteOtherUsers && !config.defaultUserEmail) {
+  if (config.deleteOtherUsers && config.users.length === 0) {
     console.warn(
-      "⚠️ BOOTSTRAP_DELETE_OTHER_USERS=true without BOOTSTRAP_USER_EMAIL set",
+      "⚠️ BOOTSTRAP_DELETE_OTHER_USERS=true without any users configured",
     );
     console.warn(
       "     This could lock you out of the system!",
@@ -692,6 +878,10 @@ function validateConfig(config: EnvConfig): void {
     if (!apiKey.name || apiKey.name.trim() === "") {
       console.warn("⚠️ API key configuration is missing 'name' field");
     }
+    const ownerEmail = getOwnerEmail(apiKey);
+    if (!apiKey.is_public && ownerEmail && config.users.length === 0) {
+      console.warn(`⚠️ API key "${apiKey.name}" references user "${ownerEmail}" but no users are configured`);
+    }
   }
 
   // Validate namespaces configuration
@@ -699,12 +889,20 @@ function validateConfig(config: EnvConfig): void {
     if (!ns.name || ns.name.trim() === "") {
       console.warn("⚠️ Namespace configuration is missing 'name' field");
     }
+    const ownerEmail = getOwnerEmail(ns);
+    if (!ns.is_public && ownerEmail && config.users.length === 0) {
+      console.warn(`⚠️ Namespace "${ns.name}" references user "${ownerEmail}" but no users are configured`);
+    }
   }
 
   // Validate endpoints configuration
   for (const ep of config.endpoints) {
     if (!ep.name || ep.name.trim() === "") {
       console.warn("⚠️ Endpoint configuration is missing 'name' field");
+    }
+    const ownerEmail = getOwnerEmail(ep);
+    if (!ep.is_public && ownerEmail && config.users.length === 0) {
+      console.warn(`⚠️ Endpoint "${ep.name}" references user "${ownerEmail}" but no users are configured`);
     }
   }
 
@@ -725,7 +923,7 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
   // Log configuration summary for debugging
   if (process.env.BOOTSTRAP_DEBUG === "true") {
     console.log("📋 Bootstrap Configuration:");
-    console.log(`   User: ${config.defaultUserEmail ?? '(not set)'}`);
+    console.log(`   Users: ${config.users.length} configured`);
     console.log(`   API Keys: ${config.apiKeys.length} configured`);
     console.log(`   Namespaces: ${config.namespaces.length} configured`);
     console.log(`   Endpoints: ${config.endpoints.length} configured`);
@@ -769,27 +967,26 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
     return;
   }
 
-  // Delete other users before ensuring default user
+  // Bootstrap all users
+  let userMap: Map<string, string>;
   try {
-    await maybeDeleteOtherUsers(config, config.defaultUserEmail);
+    userMap = await bootstrapUsers(config);
+  } catch (err) {
+    console.warn("⚠️ Users bootstrap failed:", err);
+    userMap = new Map();
+  }
+
+  // Delete other users after bootstrapping configured users
+  try {
+    const bootstrappedEmails = Array.from(userMap.keys());
+    await maybeDeleteOtherUsers(config, bootstrappedEmails);
   } catch (err) {
     console.warn("⚠️ User cleanup step failed:", err);
   }
 
-  // Ensure default user
-  let defaultUserId: string | undefined;
-  let recreated = false;
-  try {
-    const result = await ensureDefaultUser(config);
-    defaultUserId = result.userId;
-    recreated = result.recreated;
-  } catch (err) {
-    console.warn("⚠️ Default user initialization failed:", err);
-  }
-
   // Bootstrap API keys
   try {
-    await bootstrapApiKeys(config, defaultUserId);
+    await bootstrapApiKeys(config, userMap);
   } catch (err) {
     console.warn("⚠️ API keys bootstrap failed:", err);
   }
@@ -797,7 +994,7 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
   // Bootstrap namespaces and collect UUID mappings
   let namespaceMap: Map<string, string>;
   try {
-    namespaceMap = await bootstrapNamespaces(config, defaultUserId);
+    namespaceMap = await bootstrapNamespaces(config, userMap);
   } catch (err) {
     console.warn("⚠️ Namespaces bootstrap failed:", err);
     namespaceMap = new Map();
@@ -805,14 +1002,14 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
 
   // Bootstrap endpoints
   try {
-    await bootstrapEndpoints(config, namespaceMap, defaultUserId);
+    await bootstrapEndpoints(config, namespaceMap, userMap);
   } catch (err) {
     console.warn("⚠️ Endpoints bootstrap failed:", err);
   }
 
   // Mark one-time bootstrap complete
   if (config.bootstrapOnlyOnFirstRun) {
-    if (defaultUserId || namespaceMap.size > 0 || recreated) {
+    if (userMap.size > 0 || namespaceMap.size > 0) {
       await markBootstrapComplete();
     }
   }

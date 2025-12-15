@@ -28,41 +28,131 @@ services:
       # Docker networking fix
       TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL:-true}
       
-      # Bootstrap configuration - Arrays are defined as JSON strings
-      # API Keys: Define multiple API keys with different visibility levels
-      # BOOTSTRAP_API_KEYS: |
-      #   [
-      #     {"name": "Public", "is_public": true},
-      #     {"name": "Private", "is_public": false}
-      #   ]
+      # ========================================================================
+      # Bootstrap Configuration Examples
+      # ========================================================================
       
-      # Namespaces: Define multiple namespaces with descriptions and visibility
-      # BOOTSTRAP_NAMESPACES: |
-      #   [
-      #     {"name": "Namespace 1", "description": "This is bootstrapped namespace 1", "is_public": false, "update": true},
-      #     {"name": "Namespace 2", "description": "This is bootstrapped namespace 2", "is_public": true, "update": true}
-      #   ]
-      
-      # Endpoints: Define multiple endpoints with authentication settings
-      # Note: Endpoints will be created in the first available namespace
-      # BOOTSTRAP_ENDPOINTS: |
+      # Multiple Users - Define different users with different roles
+      # BOOTSTRAP_USERS: |
       #   [
       #     {
-      #       "name": "Endpoint1",
-      #       "description": "This is bootstrapped endpoint 1",
-      #       "enable_auth": false,
-      #       "enable_auth_query": false,
-      #       "enable_auth_oauth": false,
-      #       "is_public": true,
+      #       "email": "admin@company.com",
+      #       "password": "admin-secure-password",
+      #       "name": "System Administrator"
+      #     },
+      #     {
+      #       "email": "developer@company.com",
+      #       "password": "dev-secure-password",
+      #       "name": "Lead Developer"
+      #     },
+      #     {
+      #       "email": "analyst@company.com",
+      #       "password": "analyst-secure-password",
+      #       "name": "Data Analyst"
+      #     }
+      #   ]
+      
+      # API Keys - Assign keys to specific users using user_email
+      # BOOTSTRAP_API_KEYS: |
+      #   [
+      #     {
+      #       "name": "Admin Production Key",
+      #       "is_public": false,
+      #       "user_email": "admin@company.com"
+      #     },
+      #     {
+      #       "name": "Developer Key",
+      #       "is_public": false,
+      #       "user_email": "developer@company.com"
+      #     },
+      #     {
+      #       "name": "Analyst Key",
+      #       "is_public": false,
+      #       "user_email": "analyst@company.com"
+      #     },
+      #     {
+      #       "name": "Public API Key",
+      #       "is_public": true
+      #     }
+      #   ]
+      
+      # Namespaces - Create user-specific workspaces
+      # BOOTSTRAP_NAMESPACES: |
+      #   [
+      #     {
+      #       "name": "Admin Workspace",
+      #       "description": "Administrator's private workspace",
+      #       "is_public": false,
+      #       "user_email": "admin@company.com",
       #       "update": true
       #     },
       #     {
-      #       "name": "Endpoint2",
-      #       "description": "This is bootstrapped endpoint 2",
+      #       "name": "Development",
+      #       "description": "Development environment",
+      #       "is_public": false,
+      #       "user_email": "developer@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "Analytics",
+      #       "description": "Data analytics workspace",
+      #       "is_public": false,
+      #       "user_email": "analyst@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "Shared Resources",
+      #       "description": "Public shared namespace",
+      #       "is_public": true,
+      #       "update": true
+      #     }
+      #   ]
+      
+      # Endpoints - Configure endpoints with different owners and auth settings
+      # Note: Endpoints can optionally specify which namespace they should be created in
+      # BOOTSTRAP_ENDPOINTS: |
+      #   [
+      #     {
+      #       "name": "admin-api",
+      #       "description": "Admin-only API endpoint",
+      #       "namespace": "Production",
+      #       "enable_auth": true,
+      #       "enable_auth_query": false,
+      #       "enable_auth_oauth": true,
+      #       "is_public": false,
+      #       "user_email": "admin@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "dev-api",
+      #       "description": "Development API endpoint",
+      #       "namespace": "Development",
+      #       "enable_auth": true,
+      #       "enable_auth_query": true,
+      #       "enable_auth_oauth": false,
+      #       "is_public": false,
+      #       "user_email": "developer@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "analytics-api",
+      #       "description": "Analytics API endpoint",
+      #       "namespace": "Analytics",
       #       "enable_auth": true,
       #       "enable_auth_query": false,
       #       "enable_auth_oauth": false,
       #       "is_public": false,
+      #       "user_email": "analyst@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "public-api",
+      #       "description": "Public API endpoint - no auth required",
+      #       "namespace": "Shared Resources",
+      #       "enable_auth": false,
+      #       "enable_auth_query": false,
+      #       "enable_auth_oauth": false,
+      #       "is_public": true,
       #       "update": true
       #     }
       #   ]
