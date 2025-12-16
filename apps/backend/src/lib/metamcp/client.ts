@@ -9,6 +9,7 @@ import { ProcessManagedStdioTransport } from "../stdio-transport/process-managed
 import { metamcpLogStore } from "./log-store";
 import { serverErrorTracker } from "./server-error-tracker";
 import { resolveEnvVariables } from "./utils";
+import logger from "@/utils/logger";
 
 const sleep = (time: number) =>
   new Promise<void>((resolve) => setTimeout(() => resolve(), time));
@@ -164,7 +165,7 @@ export const connectMetaMcpClient = async (
   let count = 0;
   let retry = true;
 
-  console.log(
+  logger.info(
     `Connecting to server ${serverParams.name} (${serverParams.uuid}) with max attempts: ${maxAttempts}`,
   );
 
@@ -175,7 +176,7 @@ export const connectMetaMcpClient = async (
         serverParams.uuid,
       );
       if (isInErrorState) {
-        console.warn(
+        logger.info(
           `Server ${serverParams.name} (${serverParams.uuid}) is already in ERROR state, skipping connection attempt`,
         );
         return undefined;
@@ -189,22 +190,22 @@ export const connectMetaMcpClient = async (
 
       // Set up process crash detection for STDIO transports BEFORE connecting
       if (transport instanceof ProcessManagedStdioTransport) {
-        console.log(
+        logger.info(
           `Setting up crash handler for server ${serverParams.name} (${serverParams.uuid})`,
         );
         transport.onprocesscrash = (exitCode, signal) => {
-          console.warn(
+          logger.info(
             `Process crashed for server ${serverParams.name} (${serverParams.uuid}): code=${exitCode}, signal=${signal}`,
           );
 
           // Notify the pool about the crash
           if (onProcessCrash) {
-            console.log(
+            logger.info(
               `Calling onProcessCrash callback for server ${serverParams.name} (${serverParams.uuid})`,
             );
             onProcessCrash(exitCode, signal);
           } else {
-            console.warn(
+            logger.info(
               `No onProcessCrash callback provided for server ${serverParams.name} (${serverParams.uuid})`,
             );
           }
@@ -220,7 +221,7 @@ export const connectMetaMcpClient = async (
           await client.close();
         },
         onProcessCrash: (exitCode, signal) => {
-          console.warn(
+          logger.warn(
             `Process crash detected for server ${serverParams.name} (${serverParams.uuid}): code=${exitCode}, signal=${signal}`,
           );
 

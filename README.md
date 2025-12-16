@@ -153,6 +153,27 @@ volumes:
     driver: local
 ```
 
+### **📦 Build development environment with Dev Containers (VSCode/Cursor)**
+
+You can use the VSCode/Cursor extension to build the development environment in a container.
+
+It only requires that you have an environment running Docker or a similar alternative (the `docker`/`docker compose` command is required), and no other dependent components need to be installed on your host machine.
+
+1. First, clone the MetaMCP source code, open project in Visual Studio Code.
+```bash
+git clone https://github.com/metatool-ai/metamcp.git
+cd metamcp
+code .
+```
+2. Switch to Dev Containers. Open the VSCode Command Palette, and execute `Dev Containers: Reopen in Container`.
+
+VSCode will open the Dev Containers project in a new window, where it will build the runtime and install the toolchain according to the `Dockerfile` before starting the connection and finally installing the APISIX dependencies.
+
+> **note**
+> This process requires a reliable network connection, and it will access Docker Hub, GitHub, and some other sites. You will need to ensure the network connection yourself, otherwise the container build may fail.
+>
+> Wait some minutes, depending on the internet connection or computer performance, it may take from a few minutes to tens of minutes, you can click on the Progress Bar in the bottom right corner to view a live log where you will be able to check unusual stuck.
+
 ### **💻 Local Development**
 
 Still recommend running postgres through docker for easy setup:

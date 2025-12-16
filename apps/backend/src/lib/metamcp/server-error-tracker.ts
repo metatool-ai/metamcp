@@ -2,6 +2,7 @@ import { McpServerErrorStatusEnum } from "@repo/zod-types";
 
 import { mcpServersRepository } from "../../db/repositories/index";
 import { configService } from "../config.service";
+import logger from "@/utils/logger";
 
 export interface ServerCrashInfo {
   serverUuid: string;
@@ -52,7 +53,7 @@ export class ServerErrorTracker {
     try {
       return await configService.getMcpMaxAttempts();
     } catch (error) {
-      console.warn(
+      logger.warn(
         "Failed to get MCP max attempts from config, using fallback:",
         error,
       );
@@ -68,7 +69,7 @@ export class ServerErrorTracker {
     exitCode: number | null,
     signal: string | null,
   ): Promise<void> {
-    console.log(`recordServerCrash called for server ${serverUuid}`);
+    logger.info(`recordServerCrash called for server ${serverUuid}`);
 
     // Get current attempt count
     const currentAttempts = this.crashAttempts.get(serverUuid) || 0;
@@ -79,13 +80,13 @@ export class ServerErrorTracker {
 
     const maxAttempts = await this.getServerMaxAttempts(serverUuid);
 
-    console.log(
+    logger.info(
       `Server ${serverUuid} crashed. Attempt ${newAttempts}/${maxAttempts}`,
     );
 
     // If we've reached max attempts, mark the server as ERROR
     if (newAttempts >= maxAttempts) {
-      console.warn(
+      logger.warn(
         `Server ${serverUuid} has crashed ${newAttempts} times. Marking as ERROR.`,
       );
 
@@ -100,12 +101,12 @@ export class ServerErrorTracker {
           timestamp: new Date(),
         };
 
-        console.error(
+        logger.error(
           "Server marked as ERROR due to repeated crashes:",
           crashInfo,
         );
       } catch (error) {
-        console.error(`Failed to mark server ${serverUuid} as ERROR:`, error);
+        logger.error(`Failed to mark server ${serverUuid} as ERROR:`, error);
       }
     }
   }
@@ -121,9 +122,9 @@ export class ServerErrorTracker {
         errorStatus: McpServerErrorStatusEnum.Enum.ERROR,
       });
 
-      console.error(`Server ${serverUuid} marked as ERROR at server level`);
+      logger.error(`Server ${serverUuid} marked as ERROR at server level`);
     } catch (error) {
-      console.error(`Error marking server ${serverUuid} as ERROR:`, error);
+      logger.error(`Error marking server ${serverUuid} as ERROR:`, error);
     }
   }
 
@@ -149,7 +150,7 @@ export class ServerErrorTracker {
       const server = await mcpServersRepository.findByUuid(serverUuid);
       return server?.error_status === McpServerErrorStatusEnum.Enum.ERROR;
     } catch (error) {
-      console.error(
+      logger.error(
         `Error checking server error state for ${serverUuid}:`,
         error,
       );
@@ -171,9 +172,9 @@ export class ServerErrorTracker {
         errorStatus: McpServerErrorStatusEnum.Enum.NONE,
       });
 
-      console.log(`Reset error state for server ${serverUuid}`);
+      logger.info(`Reset error state for server ${serverUuid}`);
     } catch (error) {
-      console.error(
+      logger.error(
         `Error resetting error state for server ${serverUuid}:`,
         error,
       );

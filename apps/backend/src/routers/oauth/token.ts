@@ -2,6 +2,7 @@ import express from "express";
 
 import { oauthRepository } from "../../db/repositories";
 import { generateSecureAccessToken, rateLimitToken } from "./utils";
+import logger from "@/utils/logger";
 
 const tokenRouter = express.Router();
 
@@ -14,7 +15,7 @@ tokenRouter.post("/oauth/token", rateLimitToken, async (req, res) => {
   try {
     // Check if body was parsed correctly
     if (!req.body || typeof req.body !== "object") {
-      console.error("Token endpoint: req.body is undefined or invalid", {
+      logger.error("Token endpoint: req.body is undefined or invalid", {
         body: req.body,
         bodyType: typeof req.body,
         contentType: req.headers["content-type"],
@@ -187,7 +188,7 @@ tokenRouter.post("/oauth/token", rateLimitToken, async (req, res) => {
       scope: codeData.scope,
     });
   } catch (error) {
-    console.error("Error in OAuth token endpoint:", error);
+    logger.error("Error in OAuth token endpoint:", error);
     res.status(500).json({
       error: "server_error",
       error_description: "Internal server error",
@@ -246,7 +247,7 @@ tokenRouter.post("/oauth/introspect", async (req, res) => {
       sub: tokenData.user_id,
     });
   } catch (error) {
-    console.error("Error in OAuth introspect endpoint:", error);
+    logger.error("Error in OAuth introspect endpoint:", error);
     res.status(500).json({
       error: "server_error",
       error_description: "Internal server error",
@@ -287,7 +288,7 @@ tokenRouter.post("/oauth/revoke", async (req, res) => {
     // RFC 7009 specifies that revocation endpoint should return 200 OK
     res.status(200).send();
   } catch (error) {
-    console.error("Error in OAuth revoke endpoint:", error);
+    logger.error("Error in OAuth revoke endpoint:", error);
     res.status(500).json({
       error: "server_error",
       error_description: "Internal server error",
