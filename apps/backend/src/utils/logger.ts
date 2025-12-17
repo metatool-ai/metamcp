@@ -1,5 +1,17 @@
 import { WriteStream, createWriteStream } from "fs";
 import { format } from "util";
+const { LOG_LEVEL } = process.env
+
+const validLogLevels = ['all', 'info', 'errors-only', 'none'] as const;
+type ValidLogLevel = typeof validLogLevels[number];
+
+const getValidLogLevel = (level: string | undefined): LoggerOptions['shouldConsoleLog'] => {
+    if (!level) return 'errors-only';
+    if (validLogLevels.includes(level as ValidLogLevel)) {
+        return level as ValidLogLevel;
+    }
+    return 'errors-only';
+};
 
 export interface LoggerOptions {
     logFilePath?: string;
@@ -78,7 +90,7 @@ export class Logger {
 }
 
 const logger = new Logger({
-    shouldConsoleLog: 'errors-only'
+    shouldConsoleLog: getValidLogLevel(LOG_LEVEL)
 });
 
 export default logger;
