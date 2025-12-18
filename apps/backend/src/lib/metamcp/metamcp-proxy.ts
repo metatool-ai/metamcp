@@ -160,11 +160,11 @@ export const createServer = async (
     const allServerEntries = Object.entries(serverParams);
 
     console.log(`[DEBUG-TOOLS] 📋 Processing ${allServerEntries.length} servers`);
-    
+
     await Promise.allSettled(
       allServerEntries.map(async ([mcpServerUuid, params]) => {
         console.log(`[DEBUG-TOOLS] 🔧 Server: ${params.name || mcpServerUuid}`);
-        
+
         // Skip if we've already visited this server to prevent circular references
         if (visitedServers.has(mcpServerUuid)) {
           console.log(`[DEBUG-TOOLS] ⏭️  Skipping already visited: ${params.name}`);
@@ -235,7 +235,7 @@ export const createServer = async (
             cursor = result.nextCursor;
             hasMore = !!result.nextCursor;
           }
-          
+
           console.log(`[DEBUG-TOOLS] ⏱️  Fetched ${allServerTools.length} tools from ${serverName} in ${(performance.now() - toolFetchStart).toFixed(2)}ms`);
 
           // Save original tools to database (before middleware processing)
@@ -245,7 +245,7 @@ export const createServer = async (
             // PERFORMANCE OPTIMIZATION: Check hash FIRST to avoid expensive operations
             const toolNames = allServerTools.map((tool) => tool.name);
             const hasChanged = toolsSyncCache.hasChanged(mcpServerUuid, toolNames);
-            
+
             console.log(`[DEBUG-TOOLS] 🔍 Hash check for ${serverName}: ${hasChanged ? 'CHANGED' : 'UNCHANGED'}`);
 
             if (hasChanged) {
@@ -258,18 +258,13 @@ export const createServer = async (
               if (toolsToSave.length > 0) {
                 // Update cache
                 toolsSyncCache.update(mcpServerUuid, toolNames);
-                
+
                 // Sync with cleanup
                 await toolsImplementations.sync({
                   tools: toolsToSave,
                   mcpServerUuid: mcpServerUuid,
                 });
               }
-            } catch (dbError) {
-              logger.error(
-                `Error saving tools to database for server ${serverName}:`,
-                dbError,
-              );
             }
           } catch (dbError) {
             logger.error(
@@ -300,7 +295,7 @@ export const createServer = async (
 
     const totalTime = performance.now() - startTime;
     console.log(`[DEBUG-TOOLS] ✅ tools/list completed in ${totalTime.toFixed(2)}ms, returning ${allTools.length} tools`);
-    
+
     return { tools: allTools };
   };
 
