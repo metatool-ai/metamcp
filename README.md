@@ -52,6 +52,7 @@ English | [中文](./README_cn.md)
   - [🖥️ Connecting Claude Desktop and Other STDIO-only Clients](#️-connecting-claude-desktop-and-other-stdio-only-clients)
   - [🔧 API Key Auth Troubleshooting](#-api-key-auth-troubleshooting)
 - [❄️ Cold Start Problem and Custom Dockerfile](#️-cold-start-problem-and-custom-dockerfile)
+- [🧾 Log Levels](#-log-levels)
 - [🔐 Authentication](#-authentication)
 - [🚦 Traffic Management](#-traffic-management)
   - [🚧 **MCP Rate Limit**](#-rate-limit)
@@ -292,6 +293,28 @@ For more details and alternative approaches, see [issue #76](https://github.com/
 - Check [invalidation.md](invalidation.md) for a seq diagram about how idle session invalidates during updates.
 
 🛠️ **Solution**: Customize the Dockerfile to add dependencies or pre-install packages to reduce cold start time.
+
+## 🧾 Log Levels
+
+MetaMCP’s backend writes logs to files and optionally mirrors selected levels to the console. Control console mirroring with the `LOG_LEVEL` environment variable.
+
+- Files
+  - `app.log`: receives `DEBUG`, `INFO`, and `WARN`
+  - `error.log`: receives `ERROR`
+
+- Console mirroring (`LOG_LEVEL`)
+  - `all`: mirror `DEBUG`, `INFO`, `WARN`, `ERROR` to console
+  - `info`: mirror only `INFO` to console
+  - `errors-only`: mirror `WARN` and `ERROR` to console
+  - `none`: no console output
+
+- Defaults and examples
+  - Default (when unset or invalid): `errors-only`
+  - `.env` example:
+    ```bash
+    LOG_LEVEL='errors-only' # 'all', 'info', 'errors-only', 'none'
+    ```
+  - `docker-compose.dev.yml` uses: `LOG_LEVEL: ${LOG_LEVEL:-all}`
 
 ## 🔐 Authentication
 
