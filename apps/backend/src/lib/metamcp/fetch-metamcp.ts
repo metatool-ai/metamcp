@@ -52,6 +52,7 @@ export async function getMcpServers(
         url: mcpServersTable.url,
         created_at: mcpServersTable.created_at,
         bearerToken: mcpServersTable.bearerToken,
+        headers: mcpServersTable.headers,
         status: namespaceServerMappingsTable.status,
         error_status: mcpServersTable.error_status,
       })
@@ -89,6 +90,7 @@ export async function getMcpServers(
         args: server.args || [],
         env: server.env || {},
         url: server.url,
+        headers: server.headers || {},
         created_at:
           server.created_at?.toISOString() || new Date().toISOString(),
         status: server.status.toLowerCase(),

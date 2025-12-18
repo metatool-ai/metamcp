@@ -1,4 +1,4 @@
-# 🚀 MetaMCP (MCP Aggregator, Orchestrator, Middleware, Gateway in one docker)
+# 🚀 MetaMCP (MCP Aggregator, Orchestrator, Middleware, Gateway in one docker) <!-- omit in toc -->
 
 <div align="center">
 
@@ -20,6 +20,8 @@
 
 </div>
 
+> **📢 Update:** *[From the author: apologize for some recent maintainence delay, but will at least keep merging PRs, more background [here](recent-updates.md)]*
+
 **MetaMCP** is a MCP proxy that lets you dynamically aggregate MCP servers into a unified MCP server, and apply middlewares. MetaMCP itself is a MCP server so it can be easily plugged into **ANY** MCP clients.
 
 ![MetaMCP Diagram](metamcp.svg)
@@ -29,18 +31,20 @@
 For more details, consider visiting our documentation site: https://docs.metamcp.com
 
 English | [中文](./README_cn.md)
-
-## 📋 Table of Contents
+## 📋 Table of Contents <!-- omit in toc -->
 
 - [🎯 Use Cases](#-use-cases)
 - [📖 Concepts](#-concepts)
-  - [🖥️ MCP Server](#️-mcp-server)
-  - [🏷️ MetaMCP Namespace](#️-metamcp-namespace)
-  - [🌐 MetaMCP Endpoint](#-metamcp-endpoint)
-  - [⚙️ Middleware](#️-middleware)
-  - [🔍 Inspector](#-inspector)
+  - [🖥️ **MCP Server**](#️-mcp-server)
+    - [🔐 **Environment Variables \& Secrets (STDIO MCP Servers)**](#-environment-variables--secrets-stdio-mcp-servers)
+  - [🏷️ **MetaMCP Namespace**](#️-metamcp-namespace)
+  - [🌐 **MetaMCP Endpoint**](#-metamcp-endpoint)
+  - [⚙️ **Middleware**](#️-middleware)
+  - [🔍 **Inspector**](#-inspector)
+  - [✏️ **Tool Overrides \& Annotations**](#️-tool-overrides--annotations)
 - [🚀 Quick Start](#-quick-start)
   - [🐳 Run with Docker Compose (Recommended)](#-run-with-docker-compose-recommended)
+  - [📦 Build development environment with Dev Containers (VSCode/Cursor)](#-build-development-environment-with-dev-containers-vscodecursor)
   - [💻 Local Development](#-local-development)
 - [🔌 MCP Protocol Compatibility](#-mcp-protocol-compatibility)
 - [🔗 Connect to MetaMCP](#-connect-to-metamcp)
@@ -50,10 +54,14 @@ English | [中文](./README_cn.md)
 - [❄️ Cold Start Problem and Custom Dockerfile](#️-cold-start-problem-and-custom-dockerfile)
 - [🔐 Authentication](#-authentication)
 - [🔗 OpenID Connect (OIDC) Provider Support](#-openid-connect-oidc-provider-support)
-  - [🛠️ Configuration](#️-configuration)
-  - [🏢 Supported Providers](#-supported-providers)
-  - [🔒 Security Features](#-security-features)
-  - [📱 Usage](#-usage)
+  - [🛠️ **Configuration**](#️-configuration)
+  - [🏢 **Supported Providers**](#-supported-providers)
+  - [🔒 **Security Features**](#-security-features)
+  - [📱 **Usage**](#-usage)
+- [⚙️ Registration Controls](#️-registration-controls)
+  - [🎛️ **Available Controls**](#️-available-controls)
+  - [🏢 **Enterprise Use Cases**](#-enterprise-use-cases)
+  - [🛠️ **Configuration**](#️-configuration-1)
 - [🌐 Custom Deployment and SSE conf for Nginx](#-custom-deployment-and-sse-conf-for-nginx)
 - [🏗️ Architecture](#️-architecture)
   - [📊 Sequence Diagram](#-sequence-diagram)
@@ -62,7 +70,6 @@ English | [中文](./README_cn.md)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 - [🙏 Credits](#-credits)
-
 
 ## 🎯 Use Cases
 - 🏷️ **Group MCP servers into namespaces, host them as meta-MCPs, and assign public endpoints** (SSE or Streamable HTTP), with auth. One-click to switch a namespace for an endpoint.
@@ -115,6 +122,7 @@ DATABASE_URL=${DB_CONNECTION_STRING}
 - Group one or more MCP servers into a namespace
 - Enable/disable MCP servers or at tool level
 - Apply middlewares to MCP requests and responses
+- Override tool names/titles/descriptions per namespace and attach custom MCP annotations (e.g. `{ "annotations": { "readOnlyHint": false } }`)
 
 ### 🌐 **MetaMCP Endpoint**
 - Create endpoints and assign namespace to endpoints
@@ -129,6 +137,12 @@ DATABASE_URL=${DB_CONNECTION_STRING}
 
 ### 🔍 **Inspector**
 Similar to the official MCP inspector, but with **saved server configs** - MetaMCP automatically creates configurations so you can debug MetaMCP endpoints immediately.
+
+### ✏️ **Tool Overrides & Annotations**
+- Open a namespace → **Tools** tab to see every tool coming from connected MCP servers.
+- Each saved tool can be expanded and edited inline: update the display **name/title/description** or provide a JSON blob with namespace-specific annotations (for example `{ "annotations": { "readOnlyHint": false } }`).
+- Badges in the table ("Overridden", "Annotations") show which tools currently have custom metadata. Hover them to read a tooltip describing what was overridden.
+- Annotation overrides are merged with whatever the upstream MCP server returns, so you can safely add custom UI hints without losing provider metadata.
 
 ## 🚀 Quick Start
 
@@ -167,12 +181,15 @@ code .
 ```
 2. Switch to Dev Containers. Open the VSCode Command Palette, and execute `Dev Containers: Reopen in Container`.
 
-VSCode will open the Dev Containers project in a new window, where it will build the runtime and install the toolchain according to the `Dockerfile` before starting the connection and finally installing the APISIX dependencies.
+VSCode will open the Dev Containers project in a new window, where it will build the runtime and install the toolchain according to the `Dockerfile` before starting the connection and finally installing the MetaMCP dependencies.
+<img width="895" height="153" alt="image" src="https://github.com/user-attachments/assets/d3e1420d-43c1-4ed6-9229-b91ea09c142a" />
 
 > **note**
 > This process requires a reliable network connection, and it will access Docker Hub, GitHub, and some other sites. You will need to ensure the network connection yourself, otherwise the container build may fail.
->
-> Wait some minutes, depending on the internet connection or computer performance, it may take from a few minutes to tens of minutes, you can click on the Progress Bar in the bottom right corner to view a live log where you will be able to check unusual stuck.
+
+Wait some minutes, depending on the internet connection or computer performance, it may take from a few minutes to tens of minutes, you can click on the Progress Bar in the bottom right corner to view a live log where you will be able to check unusual stuck.
+<img width="732" height="173" alt="image" src="https://github.com/user-attachments/assets/6e5752f8-7353-4a8f-b489-c13daef6700e" />
+
 
 ### **💻 Local Development**
 

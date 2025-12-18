@@ -1,6 +1,6 @@
 {
-  "id": "666836dc-6c71-49d8-a902-6a363282e36a",
-  "prevId": "4ac4a0e5-88e8-4c85-ba0c-8ece21466d3e",
+  "id": "a9a06557-e46e-459c-80c4-2772cd50ccac",
+  "prevId": "666836dc-6c71-49d8-a902-6a363282e36a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -326,56 +326,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "enable_max_rate": {
-          "name": "enable_max_rate",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "enable_client_max_rate": {
-          "name": "enable_client_max_rate",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "max_rate": {
-          "name": "max_rate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "max_rate_seconds": {
-          "name": "max_rate_seconds",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "client_max_rate": {
-          "name": "client_max_rate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "client_max_rate_seconds": {
-          "name": "client_max_rate_seconds",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "client_max_rate_strategy": {
-          "name": "client_max_rate_strategy",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "client_max_rate_strategy_key": {
-          "name": "client_max_rate_strategy_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "use_query_param_auth": {
           "name": "use_query_param_auth",
@@ -824,6 +774,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "override_annotations": {
+          "name": "override_annotations",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "NULL"
         },
         "created_at": {
           "name": "created_at",

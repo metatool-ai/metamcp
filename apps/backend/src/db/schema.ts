@@ -58,6 +58,10 @@ export const mcpServersTable = pgTable(
       .notNull()
       .defaultNow(),
     bearerToken: text("bearer_token"),
+    headers: jsonb("headers")
+      .$type<{ [key: string]: string }>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     user_id: text("user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),
@@ -331,7 +335,11 @@ export const namespaceToolMappingsTable = pgTable(
       .notNull()
       .default(McpServerStatusEnum.Enum.ACTIVE),
     override_name: text("override_name"),
+    override_title: text("override_title"),
     override_description: text("override_description"),
+    override_annotations: jsonb("override_annotations")
+      .$type<Record<string, unknown> | null>()
+      .default(sql`NULL`),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

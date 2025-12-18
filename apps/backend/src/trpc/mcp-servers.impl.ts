@@ -132,6 +132,7 @@ export const mcpServersImplementations = {
             env: serverConfig.env || {},
             url: serverConfig.url || null,
             bearerToken: undefined,
+            headers: serverConfig.headers || {},
             user_id: userId, // Default bulk imported servers to current user
           };
 

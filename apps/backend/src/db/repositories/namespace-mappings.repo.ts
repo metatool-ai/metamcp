@@ -52,7 +52,9 @@ export class NamespaceMappingsRepository {
       .update(namespaceToolMappingsTable)
       .set({
         override_name: input.overrideName,
+        override_title: input.overrideTitle,
         override_description: input.overrideDescription,
+        override_annotations: input.overrideAnnotations,
       })
       .where(
         and(

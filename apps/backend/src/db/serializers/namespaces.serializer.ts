@@ -45,6 +45,7 @@ export class NamespacesSerializer {
         url: server.url,
         env: server.env || {},
         bearerToken: server.bearerToken,
+        headers: server.headers || {},
         error_status: server.error_status,
         created_at: server.created_at.toISOString(),
         user_id: server.user_id,
@@ -66,7 +67,9 @@ export class NamespacesSerializer {
       serverName: dbTool.serverName,
       serverUuid: dbTool.serverUuid,
       overrideName: dbTool.overrideName,
+      overrideTitle: dbTool.overrideTitle,
       overrideDescription: dbTool.overrideDescription,
+      overrideAnnotations: dbTool.overrideAnnotations,
     };
   }
 
