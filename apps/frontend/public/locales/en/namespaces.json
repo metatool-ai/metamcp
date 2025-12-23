@@ -46,6 +46,7 @@
   "selectMcpServersDescription": "Select MCP servers to include in this namespace. You can modify this later.",
   "creating": "Creating...",
   "searchPlaceholder": "Search namespaces...",
+  "searchServers": "Search servers...",
   "noServersFound": "No servers match your search",
   "viewDetails": "View details",
   "noDescription": "No description",
