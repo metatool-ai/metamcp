@@ -5,7 +5,7 @@ import {
   createNamespaceFormSchema,
   CreateNamespaceRequest,
 } from "@repo/zod-types";
-import { ChevronDown, Package, Plus } from "lucide-react";
+import { ChevronDown, Package, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -38,6 +38,7 @@ export default function NamespacesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedServerUuids, setSelectedServerUuids] = useState<string[]>([]);
+  const [serverSearchQuery, setServerSearchQuery] = useState("");
 
   // Get the tRPC query client for cache invalidation
   const utils = trpc.useUtils();
@@ -47,6 +48,18 @@ export default function NamespacesPage() {
     trpc.frontend.mcpServers.list.useQuery();
 
   const availableServers = serversResponse?.success ? serversResponse.data : [];
+
+  // Filter and sort servers alphabetically
+  const filteredServers = availableServers
+    .filter((server) => {
+      if (!serverSearchQuery.trim()) return true;
+      const query = serverSearchQuery.toLowerCase();
+      return (
+        server.name.toLowerCase().includes(query) ||
+        server.description?.toLowerCase().includes(query)
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   // tRPC mutation for creating namespace
   const createNamespaceMutation = trpc.frontend.namespaces.create.useMutation({
@@ -64,6 +77,7 @@ export default function NamespacesPage() {
           user_id: undefined, // Default to "For myself" (Private)
         });
         setSelectedServerUuids([]);
+        setServerSearchQuery("");
         // Invalidate and refetch the namespace list
         utils.frontend.namespaces.list.invalidate();
       } else {
@@ -222,6 +236,17 @@ export default function NamespacesPage() {
                   <label className="text-sm font-medium">
                     {t("namespaces:mcpServers")}
                   </label>
+                  {/* Search input for filtering servers */}
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder={t("namespaces:searchServers")}
+                      value={serverSearchQuery}
+                      onChange={(e) => setServerSearchQuery(e.target.value)}
+                      className="pl-8"
+                      disabled={isSubmitting || serversLoading}
+                    />
+                  </div>
                   <div className="border rounded-md p-3 max-h-48 overflow-y-auto">
                     {serversLoading ? (
                       <div className="text-sm text-muted-foreground">
@@ -231,9 +256,16 @@ export default function NamespacesPage() {
                       <div className="text-sm text-muted-foreground">
                         {t("namespaces:noMcpServersAvailable")}
                       </div>
+                    ) : filteredServers.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-4 text-center">
+                        <Search className="h-6 w-6 text-muted-foreground mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          {t("namespaces:noServersFound")}
+                        </p>
+                      </div>
                     ) : (
                       <div className="space-y-2">
-                        {availableServers.map((server) => (
+                        {filteredServers.map((server) => (
                           <div
                             key={server.uuid}
                             className="flex items-center space-x-2"
@@ -279,6 +311,7 @@ export default function NamespacesPage() {
                         user_id: undefined, // Default to "For myself" (Private)
                       });
                       setSelectedServerUuids([]);
+                      setServerSearchQuery("");
                     }}
                     disabled={isSubmitting}
                   >
