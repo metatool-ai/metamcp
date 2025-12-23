@@ -6,6 +6,7 @@ import mcpProxyRouter from "./routers/mcp-proxy";
 import oauthRouter from "./routers/oauth";
 import publicEndpointsRouter from "./routers/public-metamcp";
 import trpcRouter from "./routers/trpc";
+import logger from "./utils/logger";
 
 const app = express();
 
@@ -62,7 +63,7 @@ app.use(async (req, res, next) => {
       const body = await response.text();
       res.send(body);
     } catch (error) {
-      console.error("Auth route error:", error);
+      logger.error("Auth route error:", error);
       res.status(500).json({
         error: "Internal server error",
         details: error instanceof Error ? error.message : String(error),

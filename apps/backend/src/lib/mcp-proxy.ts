@@ -1,19 +1,20 @@
+import logger from "@/utils/logger";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { isJSONRPCRequest } from "@modelcontextprotocol/sdk/types.js";
 
 function onClientError(error: Error) {
   // Don't log "Not connected" errors as they're expected when connections close
   if (error?.message && error.message.includes("Not connected")) {
-    console.debug("Client transport disconnected (expected during cleanup)");
+    logger.debug("Client transport disconnected (expected during cleanup)");
     return;
   }
-  console.error("Error from inspector client:", error);
+  logger.error("Error from inspector client:", error);
 }
 
 function onServerError(error: Error) {
   // Don't log "Not connected" errors as they're expected when connections close
   if (error?.message && error.message.includes("Not connected")) {
-    console.debug("Server transport disconnected (expected during cleanup)");
+    logger.debug("Server transport disconnected (expected during cleanup)");
     return;
   }
 
@@ -22,9 +23,9 @@ function onServerError(error: Error) {
       error.message.includes("Error POSTing to endpoint (HTTP 404)")) ||
     (error?.cause && JSON.stringify(error.cause).includes("ECONNREFUSED"))
   ) {
-    console.error("Connection refused. Is the MCP server running?");
+    logger.error("Connection refused. Is the MCP server running?");
   } else {
-    console.error("Error from MCP server:", error);
+    logger.error("Error from MCP server:", error);
   }
 }
 
@@ -46,23 +47,23 @@ export default function mcpProxy({
   // Helper function to safely trigger cleanup once
   const triggerCleanup = async () => {
     if (cleanupCalled) {
-      console.debug("Cleanup already called, skipping");
+      logger.debug("Cleanup already called, skipping");
       return;
     }
     if (!onCleanup) {
-      console.debug("No cleanup callback provided, skipping");
+      logger.debug("No cleanup callback provided, skipping");
       return;
     }
     cleanupCalled = true;
 
     try {
-      console.debug(
+      logger.debug(
         "Triggering MCP proxy cleanup (server session/subprocess cleanup)",
       );
       await onCleanup();
-      console.debug("MCP proxy cleanup completed successfully");
+      logger.debug("MCP proxy cleanup completed successfully");
     } catch (error) {
-      console.error("Error during MCP proxy cleanup:", error);
+      logger.error("Error during MCP proxy cleanup:", error);
     }
   };
 
@@ -87,14 +88,14 @@ export default function mcpProxy({
   transportToClient.onmessage = (message) => {
     // Check if server transport is still connected before sending
     if (transportToServerClosed) {
-      console.debug("Ignoring message to closed server transport");
+      logger.debug("Ignoring message to closed server transport");
       return;
     }
 
     transportToServer.send(message).catch(async (error) => {
       // Handle connection closed errors gracefully
       if (error?.message && error.message.includes("Not connected")) {
-        console.debug(
+        logger.debug(
           "Server transport disconnected while sending message, cleaning up",
         );
         await closeAllTransports();
@@ -125,7 +126,7 @@ export default function mcpProxy({
     if (!reportedServerSession) {
       if (transportToServer.sessionId) {
         // Can only report for StreamableHttp
-        console.log(
+        logger.info(
           "Proxy  <-> Server sessionId: " + transportToServer.sessionId,
         );
       }
@@ -134,14 +135,14 @@ export default function mcpProxy({
 
     // Check if client transport is still connected before sending
     if (transportToClientClosed) {
-      console.debug("Ignoring message to closed client transport");
+      logger.debug("Ignoring message to closed client transport");
       return;
     }
 
     transportToClient.send(message).catch(async (error) => {
       // Handle connection closed errors gracefully
       if (error?.message && error.message.includes("Not connected")) {
-        console.debug(
+        logger.debug(
           "Client transport disconnected while sending message, cleaning up",
         );
         await closeAllTransports();
@@ -152,11 +153,11 @@ export default function mcpProxy({
   };
 
   transportToClient.onclose = async () => {
-    console.debug("Client transport closed");
+    logger.debug("Client transport closed");
     if (!transportToClientClosed) {
       transportToClientClosed = true;
       if (!transportToServerClosed) {
-        console.debug("Closing server transport due to client close");
+        logger.debug("Closing server transport due to client close");
         await transportToServer.close().catch(onServerError);
       }
     }
@@ -164,11 +165,11 @@ export default function mcpProxy({
   };
 
   transportToServer.onclose = async () => {
-    console.debug("Server transport closed");
+    logger.debug("Server transport closed");
     if (!transportToServerClosed) {
       transportToServerClosed = true;
       if (!transportToClientClosed) {
-        console.debug("Closing client transport due to server close");
+        logger.debug("Closing client transport due to server close");
         await transportToClient.close().catch(onClientError);
       }
     }
@@ -178,7 +179,7 @@ export default function mcpProxy({
   transportToClient.onerror = async (error) => {
     // Mark as closed and trigger cleanup if we get a connection error
     if (error?.message && error.message.includes("Not connected")) {
-      console.debug("Client transport error: Not connected, cleaning up");
+      logger.debug("Client transport error: Not connected, cleaning up");
       await closeAllTransports();
       return;
     }
@@ -188,7 +189,7 @@ export default function mcpProxy({
   transportToServer.onerror = async (error) => {
     // Mark as closed and trigger cleanup if we get a connection error
     if (error?.message && error.message.includes("Not connected")) {
-      console.debug("Server transport error: Not connected, cleaning up");
+      logger.debug("Server transport error: Not connected, cleaning up");
       await closeAllTransports();
       return;
     }

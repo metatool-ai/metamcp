@@ -52,7 +52,10 @@ English | [中文](./README_cn.md)
   - [🖥️ Connecting Claude Desktop and Other STDIO-only Clients](#️-connecting-claude-desktop-and-other-stdio-only-clients)
   - [🔧 API Key Auth Troubleshooting](#-api-key-auth-troubleshooting)
 - [❄️ Cold Start Problem and Custom Dockerfile](#️-cold-start-problem-and-custom-dockerfile)
+- [🧾 Log Levels](#-log-levels)
 - [🔐 Authentication](#-authentication)
+- [🚦 Traffic Management](#-traffic-management)
+  - [🚧 **MCP Rate Limit**](#-mcp-rate-limit)
 - [🔗 OpenID Connect (OIDC) Provider Support](#-openid-connect-oidc-provider-support)
   - [🛠️ **Configuration**](#️-configuration)
   - [🏢 **Supported Providers**](#-supported-providers)
@@ -291,6 +294,28 @@ For more details and alternative approaches, see [issue #76](https://github.com/
 
 🛠️ **Solution**: Customize the Dockerfile to add dependencies or pre-install packages to reduce cold start time.
 
+## 🧾 Log Levels
+
+MetaMCP’s backend writes logs to files and optionally mirrors selected levels to the console. Control console mirroring with the `LOG_LEVEL` environment variable.
+
+- Files
+  - `app.log`: receives `DEBUG`, `INFO`, and `WARN`
+  - `error.log`: receives `ERROR`
+
+- Console mirroring (`LOG_LEVEL`)
+  - `all`: mirror `DEBUG`, `INFO`, `WARN`, `ERROR` to console
+  - `info`: mirror only `INFO` to console
+  - `errors-only`: mirror `WARN` and `ERROR` to console
+  - `none`: no console output
+
+- Defaults and examples
+  - Default (when unset or invalid): `errors-only`
+  - `.env` example:
+    ```bash
+    LOG_LEVEL='errors-only' # 'all', 'info', 'errors-only', 'none'
+    ```
+  - `docker-compose.dev.yml` uses: `LOG_LEVEL: ${LOG_LEVEL:-all}`
+
 ## 🔐 Authentication
 
 - 🛡️ **Better Auth** for frontend & backend (TRPC procedures)
@@ -299,6 +324,33 @@ For more details and alternative approaches, see [issue #76](https://github.com/
 - 🪪 **MCP OAuth**: Exposed endpoints have options to use standard OAuth in MCP Spec 2025-06-18, easy to connect.
 - 🏢 **Multi-tenancy**: Designed for organizations to deploy on their own machines. Supports both private and public access scopes. Users can create MCPs, namespaces, endpoints, and API keys for themselves or for everyone. Public API keys cannot access private MetaMCPs.
 - ⚙️ **Separate Registration Controls**: Administrators can independently control UI registration and SSO/OAuth registration through the settings page, allowing for flexible enterprise deployment scenarios.
+
+## 🚦 Traffic Management
+
+### 🚧 MCP Rate Limit
+The MCP Rate Limit feature allows you to set the maximum requests a MCP tool (a endpoint) will accept in a given time window. There are two different strategies to set limits that you can use separately or together:
+
+ * `Endpoint rate-limiting (Rate Limiting)`: applies simultaneously to all clients using the endpoint, sharing a unique counter.
+ * `User rate-limiting (Client Rate Limiting)`: sets a counter to each individual user.
+
+Both types can coexist and they complement each other, and store the counters in-memory. On a cluster, each machine sees and counts only its passing traffic.
+
+### **Endpoint rate-limiting**
+The endpoint rate limit acts on the number of simultaneous transactions an endpoint can process. This type of limit protects the service for all customers.
+When the users connected to an endpoint together exceed the `rate-limiting`, MetaMCP starts to reject connections with a status code `503 Service Unavailable`.
+
+#### **Endpoint rate-limiting options**
+ * `Max Rate`: Defines how many requests will you accept from all users together at any given instant. When the gateway starts, the bucket is full. As requests from users come, the remaining tokens in the bucket decrease. At the same time, the rate-limiting refills the bucket at the desired rate until its maximum capacity is reached.
+ * `Max Rate Seconds`: Time period in which the maximum rates operate in seconds. For instance, if you set an max rate seconds of 60s and a rate-limiting of 5, you are allowing 5 requests every sixty seconds.
+
+### **User rate-limiting**
+The client or user rate limit applies one counter to each individual user and endpoint. When a single user connected to an endpoint exceeds their `client-max-rate`, MetaMCP starts rejecting connections with a status code `429 Too Many Requests`
+
+#### **User rate-limiting options**
+ * `Client Max Rate`: Number of tokens you add to the Token Bucket for each individual user (user quota) in the time interval you want (Client Max Rate Seconds). The remaining tokens in the bucket are the requests a specific user can do.
+ * `Client Max Rate Seconds`: Time period in which the maximum rates operate in seconds. For instance, if you set an every of 60s and a rate of 5, you are allowing 5 requests every sixty seconds.
+ * `Client Max Rate Strategy`: Sets the strategy you will use to set client counters. Choose ip when the restrictions apply to the client’s IP address, or set it to header when there is a header that identifies a user uniquely. That header must be defined with the key entry.
+ * `Client Max Rate Strategy Key`: It is the header name containing the user identification (e.g., Authorization on tokens, or X-Original-Forwarded-For for IPs).
 
 ## 🔗 OpenID Connect (OIDC) Provider Support
 

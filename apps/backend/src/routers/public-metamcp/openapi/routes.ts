@@ -12,6 +12,7 @@ import { createMiddlewareEnabledHandlers } from "./handlers";
 import { generateOpenApiSchema } from "./schema-generator";
 import { executeToolWithMiddleware } from "./tool-execution";
 import { ToolExecutionRequest } from "./types";
+import logger from "@/utils/logger";
 
 const openApiRouter = express.Router();
 
@@ -115,7 +116,7 @@ openApiRouter.get(
 
       res.json(openApiSchema);
     } catch (error) {
-      console.error("Error generating OpenAPI schema:", error);
+      logger.error("Error generating OpenAPI schema:", error);
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to generate OpenAPI schema",

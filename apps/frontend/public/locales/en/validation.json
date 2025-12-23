@@ -44,5 +44,25 @@
     "required": "This field is required",
     "tooShort": "Too short",
     "tooLong": "Too long"
+  },
+  "maxRateSeconds":{
+    "required": "Max rate seconds is required",
+    "tooSmall": "Max rate must be greater than 0",
+    "tooLarge": "Max rate must be less than 1000000"
+  },
+  "maxRate": {
+    "required": "Max rate is required",
+    "tooSmall": "Max rate must be greater than 0",
+    "tooLarge": "Max rate must be less than 1000000"
+  },
+  "clientMaxRateSeconds":{
+    "required": "Max rate seconds is required",
+    "tooSmall": "Max rate must be greater than 0",
+    "tooLarge": "Max rate must be less than 1000000"
+  },
+  "clientMaxRate": {
+    "required": "Max rate is required",
+    "tooSmall": "Max rate must be greater than 0",
+    "tooLarge": "Max rate must be less than 1000000"
   }
 }

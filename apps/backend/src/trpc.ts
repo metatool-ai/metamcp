@@ -3,6 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import type { Request, Response } from "express";
 
 import { auth, type Session, type User } from "./auth";
+import logger from "./utils/logger";
 
 // Extend the base context with Express request/response and auth data
 export interface Context extends BaseContext {
@@ -56,7 +57,7 @@ export const createContext = async ({
     }
   } catch (error) {
     // Log error but don't throw - we want to allow unauthenticated requests
-    console.error("Error getting session in tRPC context:", error);
+    logger.error("Error getting session in tRPC context:", error);
   }
 
   return {

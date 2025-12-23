@@ -1,3 +1,4 @@
+import logger from "@/utils/logger";
 import { configService } from "./config.service";
 
 export interface SessionLifetimeManager<T> {
@@ -89,7 +90,7 @@ export class SessionLifetimeManagerImpl<T>
 
       // Clean up expired sessions
       if (expiredSessions.length > 0) {
-        console.log(
+        logger.info(
           `Cleaning up ${expiredSessions.length} expired ${this.name} sessions: ${expiredSessions.map((s) => s.sessionId).join(", ")}`,
         );
 
@@ -100,7 +101,7 @@ export class SessionLifetimeManagerImpl<T>
         );
       }
     } catch (error) {
-      console.error(
+      logger.error(
         `Error during automatic ${this.name} session cleanup:`,
         error,
       );

@@ -3,6 +3,7 @@ import { ServerParameters } from "@repo/zod-types";
 import { mcpServersRepository, namespacesRepository } from "../db/repositories";
 import { metaMcpServerPool } from "./metamcp";
 import { convertDbServerToParams } from "./metamcp/utils";
+import logger from "@/utils/logger";
 
 /**
  * Startup function to initialize idle servers for all namespaces and all MCP servers
@@ -64,7 +65,7 @@ export async function initializeIdleServers() {
       "✅ Successfully initialized idle servers for all namespaces and all MCP servers",
     );
   } catch (error) {
-    console.error("❌ Error initializing idle servers:", error);
+    console.log("❌ Error initializing idle servers:", error);
     // Don't exit the process, just log the error
     // The server should still start even if idle server initialization fails
   }

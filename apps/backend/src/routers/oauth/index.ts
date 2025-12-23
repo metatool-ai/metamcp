@@ -12,6 +12,7 @@ import {
   securityHeaders,
   urlencodedParsingMiddleware,
 } from "./utils";
+import logger from "@/utils/logger";
 
 const oauthRouter = express.Router();
 
@@ -20,9 +21,9 @@ setInterval(
   async () => {
     try {
       await oauthRepository.cleanupExpired();
-      console.log("Cleaned up expired OAuth codes and tokens");
+      logger.info("Cleaned up expired OAuth codes and tokens");
     } catch (error) {
-      console.error("Error cleaning up expired OAuth entries:", error);
+      logger.error("Error cleaning up expired OAuth entries:", error);
     }
   },
   5 * 60 * 1000,
