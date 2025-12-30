@@ -14,6 +14,7 @@ export class McpServersSerializer {
       error_status: dbServer.error_status,
       created_at: dbServer.created_at.toISOString(),
       bearerToken: dbServer.bearerToken,
+      headers: dbServer.headers,
       user_id: dbServer.user_id,
     };
   }

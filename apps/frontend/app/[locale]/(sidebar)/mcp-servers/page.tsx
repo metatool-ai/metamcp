@@ -58,6 +58,7 @@ export default function McpServersPage() {
       env: "",
       url: "",
       bearerToken: "",
+      headers: "",
       user_id: undefined, // Default to private (current user)
     },
   });
@@ -108,6 +109,22 @@ export default function McpServersPage() {
       }
     }
 
+    // Parse headers string into object
+    const headersObject: Record<string, string> = {};
+    if (data.headers) {
+      const headersLines = data.headers.trim().split("\n");
+      for (const line of headersLines) {
+        const trimmedLine = line.trim();
+        if (trimmedLine && trimmedLine.includes("=")) {
+          const [key, ...valueParts] = trimmedLine.split("=");
+          const value = valueParts.join("="); // Handle values that contain '='
+          if (key?.trim()) {
+            headersObject[key.trim()] = value;
+          }
+        }
+      }
+    }
+
     const request: CreateMcpServerRequest = {
       name: data.name,
       description: data.description,
@@ -117,6 +134,7 @@ export default function McpServersPage() {
       env: envObject,
       url: data.url,
       bearerToken: data.bearerToken,
+      headers: headersObject,
       user_id: data.user_id,
     };
 
@@ -393,6 +411,27 @@ export default function McpServersPage() {
                                 placeholder={t(
                                   "mcp-servers:bearerTokenPlaceholder",
                                 )}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="headers"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("mcp-servers:headers")}</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                {...field}
+                                placeholder={t(
+                                  "mcp-servers:headersPlaceholder",
+                                )}
+                                rows={3}
+                                className="whitespace-pre-wrap break-all overflow-x-hidden"
                               />
                             </FormControl>
                             <FormMessage />

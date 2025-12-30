@@ -79,20 +79,23 @@ export const createMetaMcpClient = (
     // Transform the URL if TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL is set to "true"
     const transformedUrl = transformDockerUrl(serverParams.url);
 
-    // Check for authentication - prioritize OAuth tokens, fallback to bearerToken
-    const hasAuth =
-      serverParams.oauth_tokens?.access_token || serverParams.bearerToken;
+    // Build headers: start with custom headers, then add auth header
+    const headers: Record<string, string> = {
+      ...(serverParams.headers || {}),
+    };
 
-    if (!hasAuth) {
+    // Check for authentication - prioritize OAuth tokens, fallback to bearerToken
+    const authToken =
+      serverParams.oauth_tokens?.access_token || serverParams.bearerToken;
+    if (authToken) {
+      headers["Authorization"] = `Bearer ${authToken}`;
+    }
+
+    const hasHeaders = Object.keys(headers).length > 0;
+
+    if (!hasHeaders) {
       transport = new SSEClientTransport(new URL(transformedUrl));
     } else {
-      const headers: Record<string, string> = {};
-
-      // Use OAuth access token if available, otherwise use bearerToken
-      const authToken =
-        serverParams.oauth_tokens?.access_token || serverParams.bearerToken;
-      headers["Authorization"] = `Bearer ${authToken}`;
-
       transport = new SSEClientTransport(new URL(transformedUrl), {
         requestInit: {
           headers,
@@ -106,20 +109,23 @@ export const createMetaMcpClient = (
     // Transform the URL if TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL is set to "true"
     const transformedUrl = transformDockerUrl(serverParams.url);
 
-    // Check for authentication - prioritize OAuth tokens, fallback to bearerToken
-    const hasAuth =
-      serverParams.oauth_tokens?.access_token || serverParams.bearerToken;
+    // Build headers: start with custom headers, then add auth header
+    const headers: Record<string, string> = {
+      ...(serverParams.headers || {}),
+    };
 
-    if (!hasAuth) {
+    // Check for authentication - prioritize OAuth tokens, fallback to bearerToken
+    const authToken =
+      serverParams.oauth_tokens?.access_token || serverParams.bearerToken;
+    if (authToken) {
+      headers["Authorization"] = `Bearer ${authToken}`;
+    }
+
+    const hasHeaders = Object.keys(headers).length > 0;
+
+    if (!hasHeaders) {
       transport = new StreamableHTTPClientTransport(new URL(transformedUrl));
     } else {
-      const headers: Record<string, string> = {};
-
-      // Use OAuth access token if available, otherwise use bearerToken
-      const authToken =
-        serverParams.oauth_tokens?.access_token || serverParams.bearerToken;
-      headers["Authorization"] = `Bearer ${authToken}`;
-
       transport = new StreamableHTTPClientTransport(new URL(transformedUrl), {
         requestInit: {
           headers,

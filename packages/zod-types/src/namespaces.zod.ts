@@ -7,6 +7,8 @@ import {
 } from "./mcp-servers.zod";
 import { ToolSchema, ToolStatusEnum } from "./tools.zod";
 
+const ToolAnnotationsSchema = z.record(z.unknown());
+
 // Namespace schema definitions
 export const createNamespaceFormSchema = z.object({
   name: z.string().min(1, "validation:namespaceName.required"),
@@ -54,7 +56,9 @@ export const NamespaceToolSchema = ToolSchema.extend({
   serverUuid: z.string(),
   status: ToolStatusEnum, // Status from namespace tool mapping
   overrideName: z.string().nullable().optional(),
+  overrideTitle: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
+  overrideAnnotations: ToolAnnotationsSchema.nullable().optional(),
 });
 
 export const NamespaceWithServersSchema = NamespaceSchema.extend({
@@ -144,7 +148,9 @@ export const UpdateNamespaceToolOverridesRequestSchema = z.object({
   toolUuid: z.string().uuid(),
   serverUuid: z.string().uuid(),
   overrideName: z.string().nullable().optional(),
+  overrideTitle: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
+  overrideAnnotations: ToolAnnotationsSchema.nullable().optional(),
 });
 
 export const UpdateNamespaceToolOverridesResponseSchema = z.object({
@@ -258,7 +264,9 @@ export const NamespaceToolOverridesUpdateSchema = z.object({
   toolUuid: z.string(),
   serverUuid: z.string(),
   overrideName: z.string().nullable().optional(),
+  overrideTitle: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
+  overrideAnnotations: ToolAnnotationsSchema.nullable().optional(),
 });
 
 export type NamespaceCreateInput = z.infer<typeof NamespaceCreateInputSchema>;
@@ -293,6 +301,7 @@ export const DatabaseNamespaceServerSchema = z.object({
   url: z.string().nullable(),
   env: z.record(z.string()),
   bearerToken: z.string().nullable(),
+  headers: z.record(z.string()),
   created_at: z.date(),
   user_id: z.string().nullable(),
   status: McpServerStatusEnum,
@@ -318,7 +327,9 @@ export const DatabaseNamespaceToolSchema = z.object({
   serverName: z.string(),
   serverUuid: z.string(),
   overrideName: z.string().nullable().optional(),
+  overrideTitle: z.string().nullable().optional(),
   overrideDescription: z.string().nullable().optional(),
+  overrideAnnotations: ToolAnnotationsSchema.nullable().optional(),
 });
 
 export type DatabaseNamespace = z.infer<typeof DatabaseNamespaceSchema>;

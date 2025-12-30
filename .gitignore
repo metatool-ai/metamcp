@@ -39,3 +39,8 @@ yarn-error.log*
 
 .cursor/
 .vscode/
+.idea/
+
+# Docker Files
+docker-compose.override.yml
+compose.override.yml

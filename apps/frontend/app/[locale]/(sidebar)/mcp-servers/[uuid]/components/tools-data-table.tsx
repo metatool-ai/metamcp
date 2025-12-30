@@ -39,6 +39,7 @@ import { useTranslations } from "@/hooks/useTranslations";
 // MCP Tool type from the protocol
 interface MCPTool {
   name: string;
+  title?: string;
   description?: string;
   inputSchema: {
     type: "object";

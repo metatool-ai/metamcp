@@ -1,0 +1,12 @@
+{
+    "name": "MetaMCP",
+    "dockerComposeFile": [
+        "../docker-compose.dev.yml"
+    ],
+    "service": "app",
+    "workspaceFolder": "/app",
+    "forwardPorts": [
+        12008,
+        12009
+    ]
+}

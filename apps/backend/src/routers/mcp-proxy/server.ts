@@ -307,7 +307,11 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       }
     }
 
-    const headers = getHttpHeaders(req, transportType);
+    // Merge custom headers from database with passthrough headers from request
+    const headers = {
+      ...(matchingServer?.headers || {}),
+      ...getHttpHeaders(req, transportType),
+    };
 
     console.log(
       `SSE transport: url=${url}, headers=${JSON.stringify(headers)}`,
@@ -340,7 +344,11 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       }
     }
 
-    const headers = getHttpHeaders(req, transportType);
+    // Merge custom headers from database with passthrough headers from request
+    const headers = {
+      ...(matchingServer?.headers || {}),
+      ...getHttpHeaders(req, transportType),
+    };
 
     const transport = new StreamableHTTPClientTransport(new URL(url), {
       requestInit: {
