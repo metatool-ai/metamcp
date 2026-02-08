@@ -71,6 +71,14 @@ export default function EndpointsPage() {
           description: "",
           namespaceUuid: "",
           enableApiKeyAuth: true,
+          enableMaxRate: false,
+          enableClientMaxRate: false,
+          maxRate: undefined,
+          maxRateSeconds: undefined,
+          clientMaxRate: undefined,
+          clientMaxRateSeconds: undefined,
+          clientMaxRateStrategy: "ip",
+          clientMaxRateStrategyKey: "",
           enableOauth: false,
           useQueryParamAuth: false,
           createMcpServer: true,
@@ -107,6 +115,14 @@ export default function EndpointsPage() {
       name: "",
       description: "",
       namespaceUuid: "",
+      enableMaxRate: false,
+      enableClientMaxRate: false,
+      maxRate: undefined,
+      maxRateSeconds: undefined,
+      clientMaxRate: undefined,
+      clientMaxRateSeconds: undefined,
+      clientMaxRateStrategy: "ip",
+      clientMaxRateStrategyKey: "",
       enableApiKeyAuth: true,
       enableOauth: false,
       useQueryParamAuth: false,
@@ -124,12 +140,20 @@ export default function EndpointsPage() {
         description: data.description,
         namespaceUuid: data.namespaceUuid,
         enableApiKeyAuth: data.enableApiKeyAuth,
+        enableMaxRate: data.enableMaxRate,
+        enableClientMaxRate: data.enableClientMaxRate,
+        maxRate: data.maxRate,
+        maxRateSeconds: data.maxRateSeconds,
+        clientMaxRate: data.clientMaxRate,
+        clientMaxRateSeconds: data.clientMaxRateSeconds,
+        clientMaxRateStrategy: data.clientMaxRateStrategy,
+        clientMaxRateStrategyKey: data.clientMaxRateStrategyKey,
         enableOauth: data.enableOauth,
         useQueryParamAuth: data.useQueryParamAuth,
         createMcpServer: data.createMcpServer,
         user_id: data.user_id,
       };
-
+      console.log('apiPayload', apiPayload);
       // Use tRPC mutation
       createEndpointMutation.mutate(apiPayload);
     } catch (error) {
@@ -161,6 +185,14 @@ export default function EndpointsPage() {
       description: "",
       namespaceUuid: "",
       enableApiKeyAuth: true,
+      enableMaxRate: false,
+      enableClientMaxRate: false,
+      maxRate: undefined,
+      maxRateSeconds: undefined,
+      clientMaxRate: undefined,
+      clientMaxRateSeconds: undefined,
+      clientMaxRateStrategy: "ip",
+      clientMaxRateStrategyKey: "",
       enableOauth: false,
       useQueryParamAuth: false,
       createMcpServer: true,
@@ -192,7 +224,7 @@ export default function EndpointsPage() {
                 {t("endpoints:createEndpoint")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{t("endpoints:createEndpoint")}</DialogTitle>
                 <DialogDescription>
@@ -336,13 +368,192 @@ export default function EndpointsPage() {
                     {t("endpoints:namespaceDescription")}
                   </p>
                 </div>
-
+                {/* Rate Limit Settings */}
+                <div className="space-y-4 border-t pt-4">
+                  <h4 className="text-sm font-medium">
+                    {t("endpoints:rateLimit")}
+                  </h4>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <label className="text-sm font-medium">
+                        {t("endpoints:enableMaxRate")}
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("endpoints:enableMaxRateDescription")}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={form.watch("enableMaxRate")}
+                      onCheckedChange={(checked) =>
+                        form.setValue("enableMaxRate", checked)
+                      }
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  {form.watch("enableMaxRate") && (
+                    <>
+                      <div className="flex flex-col gap-2">
+                        <label htmlFor="maxRate" className="text-sm font-medium">
+                          {t("endpoints:maxRate")}
+                        </label>
+                        <Input
+                          id="maxRate"
+                          {...form.register("maxRate", { valueAsNumber: true })}
+                          placeholder={t("endpoints:maxRatePlaceholder")}
+                          type="number"
+                        />
+                        {form.formState.errors.maxRate && (
+                          <p className="text-sm text-red-500">
+                            {form.formState.errors.maxRate.message}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {t("endpoints:maxRateDescription")}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label htmlFor="maxRateSeconds" className="text-sm font-medium">
+                          {t("endpoints:maxRateSeconds")}
+                        </label>
+                        <Input
+                          id="maxRateSeconds"
+                          type="number"
+                          {...form.register("maxRateSeconds", { valueAsNumber: true })}
+                          placeholder={t("endpoints:maxRateSecondsPlaceholder")}
+                        />
+                        {form.formState.errors.maxRateSeconds && (
+                          <p className="text-sm text-red-500">
+                            {form.formState.errors.maxRateSeconds.message}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {t("endpoints:maxRateSecondsDescription")}
+                        </p>
+                      </div>
+                    </>)}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <label className="text-sm font-medium">
+                        {t("endpoints:enableClientMaxRate")}
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("endpoints:enableClientMaxRateDescription")}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={form.watch("enableClientMaxRate")}
+                      onCheckedChange={(checked) =>
+                        form.setValue("enableClientMaxRate", checked)
+                      }
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  {form.watch("enableClientMaxRate") && (
+                    <>
+                      <div className="flex flex-col gap-2">
+                        <label htmlFor="clientMaxRate" className="text-sm font-medium">
+                          {t("endpoints:clientMaxRate")}
+                        </label>
+                        <Input
+                          id="clientMaxRate"
+                          {...form.register("clientMaxRate", { valueAsNumber: true })}
+                          type="number"
+                          placeholder={t("endpoints:clientMaxRatePlaceholder")}
+                        />
+                        {form.formState.errors.clientMaxRate && (
+                          <p className="text-sm text-red-500">
+                            {form.formState.errors.clientMaxRate.message}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {t("endpoints:clientMaxRateDescription")}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label htmlFor="clientMaxRateSeconds" className="text-sm font-medium">
+                          {t("endpoints:clientMaxRateSeconds")}
+                        </label>
+                        <Input
+                          id="clientMaxRateSeconds"
+                          {...form.register("clientMaxRateSeconds", { valueAsNumber: true })}
+                          placeholder={t("endpoints:clientMaxRateSecondsPlaceholder")}
+                          type="number"
+                        />
+                        {form.formState.errors.clientMaxRateSeconds && (
+                          <p className="text-sm text-red-500">
+                            {form.formState.errors.clientMaxRateSeconds.message}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {t("endpoints:clientMaxRateSecondsDescription")}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label htmlFor="clientMaxRateStrategy" className="text-sm font-medium">
+                          {t("endpoints:clientMaxRateStrategy")}
+                        </label>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-between"
+                              type="button"
+                            >
+                              <span>
+                                {form.watch("clientMaxRateStrategy") === null ? t("endpoints:selectStrategy") : form.watch("clientMaxRateStrategy") === "ip" ? t("endpoints:ipStrategy") : form.watch("clientMaxRateStrategy") === "header" ? t("endpoints:headerStrategy") : t("endpoints:selectStrategy")}
+                              </span>
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
+                            <DropdownMenuItem
+                              onClick={() => form.setValue("clientMaxRateStrategy", "ip")}
+                            >
+                              {t("endpoints:ipStrategy")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => form.setValue("clientMaxRateStrategy", "header")}
+                            >
+                              {t("endpoints:headerStrategy")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        {form.formState.errors.clientMaxRateStrategy && (
+                          <p className="text-sm text-red-500">
+                            {form.formState.errors.clientMaxRateStrategy.message}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {t("endpoints:clientMaxRateStrategyDescription")}
+                        </p>
+                      </div>
+                      {form.watch("clientMaxRateStrategy") === "header" && (
+                        <div className="flex flex-col gap-2">
+                          <label htmlFor="clientMaxRateStrategyKey" className="text-sm font-medium">
+                            {t("endpoints:clientMaxRateStrategyKey")}
+                          </label>
+                          <Input
+                            id="clientMaxRateStrategyKey"
+                            {...form.register("clientMaxRateStrategyKey")}
+                            placeholder={t("endpoints:clientMaxRateStrategyKeyPlaceholder")}
+                          />
+                          {form.formState.errors.clientMaxRateStrategyKey && (
+                            <p className="text-sm text-red-500">
+                              {form.formState.errors.clientMaxRateStrategyKey.message}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {t("endpoints:clientMaxRateStrategyKeyDescription")}
+                          </p>
+                        </div>
+                      )}
+                    </>)}
+                </div>
                 {/* API Key Authentication Settings */}
                 <div className="space-y-4 border-t pt-4">
                   <h4 className="text-sm font-medium">
                     {t("endpoints:apiKeyAuth")}
                   </h4>
-
                   {/* Enable API Key Auth */}
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">

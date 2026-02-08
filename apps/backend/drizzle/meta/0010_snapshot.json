@@ -327,6 +327,56 @@
           "notNull": true,
           "default": false
         },
+        "enable_max_rate": {
+          "name": "enable_max_rate",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "enable_client_max_rate": {
+          "name": "enable_client_max_rate",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "max_rate": {
+          "name": "max_rate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_rate_seconds": {
+          "name": "max_rate_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_max_rate": {
+          "name": "client_max_rate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_max_rate_seconds": {
+          "name": "client_max_rate_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_max_rate_strategy": {
+          "name": "client_max_rate_strategy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_max_rate_strategy_key": {
+          "name": "client_max_rate_strategy_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "use_query_param_auth": {
           "name": "use_query_param_auth",
           "type": "boolean",

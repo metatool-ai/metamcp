@@ -1,6 +1,7 @@
 import { DatabaseMcpServer, ServerParameters } from "@repo/zod-types";
 
 import { oauthSessionsRepository } from "../../db/repositories/oauth-sessions.repo";
+import logger from "@/utils/logger";
 
 /**
  * Environment variables to inherit by default, if an environment is not explicitly given.
@@ -130,7 +131,7 @@ export async function convertDbServerToParams(
     } else if (params.type === "SSE" || params.type === "STREAMABLE_HTTP") {
       // For SSE or STREAMABLE_HTTP servers, ensure url is present
       if (!params.url) {
-        console.warn(
+        logger.warn(
           `${params.type} server ${params.uuid} is missing url field, skipping`,
         );
         return null;
@@ -139,7 +140,7 @@ export async function convertDbServerToParams(
 
     return params;
   } catch (error) {
-    console.error(
+    logger.error(
       `Error converting server ${server.uuid} to parameters:`,
       error,
     );
@@ -167,12 +168,12 @@ export function resolveEnvVariables(
       const varName = value.slice(2, -1);
       if (process.env[varName]) {
         resolved[key] = process.env[varName];
-        console.log(
+        logger.info(
           `Resolved environment variable: ${key}=${value} -> ${varName}=[REDACTED]`,
         );
       } else {
         resolved[key] = value; // Keep original value if env var not found
-        console.warn(
+        logger.warn(
           `Environment variable not found: ${varName}, keeping original value: ${value}`,
         );
       }

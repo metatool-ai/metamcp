@@ -25,6 +25,7 @@ import {
   createToolOverridesListToolsMiddleware,
 } from "../../../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { sanitizeName } from "../../../lib/metamcp/utils";
+import logger from "@/utils/logger";
 
 // Original List Tools Handler (adapted from metamcp-proxy.ts)
 export const createOriginalListToolsHandler = (
@@ -87,7 +88,7 @@ export const createOriginalListToolsHandler = (
 
           allTools.push(...toolsWithSource);
         } catch (error) {
-          console.error(`Error fetching tools from: ${serverName}`, error);
+          logger.error(`Error fetching tools from: ${serverName}`, error);
         }
       }),
     );
@@ -177,7 +178,7 @@ export const createOriginalCallToolHandler = (): CallToolHandler => {
       // Cast the result to CallToolResult type
       return result as CallToolResult;
     } catch (error) {
-      console.error(
+      logger.error(
         `Error calling tool "${name}" through ${
           targetSession.client.getServerVersion()?.name || "unknown"
         }:`,
