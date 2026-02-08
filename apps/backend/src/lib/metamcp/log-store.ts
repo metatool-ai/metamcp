@@ -1,3 +1,5 @@
+import logger from "@/utils/logger";
+
 export interface MetaMcpLogEntry {
   id: string;
   timestamp: Date;
@@ -43,13 +45,13 @@ class MetaMcpLogStore {
     const fullMessage = `[MetaMCP][${serverName}] ${message}`;
     switch (level) {
       case "error":
-        console.error(fullMessage, error || "");
+        logger.error(fullMessage, error || "");
         break;
       case "warn":
-        console.warn(fullMessage, error || "");
+        logger.warn(fullMessage, error || "");
         break;
       case "info":
-        console.log(fullMessage, error || "");
+        logger.info(fullMessage, error || "");
         break;
     }
 
@@ -58,7 +60,7 @@ class MetaMcpLogStore {
       try {
         listener(logEntry);
       } catch (err) {
-        console.error("Error notifying log listener:", err);
+        logger.error("Error notifying log listener:", err);
       }
     });
   }

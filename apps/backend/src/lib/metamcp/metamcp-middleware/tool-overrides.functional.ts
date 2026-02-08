@@ -12,6 +12,7 @@ import {
   CallToolMiddleware,
   ListToolsMiddleware,
 } from "./functional-middleware";
+import logger from "@/utils/logger";
 
 /**
  * Configuration for the tool overrides middleware
@@ -242,7 +243,7 @@ async function getToolOverrides(
 
     return override;
   } catch (error) {
-    console.error(
+    logger.error(
       `Error fetching tool overrides for ${toolName} in namespace ${namespaceUuid}:`,
       error,
     );
@@ -351,7 +352,7 @@ async function applyToolOverrides(
 
         overriddenTools.push(overriddenTool);
       } catch (error) {
-        console.error(`Error applying overrides for tool ${tool.name}:`, error);
+        logger.error(`Error applying overrides for tool ${tool.name}:`, error);
         // On error, include the tool as-is (fail-safe behavior)
         overriddenTools.push(tool);
       }
@@ -426,7 +427,7 @@ export async function mapOverrideNameToOriginal(
       return originalFullName;
     }
   } catch (error) {
-    console.error(
+    logger.error(
       `Error mapping override name ${toolName} to original in namespace ${namespaceUuid}:`,
       error,
     );

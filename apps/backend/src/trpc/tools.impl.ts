@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { toolsRepository } from "../db/repositories";
 import { ToolsSerializer } from "../db/serializers";
+import logger from "@/utils/logger";
 import { toolsSyncCache } from "../lib/metamcp/tools-sync-cache";
 
 export const toolsImplementations = {
@@ -25,7 +26,7 @@ export const toolsImplementations = {
         message: "Tools retrieved successfully",
       };
     } catch (error) {
-      console.error("Error fetching tools by MCP server UUID:", error);
+      logger.error("Error fetching tools by MCP server UUID:", error);
       return {
         success: false as const,
         data: [],
@@ -57,7 +58,7 @@ export const toolsImplementations = {
         message: `Successfully saved ${results.length} tools`,
       };
     } catch (error) {
-      console.error("Error saving tools to database:", error);
+      logger.error("Error saving tools to database:", error);
       return {
         success: false as const,
         count: 0,

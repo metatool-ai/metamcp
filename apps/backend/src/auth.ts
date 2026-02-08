@@ -5,6 +5,7 @@ import { genericOAuth, GenericOAuthConfig } from "better-auth/plugins";
 import { db } from "./db/index";
 import * as schema from "./db/schema";
 import { configService } from "./lib/config.service";
+import logger from "./utils/logger";
 
 // Provide default values for development
 if (!process.env.BETTER_AUTH_SECRET) {
@@ -46,7 +47,7 @@ if (process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET) {
   };
 
   oidcProviders.push(oidcConfig);
-  console.log(`✓ OIDC Provider configured: ${oidcConfig.providerId}`);
+  logger.info(`✓ OIDC Provider configured: ${oidcConfig.providerId}`);
 }
 
 // Default trusted origins for development

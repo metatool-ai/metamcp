@@ -1,6 +1,6 @@
 {
-  "id": "666836dc-6c71-49d8-a902-6a363282e36a",
-  "prevId": "4ac4a0e5-88e8-4c85-ba0c-8ece21466d3e",
+  "id": "06d6c80e-47a8-4720-ba08-ec60b13f1098",
+  "prevId": "3c8fdc64-07ec-40a6-b784-5989fe669cb8",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -557,6 +557,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "headers": {
+          "name": "headers",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
         "user_id": {
           "name": "user_id",
           "type": "text",
@@ -824,6 +831,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "override_annotations": {
+          "name": "override_annotations",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "NULL"
         },
         "created_at": {
           "name": "created_at",

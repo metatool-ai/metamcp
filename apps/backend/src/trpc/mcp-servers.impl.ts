@@ -22,6 +22,7 @@ import { clearOverrideCache } from "../lib/metamcp/metamcp-middleware/tool-overr
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
 import { serverErrorTracker } from "../lib/metamcp/server-error-tracker";
 import { convertDbServerToParams } from "../lib/metamcp/utils";
+import logger from "@/utils/logger";
 
 export const mcpServersImplementations = {
   create: async (
@@ -51,12 +52,12 @@ export const mcpServersImplementations = {
         mcpServerPool
           .ensureIdleSessionForNewServer(createdServer.uuid, serverParams)
           .then(() => {
-            console.log(
+            logger.info(
               `Ensured idle session for newly created server: ${createdServer.name} (${createdServer.uuid})`,
             );
           })
           .catch((error) => {
-            console.error(
+            logger.error(
               `Error ensuring idle session for newly created server ${createdServer.name} (${createdServer.uuid}):`,
               error,
             );
@@ -69,7 +70,7 @@ export const mcpServersImplementations = {
         message: "MCP server created successfully",
       };
     } catch (error) {
-      console.error("Error creating MCP server:", error);
+      logger.error("Error creating MCP server:", error);
       return {
         success: false as const,
         message:
@@ -92,7 +93,7 @@ export const mcpServersImplementations = {
         message: "MCP servers retrieved successfully",
       };
     } catch (error) {
-      console.error("Error fetching MCP servers:", error);
+      logger.error("Error fetching MCP servers:", error);
       return {
         success: false as const,
         data: [],
@@ -157,19 +158,19 @@ export const mcpServersImplementations = {
                 mcpServerPool
                   .ensureIdleSessionForNewServer(server.uuid, params)
                   .then(() => {
-                    console.log(
+                    logger.info(
                       `Ensured idle session for bulk imported server: ${server.name} (${server.uuid})`,
                     );
                   })
                   .catch((error) => {
-                    console.error(
+                    logger.error(
                       `Error ensuring idle session for bulk imported server ${server.name} (${server.uuid}):`,
                       error,
                     );
                   });
               }
             } catch (error) {
-              console.error(
+              logger.error(
                 `Error processing idle session for bulk imported server ${server.name} (${server.uuid}):`,
                 error,
               );
@@ -185,7 +186,7 @@ export const mcpServersImplementations = {
         message: `Successfully imported ${imported} MCP servers${errors.length > 0 ? ` with ${errors.length} errors` : ""}`,
       };
     } catch (error) {
-      console.error("Error bulk importing MCP servers:", error);
+      logger.error("Error bulk importing MCP servers:", error);
       return {
         success: false as const,
         imported: 0,
@@ -228,7 +229,7 @@ export const mcpServersImplementations = {
         message: "MCP server retrieved successfully",
       };
     } catch (error) {
-      console.error("Error fetching MCP server:", error);
+      logger.error("Error fetching MCP server:", error);
       return {
         success: false as const,
         message: "Failed to fetch MCP server",
@@ -284,12 +285,12 @@ export const mcpServersImplementations = {
         metaMcpServerPool
           .invalidateIdleServers(affectedNamespaceUuids)
           .then(() => {
-            console.log(
+            logger.info(
               `Invalidated idle MetaMCP servers for ${affectedNamespaceUuids.length} namespaces after deleting server: ${deletedServer.name} (${deletedServer.uuid})`,
             );
           })
           .catch((error) => {
-            console.error(
+            logger.error(
               `Error invalidating idle MetaMCP servers after deleting server ${deletedServer.uuid}:`,
               error,
             );
@@ -299,12 +300,12 @@ export const mcpServersImplementations = {
         metaMcpServerPool
           .invalidateOpenApiSessions(affectedNamespaceUuids)
           .then(() => {
-            console.log(
+            logger.info(
               `Invalidated OpenAPI sessions for ${affectedNamespaceUuids.length} namespaces after deleting server: ${deletedServer.name} (${deletedServer.uuid})`,
             );
           })
           .catch((error) => {
-            console.error(
+            logger.error(
               `Error invalidating OpenAPI sessions after deleting server ${deletedServer.uuid}:`,
               error,
             );
@@ -314,7 +315,7 @@ export const mcpServersImplementations = {
         affectedNamespaceUuids.forEach((namespaceUuid) => {
           clearOverrideCache(namespaceUuid);
         });
-        console.log(
+        logger.info(
           `Cleared tool overrides cache for ${affectedNamespaceUuids.length} namespaces after deleting server: ${deletedServer.name} (${deletedServer.uuid})`,
         );
       }
@@ -324,7 +325,7 @@ export const mcpServersImplementations = {
         message: "MCP server deleted successfully",
       };
     } catch (error) {
-      console.error("Error deleting MCP server:", error);
+      logger.error("Error deleting MCP server:", error);
       return {
         success: false as const,
         message:
@@ -376,11 +377,11 @@ export const mcpServersImplementations = {
       if (updatedServer.type === McpServerTypeEnum.Enum.STDIO) {
         try {
           await serverErrorTracker.resetServerErrorState(updatedServer.uuid);
-          console.log(
+          logger.info(
             `Reset error status for updated stdio server: ${updatedServer.name} (${updatedServer.uuid})`,
           );
         } catch (error) {
-          console.error(
+          logger.error(
             `Error resetting error status for updated stdio server ${updatedServer.name} (${updatedServer.uuid}):`,
             error,
           );
@@ -393,12 +394,12 @@ export const mcpServersImplementations = {
         mcpServerPool
           .invalidateIdleSession(updatedServer.uuid, serverParams)
           .then(() => {
-            console.log(
+            logger.info(
               `Invalidated and refreshed idle session for updated server: ${updatedServer.name} (${updatedServer.uuid})`,
             );
           })
           .catch((error) => {
-            console.error(
+            logger.error(
               `Error invalidating idle session for updated server ${updatedServer.name} (${updatedServer.uuid}):`,
               error,
             );
@@ -415,12 +416,12 @@ export const mcpServersImplementations = {
         metaMcpServerPool
           .invalidateIdleServers(affectedNamespaceUuids)
           .then(() => {
-            console.log(
+            logger.info(
               `Invalidated idle MetaMCP servers for ${affectedNamespaceUuids.length} namespaces after updating server: ${updatedServer.name} (${updatedServer.uuid})`,
             );
           })
           .catch((error) => {
-            console.error(
+            logger.error(
               `Error invalidating idle MetaMCP servers after updating server ${updatedServer.uuid}:`,
               error,
             );
@@ -430,12 +431,12 @@ export const mcpServersImplementations = {
         metaMcpServerPool
           .invalidateOpenApiSessions(affectedNamespaceUuids)
           .then(() => {
-            console.log(
+            logger.info(
               `Invalidated OpenAPI sessions for ${affectedNamespaceUuids.length} namespaces after updating server: ${updatedServer.name} (${updatedServer.uuid})`,
             );
           })
           .catch((error) => {
-            console.error(
+            logger.error(
               `Error invalidating OpenAPI sessions after updating server ${updatedServer.uuid}:`,
               error,
             );
@@ -445,7 +446,7 @@ export const mcpServersImplementations = {
         affectedNamespaceUuids.forEach((namespaceUuid) => {
           clearOverrideCache(namespaceUuid);
         });
-        console.log(
+        logger.info(
           `Cleared tool overrides cache for ${affectedNamespaceUuids.length} namespaces after updating server: ${updatedServer.name} (${updatedServer.uuid})`,
         );
       }
@@ -456,7 +457,7 @@ export const mcpServersImplementations = {
         message: "MCP server updated successfully",
       };
     } catch (error) {
-      console.error("Error updating MCP server:", error);
+      logger.error("Error updating MCP server:", error);
       return {
         success: false as const,
         message:
