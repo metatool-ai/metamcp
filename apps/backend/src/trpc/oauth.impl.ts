@@ -6,9 +6,10 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import { oauthSessionsRepository } from "../db/repositories";
 import { OAuthSessionsSerializer } from "../db/serializers";
-import logger from "@/utils/logger";
 
 export const oauthImplementations = {
   get: async (

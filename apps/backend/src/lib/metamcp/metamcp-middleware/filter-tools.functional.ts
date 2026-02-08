@@ -1,6 +1,8 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { and, eq } from "drizzle-orm";
 
+import logger from "@/utils/logger";
+
 import { db } from "../../../db/index";
 import {
   mcpServersTable,
@@ -12,7 +14,6 @@ import {
   CallToolMiddleware,
   ListToolsMiddleware,
 } from "./functional-middleware";
-import logger from "@/utils/logger";
 
 /**
  * Configuration for the filter middleware

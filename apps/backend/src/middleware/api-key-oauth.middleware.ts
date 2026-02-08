@@ -1,12 +1,13 @@
 import { DatabaseEndpoint } from "@repo/zod-types";
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { ApiKeysRepository } from "../db/repositories/api-keys.repo";
 import {
   authRateLimiter,
   getAuthRateLimitIdentifier,
 } from "../lib/auth-rate-limiter";
-import logger from "@/utils/logger";
 
 // Extend Express Request interface for our custom properties
 export interface ApiKeyAuthenticatedRequest extends express.Request {

@@ -1,8 +1,9 @@
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { oauthRepository } from "../../db/repositories";
 import { generateSecureAccessToken, rateLimitToken } from "./utils";
-import logger from "@/utils/logger";
 
 const tokenRouter = express.Router();
 

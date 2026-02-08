@@ -1,10 +1,11 @@
 import { CallToolRequest } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { metaMcpServerPool } from "../../../lib/metamcp/metamcp-server-pool";
 import { createMiddlewareEnabledHandlers } from "./handlers";
 import { ToolExecutionRequest } from "./types";
-import logger from "@/utils/logger";
 
 // Refactored tool execution logic to use middleware
 export const executeToolWithMiddleware = async (

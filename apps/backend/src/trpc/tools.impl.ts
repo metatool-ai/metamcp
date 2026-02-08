@@ -6,9 +6,10 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import { toolsRepository } from "../db/repositories";
 import { ToolsSerializer } from "../db/serializers";
-import logger from "@/utils/logger";
 import { toolsSyncCache } from "../lib/metamcp/tools-sync-cache";
 
 export const toolsImplementations = {
@@ -67,7 +68,6 @@ export const toolsImplementations = {
     }
   },
 
-
   /**
    * Smart sync with hash-check and cleanup
    * Only syncs if tools have actually changed (performance optimized)
@@ -86,21 +86,25 @@ export const toolsImplementations = {
 
       // Check if tools changed using hash
       const toolNames = input.tools.map((tool) => tool.name);
-      const hasChanged = toolsSyncCache.hasChanged(input.mcpServerUuid, toolNames);
+      const hasChanged = toolsSyncCache.hasChanged(
+        input.mcpServerUuid,
+        toolNames,
+      );
 
       if (hasChanged) {
         // Update cache
         toolsSyncCache.update(input.mcpServerUuid, toolNames);
-        
+
         // Perform sync with cleanup
         const { upserted, deleted } = await toolsRepository.syncTools({
           tools: input.tools,
           mcpServerUuid: input.mcpServerUuid,
         });
 
-        const message = deleted.length > 0
-          ? `Successfully synced ${upserted.length} tools (removed ${deleted.length} obsolete)`
-          : `Successfully synced ${upserted.length} tools`;
+        const message =
+          deleted.length > 0
+            ? `Successfully synced ${upserted.length} tools (removed ${deleted.length} obsolete)`
+            : `Successfully synced ${upserted.length} tools`;
 
         return {
           success: true as const,

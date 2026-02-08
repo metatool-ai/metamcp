@@ -1,8 +1,9 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
-import * as schema from "./schema";
 import logger from "@/utils/logger";
+
+import * as schema from "./schema";
 
 const { DATABASE_URL, POSTGRES_CA_CERT } = process.env;
 

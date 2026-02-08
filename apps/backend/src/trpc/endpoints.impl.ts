@@ -9,6 +9,8 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import {
   ApiKeysRepository,
   endpointsRepository,
@@ -16,7 +18,6 @@ import {
   namespacesRepository,
 } from "../db/repositories";
 import { EndpointsSerializer } from "../db/serializers";
-import logger from "@/utils/logger";
 
 const apiKeysRepository = new ApiKeysRepository();
 
@@ -67,7 +68,7 @@ export const endpointsImplementations = {
         };
       }
 
-      logger.info(input)
+      logger.info(input);
 
       const result = await endpointsRepository.create({
         name: input.name,
@@ -354,7 +355,7 @@ export const endpointsImplementations = {
         enable_oauth: input.enableOauth,
         use_query_param_auth: input.useQueryParamAuth,
       });
-      
+
       return {
         success: true as const,
         data: EndpointsSerializer.serializeEndpoint(result),

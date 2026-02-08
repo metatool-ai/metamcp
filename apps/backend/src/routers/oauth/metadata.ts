@@ -1,7 +1,8 @@
 import express from "express";
 
-import { getBaseUrl } from "./utils";
 import logger from "@/utils/logger";
+
+import { getBaseUrl } from "./utils";
 
 const metadataRouter = express.Router();
 

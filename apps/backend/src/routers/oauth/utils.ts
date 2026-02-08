@@ -1,6 +1,7 @@
-import logger from "@/utils/logger";
 import { createHash, randomBytes } from "crypto";
 import express from "express";
+
+import logger from "@/utils/logger";
 
 // OAuth 2.0 Authorization Parameters interface
 export interface OAuthParams {

@@ -21,12 +21,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { configService } from "../config.service";
 import { ConnectedClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
 import { mcpServerPool } from "./mcp-server-pool";
-import { toolsSyncCache } from "./tools-sync-cache";
 import {
   createFilterCallToolMiddleware,
   createFilterListToolsMiddleware,
@@ -43,8 +44,8 @@ import {
   mapOverrideNameToOriginal,
 } from "./metamcp-middleware/tool-overrides.functional";
 import { parseToolName } from "./tool-name-parser";
+import { toolsSyncCache } from "./tools-sync-cache";
 import { sanitizeName } from "./utils";
-import logger from "@/utils/logger";
 
 /**
  * Filter out tools that are overrides of existing tools to prevent duplicates in database
@@ -145,7 +146,10 @@ export const createServer = async (
     request,
     context,
   ) => {
-    console.log("[DEBUG-TOOLS] 🔍 tools/list called for namespace:", namespaceUuid);
+    console.log(
+      "[DEBUG-TOOLS] 🔍 tools/list called for namespace:",
+      namespaceUuid,
+    );
     const startTime = performance.now();
     const serverParams = await getMcpServers(
       context.namespaceUuid,
@@ -159,7 +163,9 @@ export const createServer = async (
     // We'll filter servers during processing after getting sessions to check actual MCP server names
     const allServerEntries = Object.entries(serverParams);
 
-    console.log(`[DEBUG-TOOLS] 📋 Processing ${allServerEntries.length} servers`);
+    console.log(
+      `[DEBUG-TOOLS] 📋 Processing ${allServerEntries.length} servers`,
+    );
 
     await Promise.allSettled(
       allServerEntries.map(async ([mcpServerUuid, params]) => {
@@ -167,7 +173,9 @@ export const createServer = async (
 
         // Skip if we've already visited this server to prevent circular references
         if (visitedServers.has(mcpServerUuid)) {
-          console.log(`[DEBUG-TOOLS] ⏭️  Skipping already visited: ${params.name}`);
+          console.log(
+            `[DEBUG-TOOLS] ⏭️  Skipping already visited: ${params.name}`,
+          );
           return;
         }
         const session = await mcpServerPool.getSession(
@@ -236,7 +244,9 @@ export const createServer = async (
             hasMore = !!result.nextCursor;
           }
 
-          console.log(`[DEBUG-TOOLS] ⏱️  Fetched ${allServerTools.length} tools from ${serverName} in ${(performance.now() - toolFetchStart).toFixed(2)}ms`);
+          console.log(
+            `[DEBUG-TOOLS] ⏱️  Fetched ${allServerTools.length} tools from ${serverName} in ${(performance.now() - toolFetchStart).toFixed(2)}ms`,
+          );
 
           // Save original tools to database (before middleware processing)
           // This ensures we only save the actual tool names, not override names
@@ -244,9 +254,14 @@ export const createServer = async (
           try {
             // PERFORMANCE OPTIMIZATION: Check hash FIRST to avoid expensive operations
             const toolNames = allServerTools.map((tool) => tool.name);
-            const hasChanged = toolsSyncCache.hasChanged(mcpServerUuid, toolNames);
+            const hasChanged = toolsSyncCache.hasChanged(
+              mcpServerUuid,
+              toolNames,
+            );
 
-            console.log(`[DEBUG-TOOLS] 🔍 Hash check for ${serverName}: ${hasChanged ? 'CHANGED' : 'UNCHANGED'}`);
+            console.log(
+              `[DEBUG-TOOLS] 🔍 Hash check for ${serverName}: ${hasChanged ? "CHANGED" : "UNCHANGED"}`,
+            );
 
             if (hasChanged) {
               const toolsToSave = await filterOutOverrideTools(
@@ -294,7 +309,9 @@ export const createServer = async (
     );
 
     const totalTime = performance.now() - startTime;
-    console.log(`[DEBUG-TOOLS] ✅ tools/list completed in ${totalTime.toFixed(2)}ms, returning ${allTools.length} tools`);
+    console.log(
+      `[DEBUG-TOOLS] ✅ tools/list completed in ${totalTime.toFixed(2)}ms, returning ${allTools.length} tools`,
+    );
 
     return { tools: allTools };
   };
@@ -438,7 +455,8 @@ export const createServer = async (
       return result as CallToolResult;
     } catch (error) {
       logger.error(
-        `Error calling tool "${name}" through ${clientForTool.client.getServerVersion()?.name || "unknown"
+        `Error calling tool "${name}" through ${
+          clientForTool.client.getServerVersion()?.name || "unknown"
         }:`,
         error,
       );
@@ -511,7 +529,8 @@ export const createServer = async (
       return response;
     } catch (error) {
       logger.error(
-        `Error getting prompt through ${clientForPrompt.client.getServerVersion()?.name
+        `Error getting prompt through ${
+          clientForPrompt.client.getServerVersion()?.name
         }:`,
         error,
       );
@@ -740,7 +759,8 @@ export const createServer = async (
       );
     } catch (error) {
       logger.error(
-        `Error reading resource through ${clientForResource.client.getServerVersion()?.name
+        `Error reading resource through ${
+          clientForResource.client.getServerVersion()?.name
         }:`,
         error,
       );

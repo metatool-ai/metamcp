@@ -5,6 +5,7 @@ import {
   ApiKeyAuthenticatedRequest,
   authenticateApiKey,
 } from "@/middleware/api-key-oauth.middleware";
+import logger from "@/utils/logger";
 
 import { metaMcpServerPool } from "../../../lib/metamcp/metamcp-server-pool";
 import { lookupEndpoint } from "../../../middleware/lookup-endpoint-middleware";
@@ -12,7 +13,6 @@ import { createMiddlewareEnabledHandlers } from "./handlers";
 import { generateOpenApiSchema } from "./schema-generator";
 import { executeToolWithMiddleware } from "./tool-execution";
 import { ToolExecutionRequest } from "./types";
-import logger from "@/utils/logger";
 
 const openApiRouter = express.Router();
 

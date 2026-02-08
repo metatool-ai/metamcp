@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+
 import { ToolsSyncCache } from "./tools-sync-cache";
 
 describe("ToolsSyncCache", () => {
@@ -238,7 +239,3 @@ describe("ToolsSyncCache", () => {
     });
   });
 });
-
-
-
-

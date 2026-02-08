@@ -78,4 +78,3 @@ export class ToolsSyncCache {
 
 // Singleton instance
 export const toolsSyncCache = new ToolsSyncCache();
-

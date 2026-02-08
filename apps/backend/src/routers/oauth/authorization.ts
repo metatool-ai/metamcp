@@ -1,5 +1,7 @@
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { auth } from "../../auth";
 import { oauthRepository } from "../../db/repositories";
 import {
@@ -9,7 +11,6 @@ import {
   rateLimitAuth,
   validateRedirectUri,
 } from "./utils";
-import logger from "@/utils/logger";
 
 const authorizationRouter = express.Router();
 

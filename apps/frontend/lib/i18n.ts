@@ -153,16 +153,32 @@ export async function loadTranslations(
     ] = await Promise.all([
       import("../public/locales/ko/common.json").catch(() => ({ default: {} })),
       import("../public/locales/ko/auth.json").catch(() => ({ default: {} })),
-      import("../public/locales/ko/navigation.json").catch(() => ({ default: {} })),
-      import("../public/locales/ko/mcp-servers.json").catch(() => ({ default: {} })),
-      import("../public/locales/ko/namespaces.json").catch(() => ({ default: {} })),
-      import("../public/locales/ko/endpoints.json").catch(() => ({ default: {} })),
-      import("../public/locales/ko/api-keys.json").catch(() => ({ default: {} })),
-      import("../public/locales/ko/settings.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/navigation.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ko/mcp-servers.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ko/namespaces.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ko/endpoints.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ko/api-keys.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ko/settings.json").catch(() => ({
+        default: {},
+      })),
       import("../public/locales/ko/search.json").catch(() => ({ default: {} })),
-      import("../public/locales/ko/inspector.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/inspector.json").catch(() => ({
+        default: {},
+      })),
       import("../public/locales/ko/logs.json").catch(() => ({ default: {} })),
-      import("../public/locales/ko/validation.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/validation.json").catch(() => ({
+        default: {},
+      })),
     ]);
 
     // Get English fallback

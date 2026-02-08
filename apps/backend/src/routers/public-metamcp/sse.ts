@@ -7,11 +7,11 @@ import {
   authenticateApiKey,
 } from "@/middleware/api-key-oauth.middleware";
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
+import { rateLimitMiddleware } from "@/middleware/rate-limit.middleware";
+import logger from "@/utils/logger";
 
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
 import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
-import { rateLimitMiddleware } from "@/middleware/rate-limit.middleware";
-import logger from "@/utils/logger";
 
 const sseRouter = express.Router();
 

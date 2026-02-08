@@ -16,7 +16,10 @@ export const createEndpointFormSchema = z.object({
   maxRateSeconds: z.number().min(1, "validation:maxRateSeconds").optional(),
   maxRate: z.number().min(1, "validation:maxRate").optional(),
   clientMaxRate: z.number().min(1, "validation:clientMaxRate").optional(),
-  clientMaxRateSeconds: z.number().min(1, "validation:clientMaxRateSeconds").optional(),
+  clientMaxRateSeconds: z
+    .number()
+    .min(1, "validation:clientMaxRateSeconds")
+    .optional(),
   clientMaxRateStrategy: z.string().optional(),
   clientMaxRateStrategyKey: z.string().optional(),
   enableOauth: z.boolean(),
@@ -38,7 +41,10 @@ export const editEndpointFormSchema = z.object({
   maxRateSeconds: z.number().min(1, "validation:maxRateSeconds").optional(),
   maxRate: z.number().min(1, "validation:maxRate").optional(),
   clientMaxRate: z.number().min(1, "validation:clientMaxRate").optional(),
-  clientMaxRateSeconds: z.number().min(1, "validation:clientMaxRateSeconds").optional(),
+  clientMaxRateSeconds: z
+    .number()
+    .min(1, "validation:clientMaxRateSeconds")
+    .optional(),
   clientMaxRateStrategy: z.string().optional(),
   clientMaxRateStrategyKey: z.string().optional(),
   enableOauth: z.boolean().optional(),
@@ -59,7 +65,10 @@ export const CreateEndpointRequestSchema = z.object({
   maxRateSeconds: z.number().min(1, "validation:maxRateSeconds").optional(),
   maxRate: z.number().min(1, "validation:maxRate").optional(),
   clientMaxRate: z.number().min(1, "validation:clientMaxRate").optional(),
-  clientMaxRateSeconds: z.number().min(1, "validation:clientMaxRateSeconds").optional(),
+  clientMaxRateSeconds: z
+    .number()
+    .min(1, "validation:clientMaxRateSeconds")
+    .optional(),
   clientMaxRateStrategy: z.string().optional(),
   clientMaxRateStrategyKey: z.string().optional(),
   enableOauth: z.boolean().default(false),
@@ -79,7 +88,10 @@ export const EndpointSchema = z.object({
   maxRateSeconds: z.number().min(1, "validation:maxRateSeconds").optional(),
   maxRate: z.number().min(1, "validation:maxRate").optional(),
   clientMaxRate: z.number().min(1, "validation:clientMaxRate").optional(),
-  clientMaxRateSeconds: z.number().min(1, "validation:clientMaxRateSeconds").optional(),
+  clientMaxRateSeconds: z
+    .number()
+    .min(1, "validation:clientMaxRateSeconds")
+    .optional(),
   clientMaxRateStrategy: z.string().optional(),
   clientMaxRateStrategyKey: z.string().optional(),
   enable_oauth: z.boolean(),
@@ -126,7 +138,10 @@ export const UpdateEndpointRequestSchema = z.object({
   maxRateSeconds: z.number().min(1, "validation:maxRateSeconds").optional(),
   maxRate: z.number().min(1, "validation:maxRate").optional(),
   clientMaxRate: z.number().min(1, "validation:clientMaxRate").optional(),
-  clientMaxRateSeconds: z.number().min(1, "validation:clientMaxRateSeconds").optional(),
+  clientMaxRateSeconds: z
+    .number()
+    .min(1, "validation:clientMaxRateSeconds")
+    .optional(),
   clientMaxRateStrategy: z.string().optional(),
   clientMaxRateStrategyKey: z.string().optional(),
   enableOauth: z.boolean().optional(),

@@ -1,7 +1,8 @@
 import { DatabaseMcpServer, ServerParameters } from "@repo/zod-types";
 
-import { oauthSessionsRepository } from "../../db/repositories/oauth-sessions.repo";
 import logger from "@/utils/logger";
+
+import { oauthSessionsRepository } from "../../db/repositories/oauth-sessions.repo";
 
 /**
  * Environment variables to inherit by default, if an environment is not explicitly given.

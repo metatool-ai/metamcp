@@ -55,7 +55,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
@@ -82,7 +83,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
@@ -118,7 +120,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
@@ -166,7 +169,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
@@ -194,7 +198,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
@@ -222,7 +227,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
@@ -263,7 +269,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
@@ -294,7 +301,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
@@ -335,7 +343,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
@@ -367,7 +376,8 @@ export class EndpointsRepository {
         max_rate_seconds: endpointsTable.max_rate_seconds,
         client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
         client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key: endpointsTable.client_max_rate_strategy_key,
+        client_max_rate_strategy_key:
+          endpointsTable.client_max_rate_strategy_key,
         use_query_param_auth: endpointsTable.use_query_param_auth,
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,

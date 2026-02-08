@@ -1,6 +1,8 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { and, eq } from "drizzle-orm";
 
+import logger from "@/utils/logger";
+
 import { db } from "../../../db/index";
 import {
   mcpServersTable,
@@ -12,7 +14,6 @@ import {
   CallToolMiddleware,
   ListToolsMiddleware,
 } from "./functional-middleware";
-import logger from "@/utils/logger";
 
 /**
  * Configuration for the tool overrides middleware
@@ -200,7 +201,7 @@ async function getToolOverrides(
     }
 
     // Query database for tool overrides
-  const [toolMapping] = await db
+    const [toolMapping] = await db
       .select({
         overrideName: namespaceToolMappingsTable.override_name,
         overrideTitle: namespaceToolMappingsTable.override_title,
@@ -322,7 +323,7 @@ async function applyToolOverrides(
 
         if (overriddenAnnotations && "title" in overriddenAnnotations) {
           // Strip legacy title hint to avoid conflicting with top-level title
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars -- remove only the title key
+
           const { title: _removed, ...rest } = overriddenAnnotations;
           overriddenAnnotations =
             Object.keys(rest).length > 0 ? rest : undefined;

@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { oauthRepository } from "../../db/repositories";
 import authorizationRouter from "./authorization";
 import metadataRouter from "./metadata";
@@ -12,7 +14,6 @@ import {
   securityHeaders,
   urlencodedParsingMiddleware,
 } from "./utils";
-import logger from "@/utils/logger";
 
 const oauthRouter = express.Router();
 

@@ -5,11 +5,12 @@ import {
 } from "@repo/zod-types";
 import { and, eq } from "drizzle-orm";
 
+import logger from "@/utils/logger";
+
 import { db } from "../../db/index";
 import { oauthSessionsRepository } from "../../db/repositories/index";
 import { mcpServersTable, namespaceServerMappingsTable } from "../../db/schema";
 import { getDefaultEnvironment } from "./utils";
-import logger from "@/utils/logger";
 
 // Define IOType for stderr handling
 export type IOType = "overlapped" | "pipe" | "ignore" | "inherit";

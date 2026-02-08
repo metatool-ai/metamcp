@@ -5,8 +5,9 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
-import { metamcpLogStore } from "../lib/metamcp/log-store";
 import logger from "@/utils/logger";
+
+import { metamcpLogStore } from "../lib/metamcp/log-store";
 
 export const logsImplementations = {
   getLogs: async (
