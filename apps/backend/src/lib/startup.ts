@@ -11,10 +11,16 @@ import { convertDbServerToParams } from "./metamcp/utils";
  * IMPORTANT: This function does not prevent the app from starting unless BOOTSTRAP_FAIL_HARD=true.
  */
 export async function initializeOnStartup(): Promise<void> {
-  const enableEnvBootstrap =
-    process.env.BOOTSTRAP_ENABLE === "true";
-  const failHard =
-    process.env.BOOTSTRAP_FAIL_HARD === "true";
+  const parseBool = (value: string | undefined, defaultValue: boolean) => {
+    if (value === undefined) return defaultValue;
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "y", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "n", "off"].includes(normalized)) return false;
+    return defaultValue;
+  };
+
+  const enableEnvBootstrap = parseBool(process.env.BOOTSTRAP_ENABLE, true);
+  const failHard = parseBool(process.env.BOOTSTRAP_FAIL_HARD, false);
 
   if (enableEnvBootstrap) {
     try {

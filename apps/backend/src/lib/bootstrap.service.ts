@@ -1,5 +1,5 @@
 import { ConfigKeyEnum } from "@repo/zod-types";
-import { and, eq, isNull, ne, inArray } from "drizzle-orm";
+import { and, eq, isNull, notInArray } from "drizzle-orm";
 import crypto from "node:crypto";
 
 import { auth } from "../auth";
@@ -500,15 +500,9 @@ async function maybeDeleteOtherUsers(
   );
 
   try {
-    await db.delete(usersTable).where(
-      and(
-        ne(usersTable.email, bootstrappedEmails[0]),
-        ...(bootstrappedEmails.length > 1 
-          ? [ne(usersTable.email, bootstrappedEmails[1])]
-          : []
-        )
-      )
-    );
+    await db
+      .delete(usersTable)
+      .where(notInArray(usersTable.email, bootstrappedEmails));
     console.log("✓ Deleted other users");
   } catch (err) {
     console.warn("⚠️ Failed to delete other users:", err);
@@ -783,10 +777,7 @@ async function bootstrapEndpoints(
 
       // Look for existing endpoint
       const existing = await db.query.endpointsTable.findFirst({
-        where: and(
-          eq(endpointsTable.name, name),
-          eq(endpointsTable.namespace_uuid, namespaceUuid)
-        ),
+        where: eq(endpointsTable.name, name),
       });
 
       const values = {
