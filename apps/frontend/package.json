@@ -54,7 +54,7 @@
     "sonner": "^2.0.5",
     "swr": "^2.3.3",
     "tailwind-merge": "^3.3.1",
-    "tailwindcss": "^4.1.10",
+    "tailwindcss": "^4.1.18",
     "zod": "^3.25.64",
     "zustand": "^5.0.6"
   },
