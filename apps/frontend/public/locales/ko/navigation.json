@@ -1,0 +1,13 @@
+{
+  "exploreMcpServers": "MCP Server 탐색 (베타)",
+  "mcpServers": "MCP Servers",
+  "metamcpNamespaces": "MetaMCP Namespaces",
+  "metamcpEndpoints": "MetaMCP Endpoints",
+  "mcpInspector": "MCP Inspector",
+  "apiKeys": "API Keys",
+  "settings": "설정",
+  "liveLogs": "실시간 로그",
+  "application": "애플리케이션",
+  "logout": "로그아웃",
+  "profile": "프로필"
+}

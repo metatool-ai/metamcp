@@ -43,8 +43,12 @@ export class McpServerPool {
   // Default number of idle sessions per server UUID
   private readonly defaultIdleCount: number;
 
-  private constructor(defaultIdleCount: number = 1) {
+  // Maximum total connections (idle + active) to prevent runaway process spawning
+  private readonly maxTotalConnections: number;
+
+  private constructor(defaultIdleCount: number = 1, maxTotalConnections: number = 100) {
     this.defaultIdleCount = defaultIdleCount;
+    this.maxTotalConnections = maxTotalConnections;
     this.startCleanupTimer();
   }
 
@@ -126,6 +130,14 @@ export class McpServerPool {
     params: ServerParameters,
     namespaceUuid?: string,
   ): Promise<ConnectedClient | undefined> {
+    // Check connection limit before attempting to create
+    if (!this.canCreateConnection()) {
+      logger.warn(
+        `Skipping connection for server ${params.name} (${params.uuid}) - connection limit reached`,
+      );
+      return undefined;
+    }
+
     logger.info(
       `Creating new connection for server ${params.name} (${params.uuid}) with namespace: ${namespaceUuid || "none"}`,
     );
@@ -355,6 +367,34 @@ export class McpServerPool {
       activeSessionIds: Object.keys(this.activeSessions),
       idleServerUuids: Object.keys(this.idleSessions),
     };
+  }
+
+  /**
+   * Get total connection count (idle + active + pending)
+   */
+  private getTotalConnectionCount(): number {
+    const idle = Object.keys(this.idleSessions).length;
+    const active = Object.keys(this.activeSessions).reduce(
+      (total, sessionId) =>
+        total + Object.keys(this.activeSessions[sessionId]).length,
+      0,
+    );
+    const pending = this.creatingIdleSessions.size;
+    return idle + active + pending;
+  }
+
+  /**
+   * Check if we can create a new connection (respects maxTotalConnections limit)
+   */
+  private canCreateConnection(): boolean {
+    const total = this.getTotalConnectionCount();
+    if (total >= this.maxTotalConnections) {
+      logger.warn(
+        `Connection limit reached: ${total}/${this.maxTotalConnections}. Refusing to create new connection.`,
+      );
+      return false;
+    }
+    return true;
   }
 
   /**

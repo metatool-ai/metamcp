@@ -46,6 +46,8 @@
   "selectMcpServersDescription": "选择要包含在此命名空间中的 MCP 服务器。您可以稍后修改。",
   "creating": "创建中...",
   "searchPlaceholder": "搜索命名空间...",
+  "searchServers": "搜索服务器...",
+  "noServersFound": "没有符合搜索条件的服务器",
   "viewDetails": "查看详情",
   "noDescription": "无描述",
   "loadingNamespaces": "正在加载命名空间...",

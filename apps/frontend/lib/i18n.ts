@@ -1,10 +1,11 @@
 // Client-side i18n utilities
-export const SUPPORTED_LOCALES = ["en", "zh"] as const;
+export const SUPPORTED_LOCALES = ["en", "zh", "ko"] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 export const LOCALE_NAMES = {
   en: "English",
   zh: "中文",
+  ko: "한국어",
 } as const;
 
 // Type for translations
@@ -133,6 +134,53 @@ export async function loadTranslations(
       inspector: { ...englishDict.inspector, ...inspectorZh.default },
       logs: { ...englishDict.logs, ...logsZh.default },
       validation: { ...englishDict.validation, ...validationZh.default },
+    };
+  } else if (locale === "ko") {
+    // Load Korean translations with fallback to English
+    const [
+      commonKo,
+      authKo,
+      navigationKo,
+      mcpServersKo,
+      namespacesKo,
+      endpointsKo,
+      apiKeysKo,
+      settingsKo,
+      searchKo,
+      inspectorKo,
+      logsKo,
+      validationKo,
+    ] = await Promise.all([
+      import("../public/locales/ko/common.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/auth.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/navigation.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/mcp-servers.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/namespaces.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/endpoints.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/api-keys.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/settings.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/search.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/inspector.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/logs.json").catch(() => ({ default: {} })),
+      import("../public/locales/ko/validation.json").catch(() => ({ default: {} })),
+    ]);
+
+    // Get English fallback
+    const englishDict = await loadTranslations("en");
+
+    return {
+      common: { ...englishDict.common, ...commonKo.default },
+      auth: { ...englishDict.auth, ...authKo.default },
+      navigation: { ...englishDict.navigation, ...navigationKo.default },
+      "mcp-servers": { ...englishDict["mcp-servers"], ...mcpServersKo.default },
+      namespaces: { ...englishDict.namespaces, ...namespacesKo.default },
+      endpoints: { ...englishDict.endpoints, ...endpointsKo.default },
+      "api-keys": { ...englishDict["api-keys"], ...apiKeysKo.default },
+      settings: { ...englishDict.settings, ...settingsKo.default },
+      search: { ...englishDict.search, ...searchKo.default },
+      inspector: { ...englishDict.inspector, ...inspectorKo.default },
+      logs: { ...englishDict.logs, ...logsKo.default },
+      validation: { ...englishDict.validation, ...validationKo.default },
     };
   } else {
     // Fallback to English for unsupported locales

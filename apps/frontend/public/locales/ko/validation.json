@@ -1,0 +1,48 @@
+{
+  "required": "필수 입력 항목입니다",
+  "nameRequired": "이름을 입력하세요",
+  "minLength": "최소 {{min}}자 이상이어야 합니다",
+  "maxLength": "최대 {{max}}자까지 입력 가능합니다",
+  "email": "유효한 이메일 주소를 입력하세요",
+  "urlFormat": "유효한 URL을 입력하세요",
+  "invalidFormat": "형식이 올바르지 않습니다",
+  "serverName": {
+    "required": "Server 이름을 입력하세요",
+    "invalidCharacters": "Server 이름은 문자, 숫자, 밑줄, 하이픈만 포함할 수 있습니다",
+    "consecutiveUnderscores": "Server 이름에 연속된 밑줄을 사용할 수 없습니다",
+    "alreadyExists": "Server 이름이 이미 존재합니다. Server 이름은 범위 내에서 고유해야 합니다."
+  },
+  "command": {
+    "required": "stdio Server에는 Command가 필요합니다",
+    "invalidCommand": "유효한 Command를 입력하세요"
+  },
+  "url": {
+    "required": "SSE 및 Streamable HTTP 유형에는 URL이 필요합니다",
+    "invalidUrl": "SSE 및 Streamable HTTP 유형에는 유효한 URL을 입력해야 합니다"
+  },
+  "namespaceName": {
+    "required": "Namespace 이름을 입력하세요",
+    "invalidCharacters": "Namespace 이름은 문자, 숫자, 밑줄, 하이픈만 포함할 수 있습니다"
+  },
+  "endpointName": {
+    "required": "Endpoint 이름을 입력하세요",
+    "invalidCharacters": "Endpoint 이름은 URL 호환 형식이어야 합니다",
+    "urlCompatible": "이름은 URL 호환 형식이어야 합니다"
+  },
+  "apiKeyName": {
+    "required": "API Key 이름을 입력하세요"
+  },
+  "description": {
+    "tooLong": "설명이 너무 깁니다"
+  },
+  "password": {
+    "tooShort": "비밀번호는 최소 8자 이상이어야 합니다",
+    "mismatch": "비밀번호가 일치하지 않습니다"
+  },
+  "generic": {
+    "invalid": "유효하지 않은 값입니다",
+    "required": "필수 입력 항목입니다",
+    "tooShort": "너무 짧습니다",
+    "tooLong": "너무 깁니다"
+  }
+}

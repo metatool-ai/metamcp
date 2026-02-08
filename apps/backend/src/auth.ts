@@ -50,6 +50,28 @@ if (process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET) {
   logger.info(`✓ OIDC Provider configured: ${oidcConfig.providerId}`);
 }
 
+// Default trusted origins for development
+const DEFAULT_TRUSTED_ORIGINS = [
+  "http://localhost",
+  "http://localhost:3000",
+  "http://localhost:12008",
+  "http://127.0.0.1",
+  "http://127.0.0.1:12008",
+  "http://127.0.0.1:3000",
+  "http://0.0.0.0",
+  "http://0.0.0.0:3000",
+  "http://0.0.0.0:12008",
+];
+
+// Parse extra trusted origins from environment variable (comma-separated)
+const extraTrustedOrigins = process.env.EXTRA_TRUSTED_ORIGINS
+  ? process.env.EXTRA_TRUSTED_ORIGINS.split(",")
+      .map((origin: string) => origin.trim())
+      .filter(Boolean)
+  : [];
+
+const trustedOrigins = [...DEFAULT_TRUSTED_ORIGINS, ...extraTrustedOrigins];
+
 export const auth = betterAuth({
   secret: BETTER_AUTH_SECRET,
   baseURL: BETTER_AUTH_URL,
@@ -62,17 +84,7 @@ export const auth = betterAuth({
       verification: schema.verificationsTable,
     },
   }),
-  trustedOrigins: [
-    "http://localhost", // Added this line to fix the "Invalid origin" error
-    "http://localhost:3000",
-    "http://localhost:12008",
-    "http://127.0.0.1", // Also added this for good measure
-    "http://127.0.0.1:12008",
-    "http://127.0.0.1:3000",
-    "http://0.0.0.0",
-    "http://0.0.0.0:3000",
-    "http://0.0.0.0:12008",
-  ],
+  trustedOrigins,
   plugins: [
     // Add generic OAuth plugin for OIDC support
     ...(oidcProviders.length > 0

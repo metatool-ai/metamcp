@@ -176,6 +176,9 @@ export const connectMetaMcpClient = async (
   );
 
   while (retry) {
+    let transport: Transport | undefined;
+    let client: Client | undefined;
+
     try {
       // Check if server is already in error state before attempting connection
       const isInErrorState = await serverErrorTracker.isServerInErrorState(
@@ -189,7 +192,10 @@ export const connectMetaMcpClient = async (
       }
 
       // Create fresh client and transport for each attempt
-      const { client, transport } = createMetaMcpClient(serverParams);
+      const result = createMetaMcpClient(serverParams);
+      client = result.client;
+      transport = result.transport;
+
       if (!client || !transport) {
         return undefined;
       }
@@ -223,8 +229,8 @@ export const connectMetaMcpClient = async (
       return {
         client,
         cleanup: async () => {
-          await transport.close();
-          await client.close();
+          await transport!.close();
+          await client!.close();
         },
         onProcessCrash: (exitCode, signal) => {
           logger.warn(
@@ -244,6 +250,30 @@ export const connectMetaMcpClient = async (
         `Error connecting to MetaMCP client (attempt ${count + 1}/${maxAttempts})`,
         error,
       );
+
+      // CRITICAL FIX: Clean up transport/process on connection failure
+      // This prevents orphaned processes from accumulating
+      if (transport) {
+        try {
+          await transport.close();
+          console.log(
+            `Cleaned up transport for failed connection to ${serverParams.name} (${serverParams.uuid})`,
+          );
+        } catch (cleanupError) {
+          console.error(
+            `Error cleaning up transport for ${serverParams.name} (${serverParams.uuid}):`,
+            cleanupError,
+          );
+        }
+      }
+      if (client) {
+        try {
+          await client.close();
+        } catch (cleanupError) {
+          // Client may not be fully initialized, ignore
+        }
+      }
+
       count++;
       retry = count < maxAttempts;
       if (retry) {

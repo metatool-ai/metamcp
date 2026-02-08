@@ -17,7 +17,8 @@
     "TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL",
     "NODE_ENV",
     "POSTGRES_CA_CERT",
-    "LOG_LEVEL"
+    "LOG_LEVEL",
+    "EXTRA_TRUSTED_ORIGINS"
   ],
   "tasks": {
     "build": {
