@@ -1,6 +1,7 @@
-import logger from "@/utils/logger";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { isJSONRPCRequest } from "@modelcontextprotocol/sdk/types.js";
+
+import logger from "@/utils/logger";
 
 function onClientError(error: Error) {
   // Don't log "Not connected" errors as they're expected when connections close

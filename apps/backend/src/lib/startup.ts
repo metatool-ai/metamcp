@@ -4,7 +4,6 @@ import { mcpServersRepository, namespacesRepository } from "../db/repositories";
 import { initializeEnvironmentConfiguration } from "./bootstrap.service";
 import { metaMcpServerPool } from "./metamcp";
 import { convertDbServerToParams } from "./metamcp/utils";
-import logger from "@/utils/logger";
 
 /**
  * Startup initialization that must happen before the HTTP server begins listening.
@@ -27,15 +26,16 @@ export async function initializeOnStartup(): Promise<void> {
     try {
       await initializeEnvironmentConfiguration();
     } catch (err) {
-      console.error("❌ Error initializing environment-based configuration (ignored):", err);
+      console.error(
+        "❌ Error initializing environment-based configuration (ignored):",
+        err,
+      );
       if (failHard) {
         throw err;
       }
     }
   } else {
-    console.log(
-      "Environment bootstrap disabled via BOOTSTRAP_ENABLE=false",
-    );
+    console.log("Environment bootstrap disabled via BOOTSTRAP_ENABLE=false");
   }
 }
 

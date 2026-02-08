@@ -19,8 +19,7 @@ export class EndpointsSerializer {
         dbEndpoint.max_rate_seconds === null
           ? undefined
           : dbEndpoint.max_rate_seconds,
-      maxRate:
-        dbEndpoint.max_rate === null ? undefined : dbEndpoint.max_rate,
+      maxRate: dbEndpoint.max_rate === null ? undefined : dbEndpoint.max_rate,
       clientMaxRate:
         dbEndpoint.client_max_rate === null
           ? undefined
@@ -64,8 +63,7 @@ export class EndpointsSerializer {
         dbEndpoint.max_rate_seconds === null
           ? undefined
           : dbEndpoint.max_rate_seconds,
-      maxRate:
-        dbEndpoint.max_rate === null ? undefined : dbEndpoint.max_rate,
+      maxRate: dbEndpoint.max_rate === null ? undefined : dbEndpoint.max_rate,
       clientMaxRate:
         dbEndpoint.client_max_rate === null
           ? undefined

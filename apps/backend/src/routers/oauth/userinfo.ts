@@ -1,7 +1,8 @@
 import express from "express";
 
-import { oauthRepository } from "../../db/repositories";
 import logger from "@/utils/logger";
+
+import { oauthRepository } from "../../db/repositories";
 
 const userinfoRouter = express.Router();
 

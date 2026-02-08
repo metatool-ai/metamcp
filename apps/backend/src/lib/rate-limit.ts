@@ -1,12 +1,11 @@
 // rateLimiting.ts
 // Rate limiting for protecting MCP servers from abuse
 
-import { mcpServerPool } from "./metamcp/mcp-server-pool";
 import logger from "../utils/logger";
+import { mcpServerPool } from "./metamcp/mcp-server-pool";
 
 type Context = Record<string, any>;
 type CallNext = (context: Context) => Promise<any>;
-
 
 export class RateLimitError extends Error {
   public code: number;
@@ -40,10 +39,10 @@ export class TokenBucketRateLimiter {
 
     this.tokens = Math.min(
       this.capacity,
-      this.tokens + elapsed * this.refillRate
+      this.tokens + elapsed * this.refillRate,
     );
     this.lastRefill = now;
-    logger.debug('tokens', this.tokens);
+    logger.debug("tokens", this.tokens);
 
     if (this.tokens >= tokens) {
       this.tokens -= tokens;
@@ -96,24 +95,32 @@ export class RateLimiting {
   async onRequest(context: Context, callNext: CallNext): Promise<any> {
     const { endpoint } = context.req;
     const { user_id, namespace_uuid } = endpoint;
-    const backgroundIdleSessions = mcpServerPool.getBackgroundIdleSessionsByNamespace();
+    const backgroundIdleSessions =
+      mcpServerPool.getBackgroundIdleSessionsByNamespace();
     let limiter = this.limiters.get(namespace_uuid);
 
     this.maxRateSeconds = endpoint.max_rate_seconds ?? 0;
     this.maxRate = endpoint.max_rate ?? 0;
 
     if (backgroundIdleSessions.size > 0) {
-      if (backgroundIdleSessions.get(namespace_uuid)?.get('status') === 'created') {
+      if (
+        backgroundIdleSessions.get(namespace_uuid)?.get("status") === "created"
+      ) {
         if (!backgroundIdleSessions.get(namespace_uuid)?.has(user_id)) {
-          backgroundIdleSessions.get(namespace_uuid)?.set(user_id, "initialized")
+          backgroundIdleSessions
+            .get(namespace_uuid)
+            ?.set(user_id, "initialized");
           if (!limiter) {
-            this.limiters.set(namespace_uuid, new TokenBucketRateLimiter(this.maxRate, this.maxRateSeconds))
+            this.limiters.set(
+              namespace_uuid,
+              new TokenBucketRateLimiter(this.maxRate, this.maxRateSeconds),
+            );
             limiter = this.limiters.get(namespace_uuid);
           }
         }
       }
 
-      const allowed = await limiter?.consume()
+      const allowed = await limiter?.consume();
       if (!allowed) {
         throw new RateLimitError(`Rate limit exceeded`);
       }
@@ -134,35 +141,58 @@ export class SlidingWindowRateLimiting {
   constructor() {
     this.clientMaxRate = 0;
     this.clientMaxRateSeconds = 0;
-    this.clientMaxRateStrategy = 'ip';
-    this.clientMaxRateStrategyKey = 'x-forwarded-for';
+    this.clientMaxRateStrategy = "ip";
+    this.clientMaxRateStrategyKey = "x-forwarded-for";
     this.limiters = new Map();
   }
 
   async onRequest(context: Context, callNext: CallNext): Promise<any> {
-
     const { endpoint, socket, headers } = context.req;
     const { namespace_uuid } = endpoint;
     this.clientMaxRate = endpoint.client_max_rate;
     this.clientMaxRateSeconds = endpoint.client_max_rate_seconds;
-    this.clientMaxRateStrategy = endpoint.client_max_rate_strategy === '' ? this.clientMaxRateStrategy : endpoint.client_max_rate_strategy;
-    this.clientMaxRateStrategyKey = endpoint.client_max_rate_strategy_key === '' ? this.clientMaxRateStrategyKey : endpoint.client_max_rate_strategy_key;
+    this.clientMaxRateStrategy =
+      endpoint.client_max_rate_strategy === ""
+        ? this.clientMaxRateStrategy
+        : endpoint.client_max_rate_strategy;
+    this.clientMaxRateStrategyKey =
+      endpoint.client_max_rate_strategy_key === ""
+        ? this.clientMaxRateStrategyKey
+        : endpoint.client_max_rate_strategy_key;
 
-    const backgroundIdleSessions = mcpServerPool.getBackgroundIdleSessionsByNamespace();
+    const backgroundIdleSessions =
+      mcpServerPool.getBackgroundIdleSessionsByNamespace();
     const key = headers[this.clientMaxRateStrategyKey] || socket.remoteAddress;
 
     let limiter = this.limiters.get(key);
 
     if (backgroundIdleSessions.size > 0) {
-      if (backgroundIdleSessions.get(namespace_uuid)?.get('status') === 'created') {
+      if (
+        backgroundIdleSessions.get(namespace_uuid)?.get("status") === "created"
+      ) {
         if (!backgroundIdleSessions.get(namespace_uuid)?.has(key)) {
-          backgroundIdleSessions.get(namespace_uuid)?.set(key, "initialized")
+          backgroundIdleSessions.get(namespace_uuid)?.set(key, "initialized");
           if (!limiter) {
-            this.limiters.set(key, new Map().set(namespace_uuid, new SlidingWindowRateLimiter(this.clientMaxRate, this.clientMaxRateSeconds)));
+            this.limiters.set(
+              key,
+              new Map().set(
+                namespace_uuid,
+                new SlidingWindowRateLimiter(
+                  this.clientMaxRate,
+                  this.clientMaxRateSeconds,
+                ),
+              ),
+            );
             limiter = this.limiters.get(key);
           } else {
             if (!limiter.has(key)) {
-              limiter.set(namespace_uuid, new SlidingWindowRateLimiter(this.clientMaxRate, this.clientMaxRateSeconds));
+              limiter.set(
+                namespace_uuid,
+                new SlidingWindowRateLimiter(
+                  this.clientMaxRate,
+                  this.clientMaxRateSeconds,
+                ),
+              );
             }
           }
         }
@@ -173,7 +203,7 @@ export class SlidingWindowRateLimiting {
         const allowed = await slidingWindowLimiter?.isAllowed();
         if (!allowed) {
           throw new RateLimitError(
-            `Rate limit exceeded: ${this.clientMaxRate} requests per ${this.clientMaxRateSeconds} second/s`
+            `Rate limit exceeded: ${this.clientMaxRate} requests per ${this.clientMaxRateSeconds} second/s`,
           );
         }
       }
@@ -185,5 +215,4 @@ export class SlidingWindowRateLimiting {
   async onResponse(context: Context, callNext: CallNext): Promise<any> {
     return callNext(context);
   }
-
 }

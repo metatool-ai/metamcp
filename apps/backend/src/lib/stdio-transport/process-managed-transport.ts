@@ -6,8 +6,9 @@ import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import spawn from "cross-spawn";
 
-import { ReadBuffer, serializeMessage } from "./shared";
 import logger from "@/utils/logger";
+
+import { ReadBuffer, serializeMessage } from "./shared";
 
 export type StdioServerParameters = {
   /**

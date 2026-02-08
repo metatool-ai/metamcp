@@ -1,8 +1,9 @@
 import { McpServerErrorStatusEnum } from "@repo/zod-types";
 
+import logger from "@/utils/logger";
+
 import { mcpServersRepository } from "../../db/repositories/index";
 import { configService } from "../config.service";
-import logger from "@/utils/logger";
 
 export interface ServerCrashInfo {
   serverUuid: string;

@@ -153,7 +153,7 @@ export default function EndpointsPage() {
         createMcpServer: data.createMcpServer,
         user_id: data.user_id,
       };
-      console.log('apiPayload', apiPayload);
+      console.log("apiPayload", apiPayload);
       // Use tRPC mutation
       createEndpointMutation.mutate(apiPayload);
     } catch (error) {
@@ -393,7 +393,10 @@ export default function EndpointsPage() {
                   {form.watch("enableMaxRate") && (
                     <>
                       <div className="flex flex-col gap-2">
-                        <label htmlFor="maxRate" className="text-sm font-medium">
+                        <label
+                          htmlFor="maxRate"
+                          className="text-sm font-medium"
+                        >
                           {t("endpoints:maxRate")}
                         </label>
                         <Input
@@ -412,13 +415,18 @@ export default function EndpointsPage() {
                         </p>
                       </div>
                       <div className="flex flex-col gap-2">
-                        <label htmlFor="maxRateSeconds" className="text-sm font-medium">
+                        <label
+                          htmlFor="maxRateSeconds"
+                          className="text-sm font-medium"
+                        >
                           {t("endpoints:maxRateSeconds")}
                         </label>
                         <Input
                           id="maxRateSeconds"
                           type="number"
-                          {...form.register("maxRateSeconds", { valueAsNumber: true })}
+                          {...form.register("maxRateSeconds", {
+                            valueAsNumber: true,
+                          })}
                           placeholder={t("endpoints:maxRateSecondsPlaceholder")}
                         />
                         {form.formState.errors.maxRateSeconds && (
@@ -430,7 +438,8 @@ export default function EndpointsPage() {
                           {t("endpoints:maxRateSecondsDescription")}
                         </p>
                       </div>
-                    </>)}
+                    </>
+                  )}
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <label className="text-sm font-medium">
@@ -451,12 +460,17 @@ export default function EndpointsPage() {
                   {form.watch("enableClientMaxRate") && (
                     <>
                       <div className="flex flex-col gap-2">
-                        <label htmlFor="clientMaxRate" className="text-sm font-medium">
+                        <label
+                          htmlFor="clientMaxRate"
+                          className="text-sm font-medium"
+                        >
                           {t("endpoints:clientMaxRate")}
                         </label>
                         <Input
                           id="clientMaxRate"
-                          {...form.register("clientMaxRate", { valueAsNumber: true })}
+                          {...form.register("clientMaxRate", {
+                            valueAsNumber: true,
+                          })}
                           type="number"
                           placeholder={t("endpoints:clientMaxRatePlaceholder")}
                         />
@@ -470,13 +484,20 @@ export default function EndpointsPage() {
                         </p>
                       </div>
                       <div className="flex flex-col gap-2">
-                        <label htmlFor="clientMaxRateSeconds" className="text-sm font-medium">
+                        <label
+                          htmlFor="clientMaxRateSeconds"
+                          className="text-sm font-medium"
+                        >
                           {t("endpoints:clientMaxRateSeconds")}
                         </label>
                         <Input
                           id="clientMaxRateSeconds"
-                          {...form.register("clientMaxRateSeconds", { valueAsNumber: true })}
-                          placeholder={t("endpoints:clientMaxRateSecondsPlaceholder")}
+                          {...form.register("clientMaxRateSeconds", {
+                            valueAsNumber: true,
+                          })}
+                          placeholder={t(
+                            "endpoints:clientMaxRateSecondsPlaceholder",
+                          )}
                           type="number"
                         />
                         {form.formState.errors.clientMaxRateSeconds && (
@@ -489,7 +510,10 @@ export default function EndpointsPage() {
                         </p>
                       </div>
                       <div className="flex flex-col gap-2">
-                        <label htmlFor="clientMaxRateStrategy" className="text-sm font-medium">
+                        <label
+                          htmlFor="clientMaxRateStrategy"
+                          className="text-sm font-medium"
+                        >
                           {t("endpoints:clientMaxRateStrategy")}
                         </label>
                         <DropdownMenu>
@@ -500,19 +524,30 @@ export default function EndpointsPage() {
                               type="button"
                             >
                               <span>
-                                {form.watch("clientMaxRateStrategy") === null ? t("endpoints:selectStrategy") : form.watch("clientMaxRateStrategy") === "ip" ? t("endpoints:ipStrategy") : form.watch("clientMaxRateStrategy") === "header" ? t("endpoints:headerStrategy") : t("endpoints:selectStrategy")}
+                                {form.watch("clientMaxRateStrategy") === null
+                                  ? t("endpoints:selectStrategy")
+                                  : form.watch("clientMaxRateStrategy") === "ip"
+                                    ? t("endpoints:ipStrategy")
+                                    : form.watch("clientMaxRateStrategy") ===
+                                        "header"
+                                      ? t("endpoints:headerStrategy")
+                                      : t("endpoints:selectStrategy")}
                               </span>
                               <ChevronDown className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
                             <DropdownMenuItem
-                              onClick={() => form.setValue("clientMaxRateStrategy", "ip")}
+                              onClick={() =>
+                                form.setValue("clientMaxRateStrategy", "ip")
+                              }
                             >
                               {t("endpoints:ipStrategy")}
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => form.setValue("clientMaxRateStrategy", "header")}
+                              onClick={() =>
+                                form.setValue("clientMaxRateStrategy", "header")
+                              }
                             >
                               {t("endpoints:headerStrategy")}
                             </DropdownMenuItem>
@@ -520,7 +555,10 @@ export default function EndpointsPage() {
                         </DropdownMenu>
                         {form.formState.errors.clientMaxRateStrategy && (
                           <p className="text-sm text-red-500">
-                            {form.formState.errors.clientMaxRateStrategy.message}
+                            {
+                              form.formState.errors.clientMaxRateStrategy
+                                .message
+                            }
                           </p>
                         )}
                         <p className="text-xs text-muted-foreground">
@@ -529,17 +567,25 @@ export default function EndpointsPage() {
                       </div>
                       {form.watch("clientMaxRateStrategy") === "header" && (
                         <div className="flex flex-col gap-2">
-                          <label htmlFor="clientMaxRateStrategyKey" className="text-sm font-medium">
+                          <label
+                            htmlFor="clientMaxRateStrategyKey"
+                            className="text-sm font-medium"
+                          >
                             {t("endpoints:clientMaxRateStrategyKey")}
                           </label>
                           <Input
                             id="clientMaxRateStrategyKey"
                             {...form.register("clientMaxRateStrategyKey")}
-                            placeholder={t("endpoints:clientMaxRateStrategyKeyPlaceholder")}
+                            placeholder={t(
+                              "endpoints:clientMaxRateStrategyKeyPlaceholder",
+                            )}
                           />
                           {form.formState.errors.clientMaxRateStrategyKey && (
                             <p className="text-sm text-red-500">
-                              {form.formState.errors.clientMaxRateStrategyKey.message}
+                              {
+                                form.formState.errors.clientMaxRateStrategyKey
+                                  .message
+                              }
                             </p>
                           )}
                           <p className="text-xs text-muted-foreground">
@@ -547,7 +593,8 @@ export default function EndpointsPage() {
                           </p>
                         </div>
                       )}
-                    </>)}
+                    </>
+                  )}
                 </div>
                 {/* API Key Authentication Settings */}
                 <div className="space-y-4 border-t pt-4">

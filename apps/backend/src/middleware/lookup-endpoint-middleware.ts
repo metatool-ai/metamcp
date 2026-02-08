@@ -1,8 +1,9 @@
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { endpointsRepository } from "../db/repositories/endpoints.repo";
 import { ApiKeyAuthenticatedRequest } from "./api-key-oauth.middleware";
-import logger from "@/utils/logger";
 
 // Middleware to lookup endpoint by name and add namespace info to request
 export const lookupEndpoint = async (

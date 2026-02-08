@@ -12,6 +12,8 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import {
   mcpServersRepository,
   namespaceMappingsRepository,
@@ -22,7 +24,6 @@ import { clearOverrideCache } from "../lib/metamcp/metamcp-middleware/tool-overr
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
 import { serverErrorTracker } from "../lib/metamcp/server-error-tracker";
 import { convertDbServerToParams } from "../lib/metamcp/utils";
-import logger from "@/utils/logger";
 
 export const mcpServersImplementations = {
   create: async (

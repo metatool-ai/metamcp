@@ -367,13 +367,18 @@ export function EditEndpoint({
                     </p>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="maxRateSeconds" className="text-sm font-medium">
+                    <label
+                      htmlFor="maxRateSeconds"
+                      className="text-sm font-medium"
+                    >
                       {t("endpoints:maxRateSeconds")}
                     </label>
                     <Input
                       id="maxRateSeconds"
                       type="number"
-                      {...editForm.register("maxRateSeconds", { valueAsNumber: true })}
+                      {...editForm.register("maxRateSeconds", {
+                        valueAsNumber: true,
+                      })}
                       placeholder={t("endpoints:maxRateSecondsPlaceholder")}
                     />
                     {editForm.formState.errors.maxRateSeconds && (
@@ -385,7 +390,8 @@ export function EditEndpoint({
                       {t("endpoints:maxRateSecondsDescription")}
                     </p>
                   </div>
-                </>)}
+                </>
+              )}
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <label className="text-sm font-medium">
@@ -406,12 +412,17 @@ export function EditEndpoint({
               {editForm.watch("enableClientMaxRate") && (
                 <>
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="clientMaxRate" className="text-sm font-medium">
+                    <label
+                      htmlFor="clientMaxRate"
+                      className="text-sm font-medium"
+                    >
                       {t("endpoints:clientMaxRate")}
                     </label>
                     <Input
                       id="clientMaxRate"
-                      {...editForm.register("clientMaxRate", { valueAsNumber: true })}
+                      {...editForm.register("clientMaxRate", {
+                        valueAsNumber: true,
+                      })}
                       type="number"
                       placeholder={t("endpoints:clientMaxRatePlaceholder")}
                     />
@@ -425,13 +436,20 @@ export function EditEndpoint({
                     </p>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="clientMaxRateSeconds" className="text-sm font-medium">
+                    <label
+                      htmlFor="clientMaxRateSeconds"
+                      className="text-sm font-medium"
+                    >
                       {t("endpoints:clientMaxRateSeconds")}
                     </label>
                     <Input
                       id="clientMaxRateSeconds"
-                      {...editForm.register("clientMaxRateSeconds", { valueAsNumber: true })}
-                      placeholder={t("endpoints:clientMaxRateSecondsPlaceholder")}
+                      {...editForm.register("clientMaxRateSeconds", {
+                        valueAsNumber: true,
+                      })}
+                      placeholder={t(
+                        "endpoints:clientMaxRateSecondsPlaceholder",
+                      )}
                       type="number"
                     />
                     {editForm.formState.errors.clientMaxRateSeconds && (
@@ -444,7 +462,10 @@ export function EditEndpoint({
                     </p>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="clientMaxRateStrategy" className="text-sm font-medium">
+                    <label
+                      htmlFor="clientMaxRateStrategy"
+                      className="text-sm font-medium"
+                    >
                       {t("endpoints:clientMaxRateStrategy")}
                     </label>
                     <DropdownMenu>
@@ -455,19 +476,30 @@ export function EditEndpoint({
                           type="button"
                         >
                           <span>
-                            {editForm.watch("clientMaxRateStrategy") === null ? t("endpoints:selectStrategy") : editForm.watch("clientMaxRateStrategy") === "ip" ? t("endpoints:ipStrategy") : editForm.watch("clientMaxRateStrategy") === "header" ? t("endpoints:headerStrategy") : t("endpoints:selectStrategy")}
+                            {editForm.watch("clientMaxRateStrategy") === null
+                              ? t("endpoints:selectStrategy")
+                              : editForm.watch("clientMaxRateStrategy") === "ip"
+                                ? t("endpoints:ipStrategy")
+                                : editForm.watch("clientMaxRateStrategy") ===
+                                    "header"
+                                  ? t("endpoints:headerStrategy")
+                                  : t("endpoints:selectStrategy")}
                           </span>
                           <ChevronDown className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
                         <DropdownMenuItem
-                          onClick={() => editForm.setValue("clientMaxRateStrategy", "ip")}
+                          onClick={() =>
+                            editForm.setValue("clientMaxRateStrategy", "ip")
+                          }
                         >
                           {t("endpoints:ipStrategy")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => editForm.setValue("clientMaxRateStrategy", "header")}
+                          onClick={() =>
+                            editForm.setValue("clientMaxRateStrategy", "header")
+                          }
                         >
                           {t("endpoints:headerStrategy")}
                         </DropdownMenuItem>
@@ -475,7 +507,10 @@ export function EditEndpoint({
                     </DropdownMenu>
                     {editForm.formState.errors.clientMaxRateStrategy && (
                       <p className="text-sm text-red-500">
-                        {editForm.formState.errors.clientMaxRateStrategy.message}
+                        {
+                          editForm.formState.errors.clientMaxRateStrategy
+                            .message
+                        }
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
@@ -484,17 +519,25 @@ export function EditEndpoint({
                   </div>
                   {editForm.watch("clientMaxRateStrategy") === "header" && (
                     <div className="flex flex-col gap-2">
-                      <label htmlFor="clientMaxRateStrategyKey" className="text-sm font-medium">
+                      <label
+                        htmlFor="clientMaxRateStrategyKey"
+                        className="text-sm font-medium"
+                      >
                         {t("endpoints:clientMaxRateStrategyKey")}
                       </label>
                       <Input
                         id="clientMaxRateStrategyKey"
                         {...editForm.register("clientMaxRateStrategyKey")}
-                        placeholder={t("endpoints:clientMaxRateStrategyKeyPlaceholder")}
+                        placeholder={t(
+                          "endpoints:clientMaxRateStrategyKeyPlaceholder",
+                        )}
                       />
                       {editForm.formState.errors.clientMaxRateStrategyKey && (
                         <p className="text-sm text-red-500">
-                          {editForm.formState.errors.clientMaxRateStrategyKey.message}
+                          {
+                            editForm.formState.errors.clientMaxRateStrategyKey
+                              .message
+                          }
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground">
@@ -502,7 +545,8 @@ export function EditEndpoint({
                       </p>
                     </div>
                   )}
-                </>)}
+                </>
+              )}
             </div>
             {/* API Key Authentication Settings */}
             <div className="space-y-4 border-t pt-4">

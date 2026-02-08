@@ -1,11 +1,12 @@
 import cors from "cors";
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { endpointsRepository } from "../db/repositories/endpoints.repo";
 import { openApiRouter } from "./public-metamcp/openapi";
 import sseRouter from "./public-metamcp/sse";
 import streamableHttpRouter from "./public-metamcp/streamable-http";
-import logger from "@/utils/logger";
 
 const publicEndpointsRouter = express.Router();
 

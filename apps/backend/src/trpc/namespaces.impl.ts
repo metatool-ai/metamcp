@@ -19,6 +19,8 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import {
   mcpServersRepository,
   namespaceMappingsRepository,
@@ -31,7 +33,6 @@ import {
   mapOverrideNameToOriginal,
 } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
-import logger from "@/utils/logger";
 
 export const namespacesImplementations = {
   create: async (

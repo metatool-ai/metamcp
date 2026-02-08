@@ -8,9 +8,10 @@ import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { DatabaseError } from "pg";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import { db } from "../index";
 import { mcpServersTable } from "../schema";
-import logger from "@/utils/logger";
 
 // Helper function to handle PostgreSQL errors
 function handleDatabaseError(

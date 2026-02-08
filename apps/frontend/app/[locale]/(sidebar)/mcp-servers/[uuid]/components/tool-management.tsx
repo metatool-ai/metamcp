@@ -98,7 +98,7 @@ export function ToolManagement({
 
       while (hasMore) {
         pageCount++;
-        
+
         const response = (await makeRequest(
           {
             method: "tools/list" as const,

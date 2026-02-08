@@ -452,9 +452,7 @@ export function EnhancedNamespaceToolsTable({
     const shouldClearDescription = overrides.description === tool.description;
 
     const originalAnnotationsText = formatAnnotations(tool.annotations);
-    const initialAnnotationsText = formatAnnotations(
-      tool.overrideAnnotations,
-    );
+    const initialAnnotationsText = formatAnnotations(tool.overrideAnnotations);
     const currentAnnotationsText =
       overrides.annotations ?? initialAnnotationsText;
     const annotationsChanged =
@@ -462,20 +460,15 @@ export function EnhancedNamespaceToolsTable({
     const matchesOriginalAnnotations =
       currentAnnotationsText === originalAnnotationsText;
 
-    let overrideAnnotationsPayload:
-      | Record<string, unknown>
-      | null
-      | undefined = undefined;
+    let overrideAnnotationsPayload: Record<string, unknown> | null | undefined =
+      undefined;
 
-        if (annotationsChanged) {
-          if (
-            currentAnnotationsText.trim() === "" ||
-            matchesOriginalAnnotations
-          ) {
-            overrideAnnotationsPayload = null;
-          } else {
-            try {
-              const parsed = JSON.parse(currentAnnotationsText);
+    if (annotationsChanged) {
+      if (currentAnnotationsText.trim() === "" || matchesOriginalAnnotations) {
+        overrideAnnotationsPayload = null;
+      } else {
+        try {
+          const parsed = JSON.parse(currentAnnotationsText);
 
           if (
             typeof parsed !== "object" ||
@@ -941,9 +934,7 @@ export function EnhancedNamespaceToolsTable({
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent side="top">
-                        {t(
-                          "namespaces:enhancedToolsTable.annotationsTooltip",
-                        )}
+                        {t("namespaces:enhancedToolsTable.annotationsTooltip")}
                       </TooltipContent>
                     </Tooltip>,
                   );
@@ -1223,7 +1214,8 @@ export function EnhancedNamespaceToolsTable({
                                       </label>
                                       <Textarea
                                         value={
-                                          tempOverrides.get(toolId)?.annotations || ""
+                                          tempOverrides.get(toolId)
+                                            ?.annotations || ""
                                         }
                                         onChange={(e) =>
                                           updateTempOverride(
@@ -1285,13 +1277,13 @@ export function EnhancedNamespaceToolsTable({
                                             "description",
                                             tool.description || "",
                                           );
-                                      updateTempOverride(
-                                        toolId,
-                                        "annotations",
-                                        formatAnnotations(tool.annotations),
-                                      );
-                                    }}
-                                  >
+                                          updateTempOverride(
+                                            toolId,
+                                            "annotations",
+                                            formatAnnotations(tool.annotations),
+                                          );
+                                        }}
+                                      >
                                         <RotateCcw className="h-3 w-3 mr-1" />
                                         Reset to Original
                                       </Button>

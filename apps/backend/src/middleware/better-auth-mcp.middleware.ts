@@ -2,8 +2,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import express from "express";
 
-import { auth } from "../auth";
 import logger from "@/utils/logger";
+
+import { auth } from "../auth";
 
 /**
  * Better Auth middleware for MCP proxy routes

@@ -1,5 +1,7 @@
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { oauthRepository } from "../../db/repositories";
 import {
   generateSecureClientId,
@@ -7,7 +9,6 @@ import {
   rateLimitToken,
   validateRedirectUri,
 } from "./utils";
-import logger from "@/utils/logger";
 
 const registrationRouter = express.Router();
 

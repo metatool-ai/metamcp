@@ -1,9 +1,10 @@
 import { ServerParameters } from "@repo/zod-types";
 
+import logger from "@/utils/logger";
+
 import { configService } from "../config.service";
 import { ConnectedClient, connectMetaMcpClient } from "./client";
 import { serverErrorTracker } from "./server-error-tracker";
-import logger from "@/utils/logger";
 
 export interface McpServerPoolStatus {
   idle: number;
@@ -46,7 +47,10 @@ export class McpServerPool {
   // Maximum total connections (idle + active) to prevent runaway process spawning
   private readonly maxTotalConnections: number;
 
-  private constructor(defaultIdleCount: number = 1, maxTotalConnections: number = 100) {
+  private constructor(
+    defaultIdleCount: number = 1,
+    maxTotalConnections: number = 100,
+  ) {
     this.defaultIdleCount = defaultIdleCount;
     this.maxTotalConnections = maxTotalConnections;
     this.startCleanupTimer();
@@ -233,7 +237,10 @@ export class McpServerPool {
             `Created background idle session for server [${params.name}] ${serverUuid}`,
           );
           if (namespaceUuid) {
-            this.setBackgroundIdleSessionsByNamespace(namespaceUuid, new Map().set('status', 'created'))
+            this.setBackgroundIdleSessionsByNamespace(
+              namespaceUuid,
+              new Map().set("status", "created"),
+            );
           }
         } else if (newClient) {
           // We already have an idle session, cleanup the extra one
@@ -423,10 +430,12 @@ export class McpServerPool {
   /**
    * Set background idle sessions by namespace
    */
-  setBackgroundIdleSessionsByNamespace(namespaceUuid: string, options: any): void {
+  setBackgroundIdleSessionsByNamespace(
+    namespaceUuid: string,
+    options: any,
+  ): void {
     this.backgroundIdleSessionsByNamespace.set(namespaceUuid, options);
   }
-
 
   /**
    * Invalidate and refresh idle session for a specific server
@@ -702,6 +711,7 @@ export class McpServerPool {
     if (age === undefined) return false;
 
     const sessionLifetime = await configService.getSessionLifetime();
+    if (sessionLifetime === null) return false; // infinite sessions
     return age > sessionLifetime;
   }
 }

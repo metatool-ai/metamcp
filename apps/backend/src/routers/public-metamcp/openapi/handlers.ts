@@ -6,6 +6,8 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import logger from "@/utils/logger";
+
 import { configService } from "../../../lib/config.service";
 import { ConnectedClient } from "../../../lib/metamcp";
 import { getMcpServers } from "../../../lib/metamcp/fetch-metamcp";
@@ -25,7 +27,6 @@ import {
   createToolOverridesListToolsMiddleware,
 } from "../../../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { sanitizeName } from "../../../lib/metamcp/utils";
-import logger from "@/utils/logger";
 
 // Original List Tools Handler (adapted from metamcp-proxy.ts)
 export const createOriginalListToolsHandler = (

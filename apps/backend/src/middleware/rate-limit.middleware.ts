@@ -1,8 +1,12 @@
-import { Request, Response, NextFunction } from "express";
-import { RateLimiting, RateLimitError, SlidingWindowRateLimiting } from "@/lib/rate-limit";
 import { DatabaseEndpoint } from "@repo/zod-types";
+import { NextFunction, Request, Response } from "express";
 import express from "express";
-import logger from "@/utils/logger";
+
+import {
+  RateLimitError,
+  RateLimiting,
+  SlidingWindowRateLimiting,
+} from "@/lib/rate-limit";
 
 const slidingWindowRateLimit = new SlidingWindowRateLimiting();
 const tokenBucketRateLimit = new RateLimiting();
@@ -10,7 +14,6 @@ const tokenBucketRateLimit = new RateLimiting();
 interface RateLimitOptions extends express.Request {
   endpoint: DatabaseEndpoint;
 }
-
 
 /**
  * Express adapter for TokenBucket rate limiting middleware
@@ -31,7 +34,7 @@ const tokenBucketRateLimiter = () => {
       }
     }
   };
-}
+};
 
 /**
  * Express adapter for Sliding Window rate limiting middleware
@@ -52,7 +55,7 @@ const slidingWindowRateLimiter = () => {
       }
     }
   };
-}
+};
 
 /**
  * Combined rate limiter that runs both sliding window and token bucket limiters sequentially
@@ -84,9 +87,13 @@ const rateLimiter = () => {
       }
     }
   };
-}
+};
 
-export const rateLimitMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+export const rateLimitMiddleware = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+) => {
   const { endpoint } = req as RateLimitOptions;
   if (endpoint.enable_client_max_rate && endpoint.enable_max_rate) {
     rateLimiter()(req, res, next);
@@ -97,4 +104,4 @@ export const rateLimitMiddleware = (req: express.Request, res: express.Response,
   } else {
     next();
   }
-}
+};
