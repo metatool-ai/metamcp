@@ -1,3 +1,5 @@
+import logger from "@/utils/logger";
+
 import { configService } from "./config.service";
 
 export interface SessionLifetimeManager<T> {
@@ -59,7 +61,7 @@ export class SessionLifetimeManagerImpl<T>
     const sessionLifetime = await configService.getSessionLifetime();
     // If session lifetime is null, sessions are infinite and never expire
     if (sessionLifetime === null) return false;
-    
+
     return age > sessionLifetime;
   }
 
@@ -68,12 +70,12 @@ export class SessionLifetimeManagerImpl<T>
   ): Promise<void> {
     try {
       const sessionLifetime = await configService.getSessionLifetime();
-      
+
       // If session lifetime is null, sessions are infinite - skip cleanup
       if (sessionLifetime === null) {
         return;
       }
-      
+
       const now = Date.now();
       const expiredSessions: Array<{ sessionId: string; session: T }> = [];
 
@@ -89,7 +91,7 @@ export class SessionLifetimeManagerImpl<T>
 
       // Clean up expired sessions
       if (expiredSessions.length > 0) {
-        console.log(
+        logger.info(
           `Cleaning up ${expiredSessions.length} expired ${this.name} sessions: ${expiredSessions.map((s) => s.sessionId).join(", ")}`,
         );
 
@@ -100,7 +102,7 @@ export class SessionLifetimeManagerImpl<T>
         );
       }
     } catch (error) {
-      console.error(
+      logger.error(
         `Error during automatic ${this.name} session cleanup:`,
         error,
       );

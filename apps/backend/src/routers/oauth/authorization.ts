@@ -1,5 +1,7 @@
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { auth } from "../../auth";
 import { oauthRepository } from "../../db/repositories";
 import {
@@ -28,7 +30,7 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
       code_challenge_method,
     } = req.query;
 
-    console.log("OAuth authorize request:", {
+    logger.info("OAuth authorize request:", {
       response_type,
       client_id,
       redirect_uri,
@@ -116,7 +118,7 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
         : undefined,
     };
 
-    console.log(
+    logger.info(
       `Using client_id: ${finalClientId} (original: ${client_id}) for redirect_uri: ${redirect_uri}`,
     );
 
@@ -168,7 +170,7 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
           }
         }
       } catch (error) {
-        console.log("Session verification failed, proceeding to login:", error);
+        logger.info("Session verification failed, proceeding to login:", error);
         // Continue to login flow if session verification fails
       }
     }
@@ -186,7 +188,7 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
     // Redirect to frontend login page
     res.redirect(authUrl.toString());
   } catch (error) {
-    console.error("Error in OAuth authorize endpoint:", error);
+    logger.error("Error in OAuth authorize endpoint:", error);
     res.status(500).json({
       error: "server_error",
       error_description: "Internal server error",
@@ -346,7 +348,7 @@ Content-Type: application/json
 
     res.redirect(redirectUrl.toString());
   } catch (error) {
-    console.error("Error in OAuth callback:", error);
+    logger.error("Error in OAuth callback:", error);
     res.status(500).send("OAuth callback error");
   }
 });

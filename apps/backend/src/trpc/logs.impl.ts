@@ -5,6 +5,8 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import { metamcpLogStore } from "../lib/metamcp/log-store";
 
 export const logsImplementations = {
@@ -21,7 +23,7 @@ export const logsImplementations = {
         totalCount,
       };
     } catch (error) {
-      console.error("Error getting logs:", error);
+      logger.error("Error getting logs:", error);
       throw new Error("Failed to get logs");
     }
   },
@@ -35,7 +37,7 @@ export const logsImplementations = {
         message: "All logs have been cleared successfully",
       };
     } catch (error) {
-      console.error("Error clearing logs:", error);
+      logger.error("Error clearing logs:", error);
       throw new Error("Failed to clear logs");
     }
   },

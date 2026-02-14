@@ -5,6 +5,7 @@ import {
   ApiKeyAuthenticatedRequest,
   authenticateApiKey,
 } from "@/middleware/api-key-oauth.middleware";
+import logger from "@/utils/logger";
 
 import { metaMcpServerPool } from "../../../lib/metamcp/metamcp-server-pool";
 import { lookupEndpoint } from "../../../middleware/lookup-endpoint-middleware";
@@ -115,7 +116,7 @@ openApiRouter.get(
 
       res.json(openApiSchema);
     } catch (error) {
-      console.error("Error generating OpenAPI schema:", error);
+      logger.error("Error generating OpenAPI schema:", error);
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to generate OpenAPI schema",

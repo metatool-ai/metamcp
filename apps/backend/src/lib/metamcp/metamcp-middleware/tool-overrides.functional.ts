@@ -1,6 +1,8 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { and, eq } from "drizzle-orm";
 
+import logger from "@/utils/logger";
+
 import { db } from "../../../db/index";
 import {
   mcpServersTable,
@@ -199,7 +201,7 @@ async function getToolOverrides(
     }
 
     // Query database for tool overrides
-  const [toolMapping] = await db
+    const [toolMapping] = await db
       .select({
         overrideName: namespaceToolMappingsTable.override_name,
         overrideTitle: namespaceToolMappingsTable.override_title,
@@ -242,7 +244,7 @@ async function getToolOverrides(
 
     return override;
   } catch (error) {
-    console.error(
+    logger.error(
       `Error fetching tool overrides for ${toolName} in namespace ${namespaceUuid}:`,
       error,
     );
@@ -321,7 +323,7 @@ async function applyToolOverrides(
 
         if (overriddenAnnotations && "title" in overriddenAnnotations) {
           // Strip legacy title hint to avoid conflicting with top-level title
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars -- remove only the title key
+
           const { title: _removed, ...rest } = overriddenAnnotations;
           overriddenAnnotations =
             Object.keys(rest).length > 0 ? rest : undefined;
@@ -351,7 +353,7 @@ async function applyToolOverrides(
 
         overriddenTools.push(overriddenTool);
       } catch (error) {
-        console.error(`Error applying overrides for tool ${tool.name}:`, error);
+        logger.error(`Error applying overrides for tool ${tool.name}:`, error);
         // On error, include the tool as-is (fail-safe behavior)
         overriddenTools.push(tool);
       }
@@ -426,7 +428,7 @@ export async function mapOverrideNameToOriginal(
       return originalFullName;
     }
   } catch (error) {
-    console.error(
+    logger.error(
       `Error mapping override name ${toolName} to original in namespace ${namespaceUuid}:`,
       error,
     );

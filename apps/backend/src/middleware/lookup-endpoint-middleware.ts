@@ -1,7 +1,9 @@
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { endpointsRepository } from "../db/repositories/endpoints.repo";
-import { ApiKeyAuthenticatedRequest } from "./api-key-auth.middleware";
+import { ApiKeyAuthenticatedRequest } from "./api-key-oauth.middleware";
 
 // Middleware to lookup endpoint by name and add namespace info to request
 export const lookupEndpoint = async (
@@ -29,7 +31,7 @@ export const lookupEndpoint = async (
 
     next();
   } catch (error) {
-    console.error("Error looking up endpoint:", error);
+    logger.error("Error looking up endpoint:", error);
     return res.status(500).json({
       error: "Internal server error",
       message: "Failed to lookup endpoint",

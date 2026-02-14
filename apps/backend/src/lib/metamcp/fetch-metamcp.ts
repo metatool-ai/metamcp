@@ -5,6 +5,8 @@ import {
 } from "@repo/zod-types";
 import { and, eq } from "drizzle-orm";
 
+import logger from "@/utils/logger";
+
 import { db } from "../../db/index";
 import { oauthSessionsRepository } from "../../db/repositories/index";
 import { mcpServersTable, namespaceServerMappingsTable } from "../../db/schema";
@@ -112,7 +114,7 @@ export async function getMcpServers(
       } else if (params.type === "SSE" || params.type === "STREAMABLE_HTTP") {
         // For SSE or STREAMABLE_HTTP servers, ensure url is present
         if (!params.url) {
-          console.warn(
+          logger.warn(
             `${params.type} server ${params.uuid} is missing url field, skipping`,
           );
           continue;
@@ -124,7 +126,7 @@ export async function getMcpServers(
 
     return serverDict;
   } catch (error) {
-    console.error("Error fetching active MCP servers from database:", error);
+    logger.error("Error fetching active MCP servers from database:", error);
     return {};
   }
 }

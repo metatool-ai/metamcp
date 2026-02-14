@@ -1,5 +1,7 @@
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { oauthRepository } from "../../db/repositories";
 
 const userinfoRouter = express.Router();
@@ -57,7 +59,7 @@ userinfoRouter.get("/oauth/userinfo", async (req, res) => {
       scope: tokenData.scope,
     });
   } catch (error) {
-    console.error("Error in OAuth userinfo endpoint:", error);
+    logger.error("Error in OAuth userinfo endpoint:", error);
     res.status(500).json({
       error: "server_error",
       error_description: "Internal server error",

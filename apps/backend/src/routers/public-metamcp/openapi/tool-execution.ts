@@ -1,6 +1,8 @@
 import { CallToolRequest } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { metaMcpServerPool } from "../../../lib/metamcp/metamcp-server-pool";
 import { createMiddlewareEnabledHandlers } from "./handlers";
 import { ToolExecutionRequest } from "./types";
@@ -55,7 +57,7 @@ export const executeToolWithMiddleware = async (
     // Return the result directly (simplified format)
     res.json(result);
   } catch (error) {
-    console.error(`Error executing tool ${toolName}:`, error);
+    logger.error(`Error executing tool ${toolName}:`, error);
 
     // Handle different types of errors
     if (error instanceof Error) {

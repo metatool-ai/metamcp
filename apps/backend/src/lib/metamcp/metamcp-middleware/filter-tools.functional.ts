@@ -1,6 +1,8 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { and, eq } from "drizzle-orm";
 
+import logger from "@/utils/logger";
+
 import { db } from "../../../db/index";
 import {
   mcpServersTable,
@@ -133,7 +135,7 @@ async function getToolStatus(
 
     return status;
   } catch (error) {
-    console.error(
+    logger.error(
       `Error fetching tool status for ${toolName} in namespace ${namespaceUuid}:`,
       error,
     );
@@ -155,7 +157,7 @@ async function getServerUuidByName(serverName: string): Promise<string | null> {
 
     return server?.uuid || null;
   } catch (error) {
-    console.error(`Error fetching server UUID for ${serverName}:`, error);
+    logger.error(`Error fetching server UUID for ${serverName}:`, error);
     return null;
   }
 }
@@ -204,7 +206,7 @@ async function filterActiveTools(
         }
         // If status is "INACTIVE", tool is filtered out
       } catch (error) {
-        console.error(`Error checking tool status for ${tool.name}:`, error);
+        logger.error(`Error checking tool status for ${tool.name}:`, error);
         // On error, include the tool (fail-safe behavior)
         activeTools.push(tool);
       }
@@ -248,7 +250,7 @@ async function isToolAllowed(
       reason: "Tool has been marked as inactive in this namespace",
     };
   } catch (error) {
-    console.error(
+    logger.error(
       `Error checking if tool ${toolName} is allowed in namespace ${namespaceUuid}:`,
       error,
     );

@@ -1,11 +1,12 @@
 import express from "express";
 
 import { auth } from "./auth";
-import { initializeIdleServers } from "./lib/startup";
+import { initializeIdleServers, initializeOnStartup } from "./lib/startup";
 import mcpProxyRouter from "./routers/mcp-proxy";
 import oauthRouter from "./routers/oauth";
 import publicEndpointsRouter from "./routers/public-metamcp";
 import trpcRouter from "./routers/trpc";
+import logger from "./utils/logger";
 
 const app = express();
 
@@ -62,7 +63,7 @@ app.use(async (req, res, next) => {
       const body = await response.text();
       res.send(body);
     } catch (error) {
-      console.error("Auth route error:", error);
+      logger.error("Auth route error:", error);
       res.status(500).json({
         error: "Internal server error",
         details: error instanceof Error ? error.message : String(error),
@@ -82,25 +83,35 @@ app.use("/mcp-proxy", mcpProxyRouter);
 // Mount tRPC routes
 app.use("/trpc", trpcRouter);
 
-app.listen(12009, async () => {
-  console.log(`Server is running on port 12009`);
-  console.log(`Auth routes available at: http://localhost:12009/api/auth`);
-  console.log(
-    `Public MetaMCP endpoints available at: http://localhost:12009/metamcp`,
-  );
-  console.log(
-    `MCP Proxy routes available at: http://localhost:12009/mcp-proxy`,
-  );
-  console.log(`tRPC routes available at: http://localhost:12009/trpc`);
+async function start(): Promise<void> {
+  // Startup initialization (must run after DB is reachable/migrations are applied, and before listening)
+  await initializeOnStartup();
 
-  // Wait a moment for the server to be fully ready to handle incoming connections,
-  // then initialize idle servers (prevents connection errors when MCP servers connect back)
-  console.log(
-    "Waiting for server to be fully ready before initializing idle servers...",
-  );
-  await new Promise((resolve) => setTimeout(resolve, 3000)).then(
-    initializeIdleServers,
-  );
+  app.listen(12009, async () => {
+    console.log(`Server is running on port 12009`);
+    console.log(`Auth routes available at: http://localhost:12009/api/auth`);
+    console.log(
+      `Public MetaMCP endpoints available at: http://localhost:12009/metamcp`,
+    );
+    console.log(
+      `MCP Proxy routes available at: http://localhost:12009/mcp-proxy`,
+    );
+    console.log(`tRPC routes available at: http://localhost:12009/trpc`);
+
+    // Wait a moment for the server to be fully ready to handle incoming connections,
+    // then initialize idle servers (prevents connection errors when MCP servers connect back)
+    console.log(
+      "Waiting for server to be fully ready before initializing idle servers...",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 3000)).then(
+      initializeIdleServers,
+    );
+  });
+}
+
+start().catch((err) => {
+  console.error("❌ Fatal startup error:", err);
+  // Do not throw - keep consistent with other startup behavior
 });
 
 app.get("/health", (req, res) => {

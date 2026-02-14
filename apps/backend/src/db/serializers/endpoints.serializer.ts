@@ -13,6 +13,29 @@ export class EndpointsSerializer {
       description: dbEndpoint.description,
       namespace_uuid: dbEndpoint.namespace_uuid,
       enable_api_key_auth: dbEndpoint.enable_api_key_auth,
+      enableClientMaxRate: dbEndpoint.enable_client_max_rate,
+      enableMaxRate: dbEndpoint.enable_max_rate,
+      maxRateSeconds:
+        dbEndpoint.max_rate_seconds === null
+          ? undefined
+          : dbEndpoint.max_rate_seconds,
+      maxRate: dbEndpoint.max_rate === null ? undefined : dbEndpoint.max_rate,
+      clientMaxRate:
+        dbEndpoint.client_max_rate === null
+          ? undefined
+          : dbEndpoint.client_max_rate,
+      clientMaxRateSeconds:
+        dbEndpoint.client_max_rate_seconds === null
+          ? undefined
+          : dbEndpoint.client_max_rate_seconds,
+      clientMaxRateStrategy:
+        dbEndpoint.client_max_rate_strategy === null
+          ? undefined
+          : dbEndpoint.client_max_rate_strategy,
+      clientMaxRateStrategyKey:
+        dbEndpoint.client_max_rate_strategy_key === null
+          ? undefined
+          : dbEndpoint.client_max_rate_strategy_key,
       enable_oauth: dbEndpoint.enable_oauth,
       use_query_param_auth: dbEndpoint.use_query_param_auth,
       created_at: dbEndpoint.created_at.toISOString(),
@@ -34,6 +57,29 @@ export class EndpointsSerializer {
       description: dbEndpoint.description,
       namespace_uuid: dbEndpoint.namespace_uuid,
       enable_api_key_auth: dbEndpoint.enable_api_key_auth,
+      enableClientMaxRate: dbEndpoint.enable_client_max_rate,
+      enableMaxRate: dbEndpoint.enable_max_rate,
+      maxRateSeconds:
+        dbEndpoint.max_rate_seconds === null
+          ? undefined
+          : dbEndpoint.max_rate_seconds,
+      maxRate: dbEndpoint.max_rate === null ? undefined : dbEndpoint.max_rate,
+      clientMaxRate:
+        dbEndpoint.client_max_rate === null
+          ? undefined
+          : dbEndpoint.client_max_rate,
+      clientMaxRateSeconds:
+        dbEndpoint.client_max_rate_seconds === null
+          ? undefined
+          : dbEndpoint.client_max_rate_seconds,
+      clientMaxRateStrategy:
+        dbEndpoint.client_max_rate_strategy === null
+          ? undefined
+          : dbEndpoint.client_max_rate_strategy,
+      clientMaxRateStrategyKey:
+        dbEndpoint.client_max_rate_strategy_key === null
+          ? undefined
+          : dbEndpoint.client_max_rate_strategy_key,
       enable_oauth: dbEndpoint.enable_oauth,
       use_query_param_auth: dbEndpoint.use_query_param_auth,
       created_at: dbEndpoint.created_at.toISOString(),

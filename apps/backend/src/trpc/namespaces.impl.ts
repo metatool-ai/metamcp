@@ -19,6 +19,8 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import {
   mcpServersRepository,
   namespaceMappingsRepository,
@@ -94,12 +96,12 @@ export const namespacesImplementations = {
       metaMcpServerPool
         .ensureIdleServerForNewNamespace(result.uuid)
         .then(() => {
-          console.log(
+          logger.info(
             `Ensured idle MetaMCP server exists for new namespace ${result.uuid}`,
           );
         })
         .catch((error) => {
-          console.error(
+          logger.error(
             `Error ensuring idle MetaMCP server for new namespace ${result.uuid}:`,
             error,
           );
@@ -112,7 +114,7 @@ export const namespacesImplementations = {
         message: "Namespace created successfully",
       };
     } catch (error) {
-      console.error("Error creating namespace:", error);
+      logger.error("Error creating namespace:", error);
       return {
         success: false as const,
         message:
@@ -135,7 +137,7 @@ export const namespacesImplementations = {
         message: "Namespaces retrieved successfully",
       };
     } catch (error) {
-      console.error("Error fetching namespaces:", error);
+      logger.error("Error fetching namespaces:", error);
       return {
         success: false as const,
         data: [],
@@ -181,7 +183,7 @@ export const namespacesImplementations = {
         message: "Namespace retrieved successfully",
       };
     } catch (error) {
-      console.error("Error fetching namespace:", error);
+      logger.error("Error fetching namespace:", error);
       return {
         success: false as const,
         message: "Failed to fetch namespace",
@@ -227,7 +229,7 @@ export const namespacesImplementations = {
         message: "Namespace tools retrieved successfully",
       };
     } catch (error) {
-      console.error("Error fetching namespace tools:", error);
+      logger.error("Error fetching namespace tools:", error);
       return {
         success: false as const,
         data: [],
@@ -277,11 +279,11 @@ export const namespacesImplementations = {
       // Clean up idle MetaMCP server for the deleted namespace
       try {
         await metaMcpServerPool.cleanupIdleServer(input.uuid);
-        console.log(
+        logger.info(
           `Cleaned up idle MetaMCP server for deleted namespace ${input.uuid}`,
         );
       } catch (error) {
-        console.error(
+        logger.error(
           `Error cleaning up idle MetaMCP server for deleted namespace ${input.uuid}:`,
           error,
         );
@@ -290,7 +292,7 @@ export const namespacesImplementations = {
 
       // Clear the tool overrides cache for the deleted namespace
       clearOverrideCache(input.uuid);
-      console.log(
+      logger.info(
         `Cleared tool overrides cache for deleted namespace ${input.uuid}`,
       );
 
@@ -299,7 +301,7 @@ export const namespacesImplementations = {
         message: "Namespace deleted successfully",
       };
     } catch (error) {
-      console.error("Error deleting namespace:", error);
+      logger.error("Error deleting namespace:", error);
       return {
         success: false as const,
         message:
@@ -390,12 +392,12 @@ export const namespacesImplementations = {
       metaMcpServerPool
         .invalidateIdleServer(input.uuid)
         .then(() => {
-          console.log(
+          logger.info(
             `Invalidated idle MetaMCP server for updated namespace ${input.uuid}`,
           );
         })
         .catch((error) => {
-          console.error(
+          logger.error(
             `Error invalidating idle MetaMCP server for namespace ${input.uuid}:`,
             error,
           );
@@ -406,12 +408,12 @@ export const namespacesImplementations = {
       metaMcpServerPool
         .invalidateOpenApiSessions([input.uuid])
         .then(() => {
-          console.log(
+          logger.info(
             `Invalidated OpenAPI session for updated namespace ${input.uuid}`,
           );
         })
         .catch((error) => {
-          console.error(
+          logger.error(
             `Error invalidating OpenAPI session for namespace ${input.uuid}:`,
             error,
           );
@@ -420,7 +422,7 @@ export const namespacesImplementations = {
 
       // Clear tool overrides cache for this namespace since MCP servers list may have changed
       clearOverrideCache(input.uuid);
-      console.log(
+      logger.info(
         `Cleared tool overrides cache for updated namespace ${input.uuid}`,
       );
 
@@ -430,7 +432,7 @@ export const namespacesImplementations = {
         message: "Namespace updated successfully",
       };
     } catch (error) {
-      console.error("Error updating namespace:", error);
+      logger.error("Error updating namespace:", error);
       return {
         success: false as const,
         message:
@@ -484,12 +486,12 @@ export const namespacesImplementations = {
       metaMcpServerPool
         .invalidateIdleServer(input.namespaceUuid)
         .then(() => {
-          console.log(
+          logger.info(
             `Invalidated idle MetaMCP server for namespace ${input.namespaceUuid} after server status update`,
           );
         })
         .catch((error) => {
-          console.error(
+          logger.error(
             `Error invalidating idle MetaMCP server for namespace ${input.namespaceUuid}:`,
             error,
           );
@@ -500,12 +502,12 @@ export const namespacesImplementations = {
       metaMcpServerPool
         .invalidateOpenApiSessions([input.namespaceUuid])
         .then(() => {
-          console.log(
+          logger.info(
             `Invalidated OpenAPI session for namespace ${input.namespaceUuid} after server status update`,
           );
         })
         .catch((error) => {
-          console.error(
+          logger.error(
             `Error invalidating OpenAPI session for namespace ${input.namespaceUuid}:`,
             error,
           );
@@ -517,7 +519,7 @@ export const namespacesImplementations = {
         message: "Server status updated successfully",
       };
     } catch (error) {
-      console.error("Error updating server status:", error);
+      logger.error("Error updating server status:", error);
       return {
         success: false as const,
         message:
@@ -573,7 +575,7 @@ export const namespacesImplementations = {
         message: "Tool status updated successfully",
       };
     } catch (error) {
-      console.error("Error updating tool status:", error);
+      logger.error("Error updating tool status:", error);
       return {
         success: false as const,
         message:
@@ -628,7 +630,7 @@ export const namespacesImplementations = {
 
       // Clear the tool overrides cache for this namespace to ensure fresh data is loaded
       clearOverrideCache(input.namespaceUuid);
-      console.log(
+      logger.info(
         `Cleared tool overrides cache for namespace ${input.namespaceUuid} after updating tool overrides`,
       );
 
@@ -637,7 +639,7 @@ export const namespacesImplementations = {
         message: "Tool overrides updated successfully",
       };
     } catch (error) {
-      console.error("Error updating tool overrides:", error);
+      logger.error("Error updating tool overrides:", error);
       return {
         success: false as const,
         message:
@@ -696,7 +698,7 @@ export const namespacesImplementations = {
         const lastDoubleUnderscoreIndex = tool.name.lastIndexOf("__");
 
         if (lastDoubleUnderscoreIndex === -1) {
-          console.warn(
+          logger.warn(
             `Tool name "${tool.name}" does not contain "__" separator, skipping`,
           );
           continue;
@@ -717,21 +719,21 @@ export const namespacesImplementations = {
           // If we found an original name mapping, this means the current toolName is an override
           // Skip this tool to avoid creating duplicates
           if (originalToolName !== fullToolName) {
-            console.log(
+            logger.info(
               `Skipping override tool "${fullToolName}" as it maps to original "${originalToolName}"`,
             );
             continue;
           }
         } catch (error) {
           // If mapping fails, continue with the parsed name (it's likely an original tool)
-          console.warn(
+          logger.warn(
             `Failed to map override name for tool "${toolName}":`,
             error,
           );
         }
 
         if (!serverName || !toolName) {
-          console.warn(`Invalid tool name format "${tool.name}", skipping`);
+          logger.warn(`Invalid tool name format "${tool.name}", skipping`);
           continue;
         }
 
@@ -786,7 +788,7 @@ export const namespacesImplementations = {
           server = await mcpServersRepository.findByName(actualServerName);
 
           if (server) {
-            console.log(
+            logger.info(
               `Found nested MetaMCP server mapping: "${parsedTool.serverName}" -> "${actualServerName}"`,
             );
             // Update the parsed tool to use the correct server name and adjust tool name
@@ -799,7 +801,7 @@ export const namespacesImplementations = {
         }
 
         if (!server) {
-          console.warn(
+          logger.warn(
             `Server "${parsedTool.serverName}" not found in database, skipping tool "${parsedTool.toolName}"`,
           );
           continue;
@@ -862,7 +864,7 @@ export const namespacesImplementations = {
 
         totalMappingsCreated += createdMappings.length;
 
-        console.log(
+        logger.info(
           `Processed ${tools.length} tools for server "${serverName}" (${serverUuid})`,
         );
       }
@@ -872,12 +874,12 @@ export const namespacesImplementations = {
       metaMcpServerPool
         .invalidateIdleServer(input.namespaceUuid)
         .then(() => {
-          console.log(
+          logger.info(
             `Invalidated idle MetaMCP server for namespace ${input.namespaceUuid} after tools refresh`,
           );
         })
         .catch((error) => {
-          console.error(
+          logger.error(
             `Error invalidating idle MetaMCP server for namespace ${input.namespaceUuid}:`,
             error,
           );
@@ -888,12 +890,12 @@ export const namespacesImplementations = {
       metaMcpServerPool
         .invalidateOpenApiSessions([input.namespaceUuid])
         .then(() => {
-          console.log(
+          logger.info(
             `Invalidated OpenAPI session for namespace ${input.namespaceUuid} after tools refresh`,
           );
         })
         .catch((error) => {
-          console.error(
+          logger.error(
             `Error invalidating OpenAPI session for namespace ${input.namespaceUuid}:`,
             error,
           );
@@ -907,7 +909,7 @@ export const namespacesImplementations = {
         mappingsCreated: totalMappingsCreated,
       };
     } catch (error) {
-      console.error("Error refreshing namespace tools:", error);
+      logger.error("Error refreshing namespace tools:", error);
       return {
         success: false as const,
         message:

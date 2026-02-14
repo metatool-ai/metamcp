@@ -5,6 +5,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { createServer } from "../../lib/metamcp/index";
 import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
@@ -39,7 +41,7 @@ const createMetaMcpServer = async (
 
 // Cleanup function for a specific session
 const cleanupSession = async (sessionId: string) => {
-  console.log(`Cleaning up session ${sessionId}`);
+  logger.info(`Cleaning up session ${sessionId}`);
 
   // Clean up transport
   const transport = webAppTransports.get(sessionId);
@@ -62,7 +64,7 @@ const cleanupSession = async (sessionId: string) => {
 metamcpRouter.get("/:uuid/mcp", async (req, res) => {
   // const namespaceUuid = req.params.uuid;
   const sessionId = req.headers["mcp-session-id"] as string;
-  // console.log(
+  // logger.info(
   //   `Received GET message for MetaMCP namespace ${namespaceUuid} sessionId ${sessionId}`,
   // );
   try {
@@ -76,7 +78,7 @@ metamcpRouter.get("/:uuid/mcp", async (req, res) => {
       await transport.handleRequest(req, res);
     }
   } catch (error) {
-    console.error("Error in MetaMCP /mcp route:", error);
+    logger.error("Error in MetaMCP /mcp route:", error);
     res.status(500).json(error);
   }
 });
@@ -93,7 +95,7 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
 
   if (!sessionId) {
     try {
-      console.log(
+      logger.info(
         `New MetaMCP StreamableHttp connection request for namespace ${namespaceUuid}`,
       );
 
@@ -111,14 +113,14 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
               newSessionId,
               includeInactiveServers,
             );
-            console.log(
+            logger.info(
               `Created MetaMCP server instance for session ${newSessionId}`,
             );
 
             webAppTransports.set(newSessionId, webAppTransport);
             metamcpServers.set(newSessionId, mcpServerInstance);
 
-            console.log(
+            logger.info(
               `MetaMCP Client <-> Proxy sessionId: ${newSessionId} for namespace ${namespaceUuid}`,
             );
 
@@ -126,17 +128,17 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
 
             // Handle cleanup when connection closes
             res.on("close", async () => {
-              console.log(
+              logger.info(
                 `MetaMCP connection closed for session ${newSessionId}`,
               );
               await cleanupSession(newSessionId);
             });
           } catch (error) {
-            console.error(`Error initializing session ${newSessionId}:`, error);
+            logger.error(`Error initializing session ${newSessionId}:`, error);
           }
         },
       });
-      console.log("Created MetaMCP StreamableHttp transport");
+      logger.info("Created MetaMCP StreamableHttp transport");
 
       await (webAppTransport as StreamableHTTPServerTransport).handleRequest(
         req,
@@ -144,11 +146,11 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
         req.body,
       );
     } catch (error) {
-      console.error("Error in MetaMCP /mcp POST route:", error);
+      logger.error("Error in MetaMCP /mcp POST route:", error);
       res.status(500).json(error);
     }
   } else {
-    // console.log(
+    // logger.info(
     //   `Received POST message for MetaMCP namespace ${namespaceUuid} sessionId ${sessionId}`,
     // );
     try {
@@ -164,7 +166,7 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
         );
       }
     } catch (error) {
-      console.error("Error in MetaMCP /mcp route:", error);
+      logger.error("Error in MetaMCP /mcp route:", error);
       res.status(500).json(error);
     }
   }
@@ -173,17 +175,17 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
 metamcpRouter.delete("/:uuid/mcp", async (req, res) => {
   const namespaceUuid = req.params.uuid;
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
-  console.log(
+  logger.info(
     `Received DELETE message for MetaMCP namespace ${namespaceUuid} sessionId ${sessionId}`,
   );
 
   if (sessionId) {
     try {
       await cleanupSession(sessionId);
-      console.log(`MetaMCP session ${sessionId} cleaned up successfully`);
+      logger.info(`MetaMCP session ${sessionId} cleaned up successfully`);
       res.status(200).end();
     } catch (error) {
-      console.error("Error in MetaMCP /mcp DELETE route:", error);
+      logger.error("Error in MetaMCP /mcp DELETE route:", error);
       res.status(500).json(error);
     }
   } else {
@@ -196,7 +198,7 @@ metamcpRouter.get("/:uuid/sse", async (req, res) => {
   const includeInactiveServers = req.query.includeInactiveServers === "true";
 
   try {
-    console.log(
+    logger.info(
       `New MetaMCP SSE connection request for namespace ${namespaceUuid}, includeInactiveServers: ${includeInactiveServers}`,
     );
 
@@ -204,7 +206,7 @@ metamcpRouter.get("/:uuid/sse", async (req, res) => {
       `/mcp-proxy/metamcp/${namespaceUuid}/message`,
       res,
     );
-    console.log("Created MetaMCP SSE transport");
+    logger.info("Created MetaMCP SSE transport");
 
     const sessionId = webAppTransport.sessionId;
 
@@ -214,20 +216,20 @@ metamcpRouter.get("/:uuid/sse", async (req, res) => {
       sessionId,
       includeInactiveServers,
     );
-    console.log(`Created MetaMCP server instance for session ${sessionId}`);
+    logger.info(`Created MetaMCP server instance for session ${sessionId}`);
 
     webAppTransports.set(sessionId, webAppTransport);
     metamcpServers.set(sessionId, mcpServerInstance);
 
     // Handle cleanup when connection closes
     res.on("close", async () => {
-      console.log(`MetaMCP SSE connection closed for session ${sessionId}`);
+      logger.info(`MetaMCP SSE connection closed for session ${sessionId}`);
       await cleanupSession(sessionId);
     });
 
     await mcpServerInstance.server.connect(webAppTransport);
   } catch (error) {
-    console.error("Error in MetaMCP /sse route:", error);
+    logger.error("Error in MetaMCP /sse route:", error);
     res.status(500).json(error);
   }
 });
@@ -236,7 +238,7 @@ metamcpRouter.post("/:uuid/message", async (req, res) => {
   // const namespaceUuid = req.params.uuid;
   try {
     const sessionId = req.query.sessionId;
-    // console.log(
+    // logger.info(
     //   `Received POST message for MetaMCP namespace ${namespaceUuid} sessionId ${sessionId}`,
     // );
 
@@ -249,7 +251,7 @@ metamcpRouter.post("/:uuid/message", async (req, res) => {
     }
     await transport.handlePostMessage(req, res);
   } catch (error) {
-    console.error("Error in MetaMCP /message route:", error);
+    logger.error("Error in MetaMCP /message route:", error);
     res.status(500).json(error);
   }
 });

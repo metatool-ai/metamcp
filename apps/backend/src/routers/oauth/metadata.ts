@@ -1,5 +1,7 @@
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { getBaseUrl } from "./utils";
 
 const metadataRouter = express.Router();
@@ -73,7 +75,7 @@ metadataRouter.get(
 
       return res.json(metadata);
     } catch (error) {
-      console.error(
+      logger.error(
         "Error generating OAuth protected resource metadata:",
         error,
       );
@@ -147,7 +149,7 @@ metadataRouter.get(
 
       return res.json(metadata);
     } catch (error) {
-      console.error(
+      logger.error(
         "Error generating OAuth authorization server metadata:",
         error,
       );

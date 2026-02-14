@@ -1,6 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+import logger from "@/utils/logger";
+
 import * as schema from "./schema";
 
 const { DATABASE_URL, POSTGRES_CA_CERT } = process.env;
@@ -25,7 +27,7 @@ export const pool = new Pool({
 pool.on("error", (err) => {
   // Log and continue so the process doesn't crash on idle client errors.
   // pg-pool will create a new client on the next checkout automatically.
-  console.error("PostgreSQL pool error (ignored):", err);
+  logger.error("PostgreSQL pool error (ignored):", err);
 });
 
 export const db = drizzle(pool, { schema });

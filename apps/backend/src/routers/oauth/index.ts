@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { oauthRepository } from "../../db/repositories";
 import authorizationRouter from "./authorization";
 import metadataRouter from "./metadata";
@@ -20,9 +22,9 @@ setInterval(
   async () => {
     try {
       await oauthRepository.cleanupExpired();
-      console.log("Cleaned up expired OAuth codes and tokens");
+      logger.info("Cleaned up expired OAuth codes and tokens");
     } catch (error) {
-      console.error("Error cleaning up expired OAuth entries:", error);
+      logger.error("Error cleaning up expired OAuth entries:", error);
     }
   },
   5 * 60 * 1000,

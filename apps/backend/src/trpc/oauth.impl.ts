@@ -6,6 +6,8 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import { oauthSessionsRepository } from "../db/repositories";
 import { OAuthSessionsSerializer } from "../db/serializers";
 
@@ -31,7 +33,7 @@ export const oauthImplementations = {
         message: "OAuth session retrieved successfully",
       };
     } catch (error) {
-      console.error("Error fetching OAuth session:", error);
+      logger.error("Error fetching OAuth session:", error);
       return {
         success: false as const,
         message: "Failed to fetch OAuth session",
@@ -65,7 +67,7 @@ export const oauthImplementations = {
         message: "OAuth session upserted successfully",
       };
     } catch (error) {
-      console.error("Error upserting OAuth session:", error);
+      logger.error("Error upserting OAuth session:", error);
       return {
         success: false as const,
         error: error instanceof Error ? error.message : "Internal server error",

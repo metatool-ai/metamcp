@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { endpointsRepository } from "../db/repositories/endpoints.repo";
 import { openApiRouter } from "./public-metamcp/openapi";
 import sseRouter from "./public-metamcp/sse";
@@ -72,7 +74,7 @@ publicEndpointsRouter.get("/", async (req, res) => {
       endpoints: publicEndpoints,
     });
   } catch (error) {
-    console.error("Error listing public endpoints:", error);
+    logger.error("Error listing public endpoints:", error);
     res.status(500).json({
       error: "Internal server error",
       message: "Failed to list endpoints",

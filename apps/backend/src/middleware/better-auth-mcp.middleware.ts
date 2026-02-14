@@ -2,6 +2,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { auth } from "../auth";
 
 /**
@@ -16,7 +18,7 @@ export const betterAuthMcpMiddleware = async (
   try {
     // Check if we have cookies in the request
     if (!req.headers.cookie) {
-      console.log("Auth middleware - no cookies found in request");
+      logger.info("Auth middleware - no cookies found in request");
       return res.status(401).json({
         error: "Authentication required",
         message: "No session cookies found",
@@ -40,7 +42,7 @@ export const betterAuthMcpMiddleware = async (
     const sessionResponse = await auth.handler(sessionRequest);
 
     if (!sessionResponse.ok) {
-      console.log("Auth middleware - session verification failed");
+      logger.info("Auth middleware - session verification failed");
       return res.status(401).json({
         error: "Invalid session",
         message: "Session verification failed",
@@ -50,7 +52,7 @@ export const betterAuthMcpMiddleware = async (
     const sessionData = (await sessionResponse.json()) as any;
 
     if (!sessionData || !sessionData.user) {
-      console.log("Auth middleware - no valid user session found");
+      logger.info("Auth middleware - no valid user session found");
       return res.status(401).json({
         error: "Invalid session",
         message: "No valid user session found",
@@ -63,7 +65,7 @@ export const betterAuthMcpMiddleware = async (
 
     next();
   } catch (error) {
-    console.error("Better auth middleware error:", error);
+    logger.error("Better auth middleware error:", error);
     return res.status(500).json({
       error: "Authentication error",
       message: "Failed to verify authentication",

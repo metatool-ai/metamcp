@@ -14,6 +14,8 @@ import express from "express";
 import { parse as shellParseArgs } from "shell-quote";
 import { findActualExecutable } from "spawn-rx";
 
+import logger from "@/utils/logger";
+
 import { mcpServersRepository } from "../../db/repositories";
 import mcpProxy from "../../lib/mcp-proxy";
 import { transformDockerUrl } from "../../lib/metamcp/client";
@@ -84,20 +86,20 @@ const extractServerUuidFromStdioCommand = async (
 
     // First, try to find by command and args pattern
     const fullCommand = `${command} ${args.join(" ")}`;
-    console.log(`Looking for server with command: ${fullCommand}`);
+    logger.info(`Looking for server with command: ${fullCommand}`);
 
     // Look for servers that match this command pattern
     const servers = await mcpServersRepository.findAll();
-    console.log(`Found ${servers.length} servers in database`);
+    logger.info(`Found ${servers.length} servers in database`);
 
     for (const server of servers) {
       if (server.type === "STDIO" && server.command) {
         const serverCommand = `${server.command} ${(server.args || []).join(" ")}`;
-        console.log(
+        logger.info(
           `Checking server ${server.name} (${server.uuid}): ${serverCommand}`,
         );
         if (serverCommand === fullCommand) {
-          console.log(
+          logger.info(
             `Found exact match for server ${server.name} (${server.uuid})`,
           );
           return server.uuid;
@@ -108,17 +110,17 @@ const extractServerUuidFromStdioCommand = async (
     // If no exact match, try to find by command only (for cases where args might vary)
     for (const server of servers) {
       if (server.type === "STDIO" && server.command === command) {
-        console.log(
+        logger.info(
           `Found command-only match for server ${server.name} (${server.uuid})`,
         );
         return server.uuid;
       }
     }
 
-    console.log(`No server found for command: ${fullCommand}`);
+    logger.info(`No server found for command: ${fullCommand}`);
     return null;
   } catch (error) {
-    console.error("Error extracting server UUID from STDIO command:", error);
+    logger.error("Error extracting server UUID from STDIO command:", error);
     return null;
   }
 };
@@ -128,18 +130,18 @@ const checkServerErrorStatus = async (serverUuid: string): Promise<boolean> => {
   try {
     const server = await mcpServersRepository.findByUuid(serverUuid);
     if (!server) {
-      console.log(`Server ${serverUuid} not found`);
+      logger.info(`Server ${serverUuid} not found`);
       return false;
     }
 
     const isInError =
       server.error_status === McpServerErrorStatusEnum.Enum.ERROR;
     if (isInError) {
-      console.log(`Server ${server.name} (${serverUuid}) is in ERROR state`);
+      logger.info(`Server ${server.name} (${serverUuid}) is in ERROR state`);
     }
     return isInError;
   } catch (error) {
-    console.error(
+    logger.error(
       `Error checking server error status for ${serverUuid}:`,
       error,
     );
@@ -195,7 +197,7 @@ const serverTransports: Map<string, Transport> = new Map<string, Transport>(); /
 
 // Session cleanup function
 const cleanupSession = async (sessionId: string) => {
-  console.log(`Cleaning up proxy session ${sessionId}`);
+  logger.info(`Cleaning up proxy session ${sessionId}`);
 
   // Clean up web app transport
   const webAppTransport = webAppTransports.get(sessionId);
@@ -203,7 +205,7 @@ const cleanupSession = async (sessionId: string) => {
     try {
       await webAppTransport.close();
     } catch (error) {
-      console.error(
+      logger.error(
         `Error closing web app transport for session ${sessionId}:`,
         error,
       );
@@ -217,7 +219,7 @@ const cleanupSession = async (sessionId: string) => {
     try {
       await serverTransport.close();
     } catch (error) {
-      console.error(
+      logger.error(
         `Error closing server transport for session ${sessionId}:`,
         error,
       );
@@ -225,12 +227,12 @@ const cleanupSession = async (sessionId: string) => {
     serverTransports.delete(sessionId);
   }
 
-  console.log(`Session ${sessionId} cleanup completed`);
+  logger.info(`Session ${sessionId} cleanup completed`);
 };
 
 const createTransport = async (req: express.Request): Promise<Transport> => {
   const query = req.query;
-  console.log("Query parameters:", JSON.stringify(query));
+  logger.info("Query parameters:", JSON.stringify(query));
 
   const transportType = query.transportType as string;
 
@@ -248,7 +250,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
 
     // Check if this command is in cooldown
     if (isStdioInCooldown(cmd, args, env)) {
-      console.log(`STDIO command in cooldown: ${cmd} ${args.join(" ")}`);
+      logger.info(`STDIO command in cooldown: ${cmd} ${args.join(" ")}`);
       const cooldownEnd = stdioCommandCooldowns.get(
         createStdioKey(cmd, args, env),
       );
@@ -270,7 +272,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       }
     }
 
-    console.log(`STDIO transport: command=${cmd}, args=${args}`);
+    logger.info(`STDIO transport: command=${cmd}, args=${args}`);
 
     const transport = new ProcessManagedStdioTransport({
       command: cmd,
@@ -285,7 +287,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     } catch (error) {
       // If the transport fails to start, put it in cooldown
       setStdioCooldown(cmd, args, env);
-      console.log(
+      logger.info(
         `STDIO command failed, setting cooldown: ${cmd} ${args.join(" ")}`,
       );
       throw error;
@@ -313,7 +315,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       ...getHttpHeaders(req, transportType),
     };
 
-    console.log(
+    logger.info(
       `SSE transport: url=${url}, headers=${JSON.stringify(headers)}`,
     );
 
@@ -358,14 +360,14 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     await transport.start();
     return transport;
   } else {
-    console.error(`Invalid transport type: ${transportType}`);
+    logger.error(`Invalid transport type: ${transportType}`);
     throw new Error("Invalid transport type specified");
   }
 };
 
 serverRouter.get("/mcp", async (req, res) => {
   const sessionId = req.headers["mcp-session-id"] as string;
-  // console.log(`Received GET message for sessionId ${sessionId}`);
+  // logger.info(`Received GET message for sessionId ${sessionId}`);
   try {
     const transport = webAppTransports.get(
       sessionId,
@@ -377,7 +379,7 @@ serverRouter.get("/mcp", async (req, res) => {
       await transport.handleRequest(req, res);
     }
   } catch (error) {
-    console.error("Error in /mcp route:", error);
+    logger.error("Error in /mcp route:", error);
     res.status(500).json(error);
   }
 });
@@ -387,12 +389,12 @@ serverRouter.post("/mcp", async (req, res) => {
   let serverTransport: Transport | undefined;
   if (!sessionId) {
     try {
-      console.log("New StreamableHttp connection request");
+      logger.info("New StreamableHttp connection request");
       try {
         serverTransport = await createTransport(req);
       } catch (error) {
         if (error instanceof SseError && error.code === 401) {
-          console.error(
+          logger.error(
             "Received 401 Unauthorized from MCP server:",
             error.message,
           );
@@ -403,12 +405,12 @@ serverRouter.post("/mcp", async (req, res) => {
         throw error;
       }
 
-      console.log("Created StreamableHttp server transport");
+      logger.info("Created StreamableHttp server transport");
 
       // Set up crash detection for STDIO transports in StreamableHttp route
       if (serverTransport instanceof ProcessManagedStdioTransport) {
         serverTransport.onprocesscrash = async (exitCode, signal) => {
-          console.warn(
+          logger.warn(
             `StreamableHttp STDIO process crashed with code: ${exitCode}, signal: ${signal}`,
           );
 
@@ -427,13 +429,13 @@ serverRouter.post("/mcp", async (req, res) => {
             mcpServerPool
               .handleServerCrashWithoutNamespace(serverUuid, exitCode, signal)
               .catch((error) => {
-                console.error(
+                logger.error(
                   `Error reporting StreamableHttp STDIO crash to server pool for ${serverUuid}:`,
                   error,
                 );
               });
           } else {
-            console.warn(
+            logger.warn(
               `Could not determine server UUID for crashed StreamableHttp STDIO process: ${command} ${origArgs.join(" ")}`,
             );
           }
@@ -450,10 +452,10 @@ serverRouter.post("/mcp", async (req, res) => {
           if (serverTransport) {
             serverTransports.set(sessionId, serverTransport);
           }
-          console.log("Client <-> Proxy  sessionId: " + sessionId);
+          logger.info("Client <-> Proxy  sessionId: " + sessionId);
         },
       });
-      console.log("Created StreamableHttp client transport");
+      logger.info("Created StreamableHttp client transport");
 
       await webAppTransport.start();
 
@@ -467,7 +469,7 @@ serverRouter.post("/mcp", async (req, res) => {
           },
         });
       } catch (error) {
-        console.error(
+        logger.error(
           `Error setting up proxy for session ${newSessionId}:`,
           error,
         );
@@ -481,11 +483,11 @@ serverRouter.post("/mcp", async (req, res) => {
         res,
       );
     } catch (error) {
-      console.error("Error in /mcp POST route:", error);
+      logger.error("Error in /mcp POST route:", error);
       res.status(500).json(error);
     }
   } else {
-    // console.log(`Received POST message for sessionId ${sessionId}`);
+    // logger.info(`Received POST message for sessionId ${sessionId}`);
     try {
       const transport = webAppTransports.get(
         sessionId,
@@ -499,7 +501,7 @@ serverRouter.post("/mcp", async (req, res) => {
         );
       }
     } catch (error) {
-      console.error("Error in /mcp route:", error);
+      logger.error("Error in /mcp route:", error);
       res.status(500).json(error);
     }
   }
@@ -508,7 +510,7 @@ serverRouter.post("/mcp", async (req, res) => {
 serverRouter.delete("/mcp", async (req, res) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   const mcpServerName = (req.query.mcpServerName as string) || "Unknown Server";
-  console.log(
+  logger.info(
     `Received DELETE message for sessionId ${sessionId}, MCP server: ${mcpServerName}`,
   );
 
@@ -526,17 +528,17 @@ serverRouter.delete("/mcp", async (req, res) => {
       try {
         await serverTransport.terminateSession();
       } catch (error) {
-        console.warn(`Warning: Error terminating session ${sessionId}:`, error);
+        logger.warn(`Warning: Error terminating session ${sessionId}:`, error);
         // Continue with cleanup even if termination fails
       }
 
       await cleanupSession(sessionId);
-      console.log(
+      logger.info(
         `Session ${sessionId} terminated and cleaned up successfully`,
       );
       res.status(200).end();
     } catch (error) {
-      console.error("Error in /mcp DELETE route:", error);
+      logger.error("Error in /mcp DELETE route:", error);
       res.status(500).json(error);
     }
   } else {
@@ -546,14 +548,14 @@ serverRouter.delete("/mcp", async (req, res) => {
 
 serverRouter.get("/stdio", async (req, res) => {
   try {
-    console.log("New STDIO connection request");
+    logger.info("New STDIO connection request");
     let serverTransport: Transport | undefined;
     try {
       serverTransport = await createTransport(req);
-      console.log("Created server transport");
+      logger.info("Created server transport");
     } catch (error) {
       if (error instanceof SseError && error.code === 401) {
-        console.error(
+        logger.error(
           "Received 401 Unauthorized from MCP server. Authentication failure.",
         );
         res.status(401).json(error);
@@ -567,14 +569,14 @@ serverRouter.get("/stdio", async (req, res) => {
       "/mcp-proxy/server/message",
       res,
     );
-    console.log("Created client transport");
+    logger.info("Created client transport");
 
     webAppTransports.set(webAppTransport.sessionId, webAppTransport);
     serverTransports.set(webAppTransport.sessionId, serverTransport);
 
     // Handle cleanup when connection closes
     const handleConnectionClose = () => {
-      console.log(`Connection closed for session ${webAppTransport.sessionId}`);
+      logger.info(`Connection closed for session ${webAppTransport.sessionId}`);
       cleanupSession(webAppTransport.sessionId);
     };
 
@@ -582,7 +584,7 @@ serverRouter.get("/stdio", async (req, res) => {
     res.on("close", handleConnectionClose);
     res.on("finish", handleConnectionClose);
     res.on("error", (error) => {
-      console.error(
+      logger.error(
         `Response error for SSE session ${webAppTransport.sessionId}:`,
         error,
       );
@@ -595,7 +597,7 @@ serverRouter.get("/stdio", async (req, res) => {
 
     // Set up crash detection for the server pool
     stdinTransport.onprocesscrash = async (exitCode, signal) => {
-      console.warn(
+      logger.warn(
         `STDIO process crashed with code: ${exitCode}, signal: ${signal}`,
       );
 
@@ -604,7 +606,7 @@ serverRouter.get("/stdio", async (req, res) => {
       const command = query.command as string;
       const origArgs = shellParseArgs(query.args as string) as string[];
 
-      console.log(
+      logger.info(
         `STDIO crash handler called for command: ${command} ${origArgs.join(" ")}`,
       );
 
@@ -616,20 +618,20 @@ serverRouter.get("/stdio", async (req, res) => {
       );
 
       if (serverUuid) {
-        console.log(
+        logger.info(
           `Reporting crash to server pool for server UUID: ${serverUuid}`,
         );
         // Report crash to server pool
         mcpServerPool
           .handleServerCrashWithoutNamespace(serverUuid, exitCode, signal)
           .catch((error) => {
-            console.error(
+            logger.error(
               `Error reporting STDIO crash to server pool for ${serverUuid}:`,
               error,
             );
           });
       } else {
-        console.warn(
+        logger.warn(
           `Could not determine server UUID for crashed STDIO process: ${command} ${origArgs.join(" ")}`,
         );
       }
@@ -657,7 +659,7 @@ serverRouter.get("/stdio", async (req, res) => {
         const { cmd, args } = findActualExecutable(command, origArgs);
 
         setStdioCooldown(cmd, args, env);
-        console.log(
+        logger.info(
           `STDIO process terminated quickly (${runTime}ms), setting cooldown: ${cmd} ${args.join(" ")}`,
         );
       }
@@ -678,12 +680,12 @@ serverRouter.get("/stdio", async (req, res) => {
             .catch((error) => {
               // Ignore "Not connected" errors during cleanup
               if (error?.message && !error.message.includes("Not connected")) {
-                console.error("Error sending stderr notification:", error);
+                logger.error("Error sending stderr notification:", error);
               }
             });
           webAppTransport.close();
           cleanupSession(webAppTransport.sessionId);
-          console.error("Command not found, transports removed");
+          logger.error("Command not found, transports removed");
         } else {
           // Check for common startup errors that should trigger cooldown
           if (
@@ -703,7 +705,7 @@ serverRouter.get("/stdio", async (req, res) => {
             const { cmd, args } = findActualExecutable(command, origArgs);
 
             setStdioCooldown(cmd, args, env);
-            console.log(
+            logger.info(
               `STDIO process reported startup error, setting cooldown: ${cmd} ${args.join(" ")}`,
             );
           }
@@ -719,7 +721,7 @@ serverRouter.get("/stdio", async (req, res) => {
             .catch((error) => {
               // Ignore "Not connected" errors as they're expected when connections close
               if (error?.message && !error.message.includes("Not connected")) {
-                console.error("Error sending stderr notification:", error);
+                logger.error("Error sending stderr notification:", error);
               }
             });
         }
@@ -734,14 +736,14 @@ serverRouter.get("/stdio", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error in /stdio route:", error);
+    logger.error("Error in /stdio route:", error);
     res.status(500).json(error);
   }
 });
 
 serverRouter.get("/sse", async (req, res) => {
   try {
-    console.log(
+    logger.info(
       "New SSE connection request. NOTE: The sse transport is deprecated and has been replaced by StreamableHttp",
     );
     let serverTransport: Transport | undefined;
@@ -749,19 +751,19 @@ serverRouter.get("/sse", async (req, res) => {
       serverTransport = await createTransport(req);
     } catch (error) {
       if (error instanceof SseError && error.code === 401) {
-        console.error(
+        logger.error(
           "Received 401 Unauthorized from MCP server. Authentication failure.",
         );
         res.status(401).json(error);
         return;
       } else if (error instanceof SseError && error.code === 404) {
-        console.error(
+        logger.error(
           "Received 404 not found from MCP server. Does the MCP server support SSE?",
         );
         res.status(404).json(error);
         return;
       } else if (JSON.stringify(error).includes("ECONNREFUSED")) {
-        console.error("Connection refused. Is the MCP server running?");
+        logger.error("Connection refused. Is the MCP server running?");
         res.status(500).json(error);
       } else {
         throw error;
@@ -774,15 +776,15 @@ serverRouter.get("/sse", async (req, res) => {
         res,
       );
       webAppTransports.set(webAppTransport.sessionId, webAppTransport);
-      console.log("Created client transport");
+      logger.info("Created client transport");
       if (serverTransport) {
         serverTransports.set(webAppTransport.sessionId, serverTransport);
       }
-      console.log("Created server transport");
+      logger.info("Created server transport");
 
       // Handle cleanup when connection closes
       const handleConnectionClose = () => {
-        console.log(
+        logger.info(
           `Connection closed for session ${webAppTransport.sessionId}`,
         );
         cleanupSession(webAppTransport.sessionId);
@@ -792,7 +794,7 @@ serverRouter.get("/sse", async (req, res) => {
       res.on("close", handleConnectionClose);
       res.on("finish", handleConnectionClose);
       res.on("error", (error) => {
-        console.error(
+        logger.error(
           `Response error for STDIO session ${webAppTransport.sessionId}:`,
           error,
         );
@@ -810,7 +812,7 @@ serverRouter.get("/sse", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("Error in /sse route:", error);
+    logger.error("Error in /sse route:", error);
     res.status(500).json(error);
   }
 });
@@ -818,7 +820,7 @@ serverRouter.get("/sse", async (req, res) => {
 serverRouter.post("/message", async (req, res) => {
   try {
     const sessionId = req.query.sessionId;
-    // console.log(`Received POST message for sessionId ${sessionId}`);
+    // logger.info(`Received POST message for sessionId ${sessionId}`);
 
     const transport = webAppTransports.get(
       sessionId as string,
@@ -829,7 +831,7 @@ serverRouter.post("/message", async (req, res) => {
     }
     await transport.handlePostMessage(req, res);
   } catch (error) {
-    console.error("Error in /message route:", error);
+    logger.error("Error in /message route:", error);
     res.status(500).json(error);
   }
 });

@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "crypto";
 import express from "express";
 
+import logger from "@/utils/logger";
+
 // OAuth 2.0 Authorization Parameters interface
 export interface OAuthParams {
   client_id: string;
@@ -266,7 +268,7 @@ export function rateLimitAuth(
   const identifier = req.ip || req.socket?.remoteAddress || "unknown";
 
   if (authEndpointLimiter.isRateLimited(identifier)) {
-    console.log(
+    logger.info(
       `[RATE LIMIT] Authorization endpoint rate limited for IP: ${identifier} - Too many authorization attempts`,
     );
     return res.status(429).json({
@@ -290,7 +292,7 @@ export function rateLimitToken(
   const identifier = req.ip || req.socket?.remoteAddress || "unknown";
 
   if (tokenEndpointLimiter.isRateLimited(identifier)) {
-    console.log(
+    logger.info(
       `[RATE LIMIT] Token endpoint rate limited for IP: ${identifier} - Too many token requests`,
     );
     return res.status(429).json({

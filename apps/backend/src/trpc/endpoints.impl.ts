@@ -9,6 +9,8 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import {
   ApiKeysRepository,
   endpointsRepository,
@@ -66,11 +68,21 @@ export const endpointsImplementations = {
         };
       }
 
+      logger.info(input);
+
       const result = await endpointsRepository.create({
         name: input.name,
         description: input.description,
         namespace_uuid: input.namespaceUuid,
         enable_api_key_auth: input.enableApiKeyAuth ?? true,
+        enable_max_rate: input.enableMaxRate ?? false,
+        enable_client_max_rate: input.enableClientMaxRate ?? false,
+        max_rate: input.maxRate,
+        max_rate_seconds: input.maxRateSeconds,
+        client_max_rate: input.clientMaxRate,
+        client_max_rate_seconds: input.clientMaxRateSeconds,
+        client_max_rate_strategy: input.clientMaxRateStrategy,
+        client_max_rate_strategy_key: input.clientMaxRateStrategyKey,
         enable_oauth: input.enableOauth ?? false,
         use_query_param_auth: input.useQueryParamAuth ?? false,
         user_id: effectiveUserId,
@@ -104,7 +116,7 @@ export const endpointsImplementations = {
                 bearerToken = newApiKey.key;
               }
             } catch (apiKeyError) {
-              console.error(
+              logger.error(
                 "Error getting API key for MCP server:",
                 apiKeyError,
               );
@@ -124,7 +136,7 @@ export const endpointsImplementations = {
             user_id: effectiveUserId,
           });
         } catch (mcpError) {
-          console.error("Error creating MCP server:", mcpError);
+          logger.error("Error creating MCP server:", mcpError);
           // Don't fail the endpoint creation if MCP server creation fails
           // Just log the error and continue
         }
@@ -136,7 +148,7 @@ export const endpointsImplementations = {
         message: "Endpoint created successfully",
       };
     } catch (error) {
-      console.error("Error creating endpoint:", error);
+      logger.error("Error creating endpoint:", error);
       return {
         success: false as const,
         message:
@@ -159,7 +171,7 @@ export const endpointsImplementations = {
         message: "Endpoints retrieved successfully",
       };
     } catch (error) {
-      console.error("Error fetching endpoints:", error);
+      logger.error("Error fetching endpoints:", error);
       return {
         success: false as const,
         data: [],
@@ -201,7 +213,7 @@ export const endpointsImplementations = {
         message: "Endpoint retrieved successfully",
       };
     } catch (error) {
-      console.error("Error fetching endpoint:", error);
+      logger.error("Error fetching endpoint:", error);
       return {
         success: false as const,
         message: "Failed to fetch endpoint",
@@ -251,7 +263,7 @@ export const endpointsImplementations = {
         message: "Endpoint deleted successfully",
       };
     } catch (error) {
-      console.error("Error deleting endpoint:", error);
+      logger.error("Error deleting endpoint:", error);
       return {
         success: false as const,
         message:
@@ -332,6 +344,14 @@ export const endpointsImplementations = {
         description: input.description,
         namespace_uuid: input.namespaceUuid,
         enable_api_key_auth: input.enableApiKeyAuth,
+        enable_max_rate: input.enableMaxRate ?? false,
+        enable_client_max_rate: input.enableClientMaxRate ?? false,
+        max_rate: input.maxRate,
+        max_rate_seconds: input.maxRateSeconds,
+        client_max_rate: input.clientMaxRate,
+        client_max_rate_seconds: input.clientMaxRateSeconds,
+        client_max_rate_strategy: input.clientMaxRateStrategy,
+        client_max_rate_strategy_key: input.clientMaxRateStrategyKey,
         enable_oauth: input.enableOauth,
         use_query_param_auth: input.useQueryParamAuth,
       });
@@ -342,7 +362,7 @@ export const endpointsImplementations = {
         message: "Endpoint updated successfully",
       };
     } catch (error) {
-      console.error("Error updating endpoint:", error);
+      logger.error("Error updating endpoint:", error);
       return {
         success: false as const,
         message:

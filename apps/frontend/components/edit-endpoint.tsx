@@ -115,6 +115,14 @@ export function EditEndpoint({
       description: "",
       namespaceUuid: "",
       enableApiKeyAuth: true,
+      enableMaxRate: false,
+      enableClientMaxRate: false,
+      maxRate: undefined,
+      maxRateSeconds: undefined,
+      clientMaxRate: undefined,
+      clientMaxRateSeconds: undefined,
+      clientMaxRateStrategy: "ip",
+      clientMaxRateStrategyKey: "",
       enableOauth: false,
       useQueryParamAuth: false,
     },
@@ -128,6 +136,14 @@ export function EditEndpoint({
         description: endpoint.description || "",
         namespaceUuid: endpoint.namespace.uuid,
         enableApiKeyAuth: endpoint.enable_api_key_auth ?? true,
+        enableMaxRate: endpoint.enableMaxRate,
+        enableClientMaxRate: endpoint.enableClientMaxRate,
+        maxRate: endpoint.maxRate,
+        maxRateSeconds: endpoint.maxRateSeconds,
+        clientMaxRate: endpoint.clientMaxRate,
+        clientMaxRateSeconds: endpoint.clientMaxRateSeconds,
+        clientMaxRateStrategy: endpoint.clientMaxRateStrategy,
+        clientMaxRateStrategyKey: endpoint.clientMaxRateStrategyKey,
         enableOauth: endpoint.enable_oauth ?? false,
         useQueryParamAuth: endpoint.use_query_param_auth ?? false,
       });
@@ -160,10 +176,17 @@ export function EditEndpoint({
         description: data.description,
         namespaceUuid: data.namespaceUuid,
         enableApiKeyAuth: data.enableApiKeyAuth,
+        enableMaxRate: data.enableMaxRate,
+        enableClientMaxRate: data.enableClientMaxRate,
+        maxRate: data.maxRate,
+        maxRateSeconds: data.maxRateSeconds,
+        clientMaxRate: data.clientMaxRate,
+        clientMaxRateSeconds: data.clientMaxRateSeconds,
+        clientMaxRateStrategy: data.clientMaxRateStrategy,
+        clientMaxRateStrategyKey: data.clientMaxRateStrategyKey,
         enableOauth: data.enableOauth,
         useQueryParamAuth: data.useQueryParamAuth,
       };
-
       // Use tRPC mutation
       updateEndpointMutation.mutate(apiPayload);
     } catch (error) {
@@ -196,7 +219,7 @@ export function EditEndpoint({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("endpoints:edit.title")}</DialogTitle>
           <DialogDescription>
@@ -300,7 +323,231 @@ export function EditEndpoint({
                 {t("endpoints:edit.namespaceHelpText")}
               </p>
             </div>
-
+            {/* Rate Limit Settings */}
+            <div className="space-y-4 border-t pt-4">
+              <h4 className="text-sm font-medium">
+                {t("endpoints:rateLimit")}
+              </h4>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-medium">
+                    {t("endpoints:enableMaxRate")}
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("endpoints:enableMaxRateDescription")}
+                  </p>
+                </div>
+                <Switch
+                  checked={editForm.watch("enableMaxRate")}
+                  onCheckedChange={(checked) =>
+                    editForm.setValue("enableMaxRate", checked)
+                  }
+                  disabled={isUpdating}
+                />
+              </div>
+              {editForm.watch("enableMaxRate") && (
+                <>
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="maxRate" className="text-sm font-medium">
+                      {t("endpoints:maxRate")}
+                    </label>
+                    <Input
+                      id="maxRate"
+                      {...editForm.register("maxRate", { valueAsNumber: true })}
+                      placeholder={t("endpoints:maxRatePlaceholder")}
+                      type="number"
+                    />
+                    {editForm.formState.errors.maxRate && (
+                      <p className="text-sm text-red-500">
+                        {editForm.formState.errors.maxRate.message}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {t("endpoints:maxRateDescription")}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="maxRateSeconds"
+                      className="text-sm font-medium"
+                    >
+                      {t("endpoints:maxRateSeconds")}
+                    </label>
+                    <Input
+                      id="maxRateSeconds"
+                      type="number"
+                      {...editForm.register("maxRateSeconds", {
+                        valueAsNumber: true,
+                      })}
+                      placeholder={t("endpoints:maxRateSecondsPlaceholder")}
+                    />
+                    {editForm.formState.errors.maxRateSeconds && (
+                      <p className="text-sm text-red-500">
+                        {editForm.formState.errors.maxRateSeconds.message}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {t("endpoints:maxRateSecondsDescription")}
+                    </p>
+                  </div>
+                </>
+              )}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-medium">
+                    {t("endpoints:enableClientMaxRate")}
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("endpoints:enableClientMaxRateDescription")}
+                  </p>
+                </div>
+                <Switch
+                  checked={editForm.watch("enableClientMaxRate")}
+                  onCheckedChange={(checked) =>
+                    editForm.setValue("enableClientMaxRate", checked)
+                  }
+                  disabled={isUpdating}
+                />
+              </div>
+              {editForm.watch("enableClientMaxRate") && (
+                <>
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="clientMaxRate"
+                      className="text-sm font-medium"
+                    >
+                      {t("endpoints:clientMaxRate")}
+                    </label>
+                    <Input
+                      id="clientMaxRate"
+                      {...editForm.register("clientMaxRate", {
+                        valueAsNumber: true,
+                      })}
+                      type="number"
+                      placeholder={t("endpoints:clientMaxRatePlaceholder")}
+                    />
+                    {editForm.formState.errors.clientMaxRate && (
+                      <p className="text-sm text-red-500">
+                        {editForm.formState.errors.clientMaxRate.message}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {t("endpoints:clientMaxRateDescription")}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="clientMaxRateSeconds"
+                      className="text-sm font-medium"
+                    >
+                      {t("endpoints:clientMaxRateSeconds")}
+                    </label>
+                    <Input
+                      id="clientMaxRateSeconds"
+                      {...editForm.register("clientMaxRateSeconds", {
+                        valueAsNumber: true,
+                      })}
+                      placeholder={t(
+                        "endpoints:clientMaxRateSecondsPlaceholder",
+                      )}
+                      type="number"
+                    />
+                    {editForm.formState.errors.clientMaxRateSeconds && (
+                      <p className="text-sm text-red-500">
+                        {editForm.formState.errors.clientMaxRateSeconds.message}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {t("endpoints:clientMaxRateSecondsDescription")}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="clientMaxRateStrategy"
+                      className="text-sm font-medium"
+                    >
+                      {t("endpoints:clientMaxRateStrategy")}
+                    </label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between"
+                          type="button"
+                        >
+                          <span>
+                            {editForm.watch("clientMaxRateStrategy") === null
+                              ? t("endpoints:selectStrategy")
+                              : editForm.watch("clientMaxRateStrategy") === "ip"
+                                ? t("endpoints:ipStrategy")
+                                : editForm.watch("clientMaxRateStrategy") ===
+                                    "header"
+                                  ? t("endpoints:headerStrategy")
+                                  : t("endpoints:selectStrategy")}
+                          </span>
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
+                        <DropdownMenuItem
+                          onClick={() =>
+                            editForm.setValue("clientMaxRateStrategy", "ip")
+                          }
+                        >
+                          {t("endpoints:ipStrategy")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            editForm.setValue("clientMaxRateStrategy", "header")
+                          }
+                        >
+                          {t("endpoints:headerStrategy")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {editForm.formState.errors.clientMaxRateStrategy && (
+                      <p className="text-sm text-red-500">
+                        {
+                          editForm.formState.errors.clientMaxRateStrategy
+                            .message
+                        }
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {t("endpoints:clientMaxRateStrategyDescription")}
+                    </p>
+                  </div>
+                  {editForm.watch("clientMaxRateStrategy") === "header" && (
+                    <div className="flex flex-col gap-2">
+                      <label
+                        htmlFor="clientMaxRateStrategyKey"
+                        className="text-sm font-medium"
+                      >
+                        {t("endpoints:clientMaxRateStrategyKey")}
+                      </label>
+                      <Input
+                        id="clientMaxRateStrategyKey"
+                        {...editForm.register("clientMaxRateStrategyKey")}
+                        placeholder={t(
+                          "endpoints:clientMaxRateStrategyKeyPlaceholder",
+                        )}
+                      />
+                      {editForm.formState.errors.clientMaxRateStrategyKey && (
+                        <p className="text-sm text-red-500">
+                          {
+                            editForm.formState.errors.clientMaxRateStrategyKey
+                              .message
+                          }
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {t("endpoints:clientMaxRateStrategyKeyDescription")}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
             {/* API Key Authentication Settings */}
             <div className="space-y-4 border-t pt-4">
               <h4 className="text-sm font-medium">

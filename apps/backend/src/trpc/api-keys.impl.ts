@@ -11,6 +11,8 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import { ApiKeysRepository } from "../db/repositories";
 import { ApiKeysSerializer } from "../db/serializers";
 
@@ -33,7 +35,7 @@ export const apiKeysImplementations = {
 
       return ApiKeysSerializer.serializeCreateApiKeyResponse(result);
     } catch (error) {
-      console.error("Error creating API key:", error);
+      logger.error("Error creating API key:", error);
       throw new Error(
         error instanceof Error ? error.message : "Internal server error",
       );
@@ -50,7 +52,7 @@ export const apiKeysImplementations = {
         apiKeys: ApiKeysSerializer.serializeApiKeyList(apiKeys),
       };
     } catch (error) {
-      console.error("Error fetching API keys:", error);
+      logger.error("Error fetching API keys:", error);
       throw new Error("Failed to fetch API keys");
     }
   },
@@ -67,7 +69,7 @@ export const apiKeysImplementations = {
 
       return ApiKeysSerializer.serializeApiKey(result);
     } catch (error) {
-      console.error("Error updating API key:", error);
+      logger.error("Error updating API key:", error);
       throw new Error(
         error instanceof Error ? error.message : "Internal server error",
       );
@@ -86,7 +88,7 @@ export const apiKeysImplementations = {
         message: "API key deleted successfully",
       };
     } catch (error) {
-      console.error("Error deleting API key:", error);
+      logger.error("Error deleting API key:", error);
       return {
         success: false,
         message:
@@ -106,7 +108,7 @@ export const apiKeysImplementations = {
         key_uuid: result.key_uuid,
       };
     } catch (error) {
-      console.error("Error validating API key:", error);
+      logger.error("Error validating API key:", error);
       return { valid: false };
     }
   },

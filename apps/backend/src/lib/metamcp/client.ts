@@ -5,6 +5,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ServerParameters } from "@repo/zod-types";
 
+import logger from "@/utils/logger";
+
 import { ProcessManagedStdioTransport } from "../stdio-transport/process-managed-transport";
 import { metamcpLogStore } from "./log-store";
 import { serverErrorTracker } from "./server-error-tracker";
@@ -170,47 +172,53 @@ export const connectMetaMcpClient = async (
   let count = 0;
   let retry = true;
 
-  console.log(
+  logger.info(
     `Connecting to server ${serverParams.name} (${serverParams.uuid}) with max attempts: ${maxAttempts}`,
   );
 
   while (retry) {
+    let transport: Transport | undefined;
+    let client: Client | undefined;
+
     try {
       // Check if server is already in error state before attempting connection
       const isInErrorState = await serverErrorTracker.isServerInErrorState(
         serverParams.uuid,
       );
       if (isInErrorState) {
-        console.warn(
+        logger.info(
           `Server ${serverParams.name} (${serverParams.uuid}) is already in ERROR state, skipping connection attempt`,
         );
         return undefined;
       }
 
       // Create fresh client and transport for each attempt
-      const { client, transport } = createMetaMcpClient(serverParams);
+      const result = createMetaMcpClient(serverParams);
+      client = result.client;
+      transport = result.transport;
+
       if (!client || !transport) {
         return undefined;
       }
 
       // Set up process crash detection for STDIO transports BEFORE connecting
       if (transport instanceof ProcessManagedStdioTransport) {
-        console.log(
+        logger.info(
           `Setting up crash handler for server ${serverParams.name} (${serverParams.uuid})`,
         );
         transport.onprocesscrash = (exitCode, signal) => {
-          console.warn(
+          logger.info(
             `Process crashed for server ${serverParams.name} (${serverParams.uuid}): code=${exitCode}, signal=${signal}`,
           );
 
           // Notify the pool about the crash
           if (onProcessCrash) {
-            console.log(
+            logger.info(
               `Calling onProcessCrash callback for server ${serverParams.name} (${serverParams.uuid})`,
             );
             onProcessCrash(exitCode, signal);
           } else {
-            console.warn(
+            logger.info(
               `No onProcessCrash callback provided for server ${serverParams.name} (${serverParams.uuid})`,
             );
           }
@@ -222,11 +230,11 @@ export const connectMetaMcpClient = async (
       return {
         client,
         cleanup: async () => {
-          await transport.close();
-          await client.close();
+          await transport!.close();
+          await client!.close();
         },
         onProcessCrash: (exitCode, signal) => {
-          console.warn(
+          logger.warn(
             `Process crash detected for server ${serverParams.name} (${serverParams.uuid}): code=${exitCode}, signal=${signal}`,
           );
 
@@ -243,6 +251,30 @@ export const connectMetaMcpClient = async (
         `Error connecting to MetaMCP client (attempt ${count + 1}/${maxAttempts})`,
         error,
       );
+
+      // CRITICAL FIX: Clean up transport/process on connection failure
+      // This prevents orphaned processes from accumulating
+      if (transport) {
+        try {
+          await transport.close();
+          console.log(
+            `Cleaned up transport for failed connection to ${serverParams.name} (${serverParams.uuid})`,
+          );
+        } catch (cleanupError) {
+          console.error(
+            `Error cleaning up transport for ${serverParams.name} (${serverParams.uuid}):`,
+            cleanupError,
+          );
+        }
+      }
+      if (client) {
+        try {
+          await client.close();
+        } catch (cleanupError) {
+          // Client may not be fully initialized, ignore
+        }
+      }
+
       count++;
       retry = count < maxAttempts;
       if (retry) {

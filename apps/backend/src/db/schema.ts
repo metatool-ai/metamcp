@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -251,6 +252,16 @@ export const endpointsTable = pgTable(
       .references(() => namespacesTable.uuid, { onDelete: "cascade" }),
     enable_api_key_auth: boolean("enable_api_key_auth").notNull().default(true),
     enable_oauth: boolean("enable_oauth").notNull().default(false),
+    enable_max_rate: boolean("enable_max_rate").notNull().default(false),
+    enable_client_max_rate: boolean("enable_client_max_rate")
+      .notNull()
+      .default(false),
+    max_rate: integer("max_rate"),
+    max_rate_seconds: integer("max_rate_seconds"),
+    client_max_rate: integer("client_max_rate"),
+    client_max_rate_seconds: integer("client_max_rate_seconds"),
+    client_max_rate_strategy: text("client_max_rate_strategy"),
+    client_max_rate_strategy_key: text("client_max_rate_strategy_key"),
     use_query_param_auth: boolean("use_query_param_auth")
       .notNull()
       .default(false),

@@ -21,12 +21,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
+import logger from "@/utils/logger";
+
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { configService } from "../config.service";
 import { ConnectedClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
 import { mcpServerPool } from "./mcp-server-pool";
-import { toolsSyncCache } from "./tools-sync-cache";
 import {
   createFilterCallToolMiddleware,
   createFilterListToolsMiddleware,
@@ -43,6 +44,7 @@ import {
   mapOverrideNameToOriginal,
 } from "./metamcp-middleware/tool-overrides.functional";
 import { parseToolName } from "./tool-name-parser";
+import { toolsSyncCache } from "./tools-sync-cache";
 import { sanitizeName } from "./utils";
 
 /**
@@ -82,7 +84,7 @@ async function filterOutOverrideTools(
         // This is not an override, include it
         filteredTools.push(tool);
       } catch (error) {
-        console.error(
+        logger.error(
           `Error checking if tool ${tool.name} is an override:`,
           error,
         );
@@ -144,7 +146,10 @@ export const createServer = async (
     request,
     context,
   ) => {
-    console.log("[DEBUG-TOOLS] 🔍 tools/list called for namespace:", namespaceUuid);
+    console.log(
+      "[DEBUG-TOOLS] 🔍 tools/list called for namespace:",
+      namespaceUuid,
+    );
     const startTime = performance.now();
     const serverParams = await getMcpServers(
       context.namespaceUuid,
@@ -158,15 +163,19 @@ export const createServer = async (
     // We'll filter servers during processing after getting sessions to check actual MCP server names
     const allServerEntries = Object.entries(serverParams);
 
-    console.log(`[DEBUG-TOOLS] 📋 Processing ${allServerEntries.length} servers`);
-    
+    console.log(
+      `[DEBUG-TOOLS] 📋 Processing ${allServerEntries.length} servers`,
+    );
+
     await Promise.allSettled(
       allServerEntries.map(async ([mcpServerUuid, params]) => {
         console.log(`[DEBUG-TOOLS] 🔧 Server: ${params.name || mcpServerUuid}`);
-        
+
         // Skip if we've already visited this server to prevent circular references
         if (visitedServers.has(mcpServerUuid)) {
-          console.log(`[DEBUG-TOOLS] ⏭️  Skipping already visited: ${params.name}`);
+          console.log(
+            `[DEBUG-TOOLS] ⏭️  Skipping already visited: ${params.name}`,
+          );
           return;
         }
         const session = await mcpServerPool.getSession(
@@ -186,7 +195,7 @@ export const createServer = async (
         const ourServerName = `metamcp-unified-${namespaceUuid}`;
 
         if (actualServerName === ourServerName) {
-          console.log(
+          logger.info(
             `Skipping self-referencing MetaMCP server: "${actualServerName}"`,
           );
           return;
@@ -234,8 +243,10 @@ export const createServer = async (
             cursor = result.nextCursor;
             hasMore = !!result.nextCursor;
           }
-          
-          console.log(`[DEBUG-TOOLS] ⏱️  Fetched ${allServerTools.length} tools from ${serverName} in ${(performance.now() - toolFetchStart).toFixed(2)}ms`);
+
+          console.log(
+            `[DEBUG-TOOLS] ⏱️  Fetched ${allServerTools.length} tools from ${serverName} in ${(performance.now() - toolFetchStart).toFixed(2)}ms`,
+          );
 
           // Save original tools to database (before middleware processing)
           // This ensures we only save the actual tool names, not override names
@@ -243,9 +254,14 @@ export const createServer = async (
           try {
             // PERFORMANCE OPTIMIZATION: Check hash FIRST to avoid expensive operations
             const toolNames = allServerTools.map((tool) => tool.name);
-            const hasChanged = toolsSyncCache.hasChanged(mcpServerUuid, toolNames);
-            
-            console.log(`[DEBUG-TOOLS] 🔍 Hash check for ${serverName}: ${hasChanged ? 'CHANGED' : 'UNCHANGED'}`);
+            const hasChanged = toolsSyncCache.hasChanged(
+              mcpServerUuid,
+              toolNames,
+            );
+
+            console.log(
+              `[DEBUG-TOOLS] 🔍 Hash check for ${serverName}: ${hasChanged ? "CHANGED" : "UNCHANGED"}`,
+            );
 
             if (hasChanged) {
               const toolsToSave = await filterOutOverrideTools(
@@ -257,7 +273,7 @@ export const createServer = async (
               if (toolsToSave.length > 0) {
                 // Update cache
                 toolsSyncCache.update(mcpServerUuid, toolNames);
-                
+
                 // Sync with cleanup
                 await toolsImplementations.sync({
                   tools: toolsToSave,
@@ -266,7 +282,7 @@ export const createServer = async (
               }
             }
           } catch (dbError) {
-            console.error(
+            logger.error(
               `Error syncing tools to database for server ${serverName}:`,
               dbError,
             );
@@ -287,14 +303,16 @@ export const createServer = async (
 
           allTools.push(...toolsWithSource);
         } catch (error) {
-          console.error(`Error fetching tools from: ${serverName}`, error);
+          logger.error(`Error fetching tools from: ${serverName}`, error);
         }
       }),
     );
 
     const totalTime = performance.now() - startTime;
-    console.log(`[DEBUG-TOOLS] ✅ tools/list completed in ${totalTime.toFixed(2)}ms, returning ${allTools.length} tools`);
-    
+    console.log(
+      `[DEBUG-TOOLS] ✅ tools/list completed in ${totalTime.toFixed(2)}ms, returning ${allTools.length} tools`,
+    );
+
     return { tools: allTools };
   };
 
@@ -382,7 +400,7 @@ export const createServer = async (
                   break;
                 }
               } catch (error) {
-                console.error(
+                logger.error(
                   `Error checking tools for server ${serverName}:`,
                   error,
                 );
@@ -392,7 +410,7 @@ export const createServer = async (
           }
         }
       } catch (error) {
-        console.error(`Error dynamically finding tool ${name}:`, error);
+        logger.error(`Error dynamically finding tool ${name}:`, error);
       }
     }
 
@@ -436,7 +454,7 @@ export const createServer = async (
       // Cast the result to CallToolResult type
       return result as CallToolResult;
     } catch (error) {
-      console.error(
+      logger.error(
         `Error calling tool "${name}" through ${
           clientForTool.client.getServerVersion()?.name || "unknown"
         }:`,
@@ -510,7 +528,7 @@ export const createServer = async (
 
       return response;
     } catch (error) {
-      console.error(
+      logger.error(
         `Error getting prompt through ${
           clientForPrompt.client.getServerVersion()?.name
         }:`,
@@ -536,7 +554,7 @@ export const createServer = async (
       ([uuid, params]) => {
         // Skip if we've already visited this server to prevent circular references
         if (visitedServers.has(uuid)) {
-          console.log(
+          logger.info(
             `Skipping already visited server in prompts: ${params.name || uuid}`,
           );
           return false;
@@ -544,7 +562,7 @@ export const createServer = async (
 
         // Check if this server is the same instance to prevent self-referencing
         if (isSameServerInstance(params, uuid)) {
-          console.log(
+          logger.info(
             `Skipping self-referencing server in prompts: ${params.name || uuid}`,
           );
           return false;
@@ -572,7 +590,7 @@ export const createServer = async (
         const ourServerName = `metamcp-unified-${namespaceUuid}`;
 
         if (actualServerName === ourServerName) {
-          console.log(
+          logger.info(
             `Skipping self-referencing MetaMCP server in prompts: "${actualServerName}"`,
           );
           return;
@@ -609,7 +627,7 @@ export const createServer = async (
             allPrompts.push(...promptsWithSource);
           }
         } catch (error) {
-          console.error(`Error fetching prompts from: ${serverName}`, error);
+          logger.error(`Error fetching prompts from: ${serverName}`, error);
         }
       }),
     );
@@ -637,7 +655,7 @@ export const createServer = async (
       ([uuid, params]) => {
         // Skip if we've already visited this server to prevent circular references
         if (visitedServers.has(uuid)) {
-          console.log(
+          logger.info(
             `Skipping already visited server in resources: ${params.name || uuid}`,
           );
           return false;
@@ -645,7 +663,7 @@ export const createServer = async (
 
         // Check if this server is the same instance to prevent self-referencing
         if (isSameServerInstance(params, uuid)) {
-          console.log(
+          logger.info(
             `Skipping self-referencing server in resources: ${params.name || uuid}`,
           );
           return false;
@@ -673,7 +691,7 @@ export const createServer = async (
         const ourServerName = `metamcp-unified-${namespaceUuid}`;
 
         if (actualServerName === ourServerName) {
-          console.log(
+          logger.info(
             `Skipping self-referencing MetaMCP server in resources: "${actualServerName}"`,
           );
           return;
@@ -708,7 +726,7 @@ export const createServer = async (
             allResources.push(...resourcesWithSource);
           }
         } catch (error) {
-          console.error(`Error fetching resources from: ${serverName}`, error);
+          logger.error(`Error fetching resources from: ${serverName}`, error);
         }
       }),
     );
@@ -740,7 +758,7 @@ export const createServer = async (
         ReadResourceResultSchema,
       );
     } catch (error) {
-      console.error(
+      logger.error(
         `Error reading resource through ${
           clientForResource.client.getServerVersion()?.name
         }:`,
@@ -768,7 +786,7 @@ export const createServer = async (
         ([uuid, params]) => {
           // Skip if we've already visited this server to prevent circular references
           if (visitedServers.has(uuid)) {
-            console.log(
+            logger.info(
               `Skipping already visited server in resource templates: ${params.name || uuid}`,
             );
             return false;
@@ -776,7 +794,7 @@ export const createServer = async (
 
           // Check if this server is the same instance to prevent self-referencing
           if (isSameServerInstance(params, uuid)) {
-            console.log(
+            logger.info(
               `Skipping self-referencing server in resource templates: ${params.name || uuid}`,
             );
             return false;
@@ -804,7 +822,7 @@ export const createServer = async (
           const ourServerName = `metamcp-unified-${namespaceUuid}`;
 
           if (actualServerName === ourServerName) {
-            console.log(
+            logger.info(
               `Skipping self-referencing MetaMCP server in resource templates: "${actualServerName}"`,
             );
             return;
@@ -838,7 +856,7 @@ export const createServer = async (
               allTemplates.push(...templatesWithSource);
             }
           } catch (error) {
-            console.error(
+            logger.error(
               `Error fetching resource templates from: ${serverName}`,
               error,
             );

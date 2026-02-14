@@ -1,5 +1,7 @@
 import express from "express";
 
+import logger from "@/utils/logger";
+
 import { oauthRepository } from "../../db/repositories";
 import {
   generateSecureClientId,
@@ -193,7 +195,7 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
 
     res.status(201).json(response);
   } catch (error) {
-    console.error("Error in OAuth registration endpoint:", error);
+    logger.error("Error in OAuth registration endpoint:", error);
     res.status(500).json({
       error: "server_error",
       error_description: "Internal server error during client registration",
@@ -266,7 +268,7 @@ registrationRouter.get("/oauth/register", async (req, res) => {
       ],
     });
   } catch (error) {
-    console.error("Error in OAuth registration info endpoint:", error);
+    logger.error("Error in OAuth registration info endpoint:", error);
     res.status(500).json({
       error: "server_error",
       error_description: "Internal server error",
