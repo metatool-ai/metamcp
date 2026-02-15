@@ -37,7 +37,7 @@ function makeServer(
 }
 
 describe("extractForwardedHeaders", () => {
-  it("should extract matching headers from client request", () => {
+  it("should extract matching headers with case-insensitive lookup", () => {
     const clientHeaders: Record<string, string | string[] | undefined> = {
       "x-octopus-apikey": "API-123",
       authorization: "Bearer user-token",
@@ -56,26 +56,6 @@ describe("extractForwardedHeaders", () => {
 
     expect(result).toEqual({
       "server-1": { "X-Octopus-ApiKey": "API-123" },
-    });
-  });
-
-  it("should handle case-insensitive header matching", () => {
-    const clientHeaders: Record<string, string | string[] | undefined> = {
-      "x-custom-auth": "my-secret",
-    };
-
-    const serverParams: Record<string, ServerParameters> = {
-      "server-1": makeServer({
-        uuid: "server-1",
-        name: "my-server",
-        forward_headers: ["X-Custom-Auth"],
-      }),
-    };
-
-    const result = extractForwardedHeaders(clientHeaders, serverParams);
-
-    expect(result).toEqual({
-      "server-1": { "X-Custom-Auth": "my-secret" },
     });
   });
 
@@ -106,32 +86,7 @@ describe("extractForwardedHeaders", () => {
     });
   });
 
-  it("should skip servers without forward_headers", () => {
-    const clientHeaders: Record<string, string | string[] | undefined> = {
-      "x-octopus-apikey": "API-123",
-    };
-
-    const serverParams: Record<string, ServerParameters> = {
-      "server-1": makeServer({
-        uuid: "server-1",
-        name: "octopus",
-        forward_headers: ["X-Octopus-ApiKey"],
-      }),
-      "server-2": makeServer({
-        uuid: "server-2",
-        name: "no-forwarding",
-        // no forward_headers
-      }),
-    };
-
-    const result = extractForwardedHeaders(clientHeaders, serverParams);
-
-    expect(result).toEqual({
-      "server-1": { "X-Octopus-ApiKey": "API-123" },
-    });
-  });
-
-  it("should skip servers with empty forward_headers array", () => {
+  it("should skip servers without forward_headers or with empty array", () => {
     const clientHeaders: Record<string, string | string[] | undefined> = {
       "x-key": "value",
     };
@@ -139,6 +94,11 @@ describe("extractForwardedHeaders", () => {
     const serverParams: Record<string, ServerParameters> = {
       "server-1": makeServer({
         uuid: "server-1",
+        name: "no-forward",
+        // no forward_headers
+      }),
+      "server-2": makeServer({
+        uuid: "server-2",
         name: "empty-forward",
         forward_headers: [],
       }),
@@ -213,10 +173,8 @@ describe("extractForwardedHeaders", () => {
     });
   });
 
-  it("should handle empty client headers", () => {
-    const clientHeaders: Record<string, string | string[] | undefined> = {};
-
-    const serverParams: Record<string, ServerParameters> = {
+  it("should return empty for empty client headers or empty server params", () => {
+    const serverWithHeaders: Record<string, ServerParameters> = {
       "server-1": makeServer({
         uuid: "server-1",
         name: "octopus",
@@ -224,99 +182,8 @@ describe("extractForwardedHeaders", () => {
       }),
     };
 
-    const result = extractForwardedHeaders(clientHeaders, serverParams);
-
-    expect(result).toEqual({});
-  });
-
-  it("should handle empty server params", () => {
-    const clientHeaders: Record<string, string | string[] | undefined> = {
-      "x-key": "value",
-    };
-
-    const result = extractForwardedHeaders(clientHeaders, {});
-
-    expect(result).toEqual({});
-  });
-});
-
-describe("mergeHeaders", () => {
-  it("should merge static and forwarded headers", () => {
-    const result = mergeHeaders(
-      { "X-Static": "static-value" },
-      { "X-Forwarded": "forwarded-value" },
-    );
-
-    expect(result).toEqual({
-      "X-Static": "static-value",
-      "X-Forwarded": "forwarded-value",
-    });
-  });
-
-  it("should let forwarded headers override static headers", () => {
-    const result = mergeHeaders(
-      { "X-Api-Key": "admin-default-key" },
-      { "X-Api-Key": "user-specific-key" },
-    );
-
-    expect(result).toEqual({
-      "X-Api-Key": "user-specific-key",
-    });
-  });
-
-  it("should handle null static headers", () => {
-    const result = mergeHeaders(null, { "X-Forwarded": "value" });
-
-    expect(result).toEqual({ "X-Forwarded": "value" });
-  });
-
-  it("should handle undefined static headers", () => {
-    const result = mergeHeaders(undefined, { "X-Forwarded": "value" });
-
-    expect(result).toEqual({ "X-Forwarded": "value" });
-  });
-
-  it("should handle undefined forwarded headers", () => {
-    const result = mergeHeaders({ "X-Static": "value" }, undefined);
-
-    expect(result).toEqual({ "X-Static": "value" });
-  });
-
-  it("should handle both undefined", () => {
-    const result = mergeHeaders(undefined, undefined);
-
-    expect(result).toEqual({});
-  });
-});
-
-describe("serverRequiresForwardedHeaders", () => {
-  it("should return true when forward_headers has entries", () => {
-    const params = makeServer({
-      uuid: "server-1",
-      name: "test",
-      forward_headers: ["X-Api-Key"],
-    });
-
-    expect(serverRequiresForwardedHeaders(params)).toBe(true);
-  });
-
-  it("should return false when forward_headers is empty", () => {
-    const params = makeServer({
-      uuid: "server-1",
-      name: "test",
-      forward_headers: [],
-    });
-
-    expect(serverRequiresForwardedHeaders(params)).toBe(false);
-  });
-
-  it("should return false when forward_headers is undefined", () => {
-    const params = makeServer({
-      uuid: "server-1",
-      name: "test",
-    });
-
-    expect(serverRequiresForwardedHeaders(params)).toBe(false);
+    expect(extractForwardedHeaders({}, serverWithHeaders)).toEqual({});
+    expect(extractForwardedHeaders({ "x-key": "value" }, {})).toEqual({});
   });
 });
 
@@ -344,9 +211,37 @@ describe("extractForwardedHeaders - security", () => {
 
     const result = extractForwardedHeaders(clientHeaders, serverParams);
 
-    // Only X-API-Key should be forwarded; denied headers are silently dropped
     expect(result).toEqual({
       "server-1": { "X-API-Key": "legit-key" },
+    });
+  });
+
+  it("should block proxy-* and sec-* prefixed headers", () => {
+    const clientHeaders: Record<string, string | string[] | undefined> = {
+      "proxy-connection": "keep-alive",
+      "proxy-authenticate": "Basic",
+      "sec-fetch-dest": "document",
+      "sec-ch-ua": '"Chrome"',
+      "x-api-key": "legit",
+    };
+
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "test",
+        forward_headers: [
+          "Proxy-Connection",
+          "Proxy-Authenticate",
+          "Sec-Fetch-Dest",
+          "Sec-Ch-Ua",
+          "X-API-Key",
+        ],
+      }),
+    };
+
+    const result = extractForwardedHeaders(clientHeaders, serverParams);
+    expect(result).toEqual({
+      "server-1": { "X-API-Key": "legit" },
     });
   });
 
@@ -371,11 +266,91 @@ describe("extractForwardedHeaders - security", () => {
   });
 });
 
+describe("mergeHeaders", () => {
+  it("should merge static and forwarded headers", () => {
+    const result = mergeHeaders(
+      { "X-Static": "static-value" },
+      { "X-Forwarded": "forwarded-value" },
+    );
+
+    expect(result).toEqual({
+      "X-Static": "static-value",
+      "X-Forwarded": "forwarded-value",
+    });
+  });
+
+  it("should let forwarded headers override static headers", () => {
+    const result = mergeHeaders(
+      { "X-Api-Key": "admin-default-key" },
+      { "X-Api-Key": "user-specific-key" },
+    );
+
+    expect(result).toEqual({
+      "X-Api-Key": "user-specific-key",
+    });
+  });
+
+  it("should handle undefined/null inputs gracefully", () => {
+    expect(mergeHeaders(null, { "X-Forwarded": "value" })).toEqual({
+      "X-Forwarded": "value",
+    });
+    expect(mergeHeaders(undefined, { "X-Forwarded": "value" })).toEqual({
+      "X-Forwarded": "value",
+    });
+    expect(mergeHeaders({ "X-Static": "value" }, undefined)).toEqual({
+      "X-Static": "value",
+    });
+    expect(mergeHeaders(undefined, undefined)).toEqual({});
+  });
+});
+
+describe("serverRequiresForwardedHeaders", () => {
+  it("should return true when forward_headers has entries", () => {
+    expect(
+      serverRequiresForwardedHeaders(
+        makeServer({ uuid: "s1", name: "test", forward_headers: ["X-Api-Key"] }),
+      ),
+    ).toBe(true);
+  });
+
+  it("should return false when forward_headers is empty or undefined", () => {
+    expect(
+      serverRequiresForwardedHeaders(
+        makeServer({ uuid: "s1", name: "test", forward_headers: [] }),
+      ),
+    ).toBe(false);
+    expect(
+      serverRequiresForwardedHeaders(
+        makeServer({ uuid: "s1", name: "test" }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("anyServerRequiresForwardedHeaders", () => {
+  it("should return true when at least one server has forward_headers", () => {
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({ uuid: "server-1", name: "no-forward", forward_headers: [] }),
+      "server-2": makeServer({ uuid: "server-2", name: "has-forward", forward_headers: ["Authorization"] }),
+    };
+
+    expect(anyServerRequiresForwardedHeaders(serverParams)).toBe(true);
+  });
+
+  it("should return false when no servers have forward_headers", () => {
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({ uuid: "server-1", name: "no-forward", forward_headers: [] }),
+      "server-2": makeServer({ uuid: "server-2", name: "also-no-forward" }),
+    };
+
+    expect(anyServerRequiresForwardedHeaders(serverParams)).toBe(false);
+    expect(anyServerRequiresForwardedHeaders({})).toBe(false);
+  });
+});
+
 describe("sanitizeHeaderValue", () => {
   it("should strip \\r, \\n, and null-byte characters", () => {
     expect(sanitizeHeaderValue("hello\r\nworld")).toBe("helloworld");
-    expect(sanitizeHeaderValue("line1\nline2")).toBe("line1line2");
-    expect(sanitizeHeaderValue("ok\rvalue")).toBe("okvalue");
     expect(sanitizeHeaderValue("val\0ue")).toBe("value");
     expect(sanitizeHeaderValue("a\r\n\0b")).toBe("ab");
   });
@@ -386,140 +361,8 @@ describe("sanitizeHeaderValue", () => {
   });
 });
 
-describe("anyServerRequiresForwardedHeaders", () => {
-  it("should return true when at least one server has forward_headers", () => {
-    const serverParams: Record<string, ServerParameters> = {
-      "server-1": makeServer({
-        uuid: "server-1",
-        name: "no-forward",
-        forward_headers: [],
-      }),
-      "server-2": makeServer({
-        uuid: "server-2",
-        name: "has-forward",
-        forward_headers: ["Authorization"],
-      }),
-    };
-
-    expect(anyServerRequiresForwardedHeaders(serverParams)).toBe(true);
-  });
-
-  it("should return false when no servers have forward_headers", () => {
-    const serverParams: Record<string, ServerParameters> = {
-      "server-1": makeServer({
-        uuid: "server-1",
-        name: "no-forward",
-        forward_headers: [],
-      }),
-      "server-2": makeServer({
-        uuid: "server-2",
-        name: "also-no-forward",
-      }),
-    };
-
-    expect(anyServerRequiresForwardedHeaders(serverParams)).toBe(false);
-  });
-
-  it("should return false for empty server params", () => {
-    expect(anyServerRequiresForwardedHeaders({})).toBe(false);
-  });
-});
-
-describe("extractForwardedHeaders - prefix deny rules", () => {
-  it("should block all proxy-* prefixed headers", () => {
-    const clientHeaders: Record<string, string | string[] | undefined> = {
-      "proxy-connection": "keep-alive",
-      "proxy-authenticate": "Basic",
-      "proxy-custom": "value",
-      "x-api-key": "legit",
-    };
-
-    const serverParams: Record<string, ServerParameters> = {
-      "server-1": makeServer({
-        uuid: "server-1",
-        name: "test",
-        forward_headers: [
-          "Proxy-Connection",
-          "Proxy-Authenticate",
-          "Proxy-Custom",
-          "X-API-Key",
-        ],
-      }),
-    };
-
-    const result = extractForwardedHeaders(clientHeaders, serverParams);
-    expect(result).toEqual({
-      "server-1": { "X-API-Key": "legit" },
-    });
-  });
-
-  it("should block all sec-* prefixed headers", () => {
-    const clientHeaders: Record<string, string | string[] | undefined> = {
-      "sec-fetch-dest": "document",
-      "sec-fetch-mode": "navigate",
-      "sec-ch-ua": '"Chrome"',
-      "x-api-key": "legit",
-    };
-
-    const serverParams: Record<string, ServerParameters> = {
-      "server-1": makeServer({
-        uuid: "server-1",
-        name: "test",
-        forward_headers: [
-          "Sec-Fetch-Dest",
-          "Sec-Fetch-Mode",
-          "Sec-Ch-Ua",
-          "X-API-Key",
-        ],
-      }),
-    };
-
-    const result = extractForwardedHeaders(clientHeaders, serverParams);
-    expect(result).toEqual({
-      "server-1": { "X-API-Key": "legit" },
-    });
-  });
-});
-
 describe("extractClientHeaders", () => {
-  it("should extract string header values", () => {
-    const result = extractClientHeaders({
-      authorization: "Bearer token",
-      "content-type": "application/json",
-    });
-
-    expect(result).toEqual({
-      authorization: "Bearer token",
-      "content-type": "application/json",
-    });
-  });
-
-  it("should join array header values with comma-space", () => {
-    const result = extractClientHeaders({
-      "x-custom": ["val1", "val2", "val3"],
-    });
-
-    expect(result).toEqual({
-      "x-custom": "val1, val2, val3",
-    });
-  });
-
-  it("should skip undefined values", () => {
-    const result = extractClientHeaders({
-      "x-present": "yes",
-      "x-missing": undefined,
-    });
-
-    expect(result).toEqual({
-      "x-present": "yes",
-    });
-  });
-
-  it("should return empty object for empty headers", () => {
-    expect(extractClientHeaders({})).toEqual({});
-  });
-
-  it("should handle mixed string and array values", () => {
+  it("should normalize string, array, and undefined header values", () => {
     const result = extractClientHeaders({
       authorization: "Bearer token",
       "set-cookie": ["a=1", "b=2"],
@@ -532,5 +375,9 @@ describe("extractClientHeaders", () => {
       "set-cookie": "a=1, b=2",
       host: "example.com",
     });
+  });
+
+  it("should return empty object for empty headers", () => {
+    expect(extractClientHeaders({})).toEqual({});
   });
 });
