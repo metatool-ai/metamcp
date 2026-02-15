@@ -17,6 +17,9 @@ export function sanitizeHeaderValue(value: string): string {
  * enable host injection, session hijacking, or request smuggling.
  */
 const DENIED_FORWARD_HEADERS = new Set([
+  "host",
+  "cookie",
+  "set-cookie",
   "connection",
   "transfer-encoding",
   "content-length",
