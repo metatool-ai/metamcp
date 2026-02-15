@@ -633,6 +633,26 @@ export default function McpServerDetailPage({
                     </div>
                   </div>
                 )}
+                {server.forward_headers &&
+                  server.forward_headers.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium text-muted-foreground">
+                        {t("mcp-servers:forwardHeaders")}:
+                      </span>
+                      <div className="space-y-1">
+                        {server.forward_headers.map((header) => (
+                          <div
+                            key={header}
+                            className="bg-muted p-2 rounded"
+                          >
+                            <span className="text-sm font-mono">
+                              {header}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
               </div>
             </div>
 

@@ -4,6 +4,7 @@ import logger from "@/utils/logger";
 
 import { configService } from "../config.service";
 import { ConnectedClient, connectMetaMcpClient } from "./client";
+import { serverRequiresForwardedHeaders } from "./header-forwarding";
 import { serverErrorTracker } from "./server-error-tracker";
 
 export interface McpServerPoolStatus {
@@ -90,22 +91,26 @@ export class McpServerPool {
       this.sessionTimestamps[sessionId] = Date.now();
     }
 
-    // Check if we have an idle session for this server that we can convert
-    const idleClient = this.idleSessions[serverUuid];
-    if (idleClient) {
-      // Convert idle session to active session
-      delete this.idleSessions[serverUuid];
-      this.activeSessions[sessionId][serverUuid] = idleClient;
-      this.sessionToServers[sessionId].add(serverUuid);
+    // Check if we have an idle session for this server that we can convert.
+    // Skip idle reuse for servers with forward_headers since each client may
+    // need unique credentials forwarded to the backend MCP server.
+    if (!serverRequiresForwardedHeaders(params)) {
+      const idleClient = this.idleSessions[serverUuid];
+      if (idleClient) {
+        // Convert idle session to active session
+        delete this.idleSessions[serverUuid];
+        this.activeSessions[sessionId][serverUuid] = idleClient;
+        this.sessionToServers[sessionId].add(serverUuid);
 
-      logger.info(
-        `Converted idle session to active for server ${serverUuid}, session ${sessionId}`,
-      );
+        logger.info(
+          `Converted idle session to active for server ${serverUuid}, session ${sessionId}`,
+        );
 
-      // Create a new idle session to replace the one we just used (ASYNC - NON-BLOCKING)
-      this.createIdleSessionAsync(serverUuid, params, namespaceUuid);
+        // Create a new idle session to replace the one we just used (ASYNC - NON-BLOCKING)
+        this.createIdleSessionAsync(serverUuid, params, namespaceUuid);
 
-      return idleClient;
+        return idleClient;
+      }
     }
 
     // No idle session available, create a new connection

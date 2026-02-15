@@ -157,6 +157,7 @@ export function EditMcpServer({
       url: "",
       bearerToken: "",
       headers: "",
+      forward_headers: "",
       env: "",
       user_id: undefined,
     },
@@ -167,10 +168,11 @@ export function EditMcpServer({
     const subscription = editForm.watch((value, { name }) => {
       if (name === "type" && value.type) {
         if (value.type === McpServerTypeEnum.Enum.STDIO) {
-          // Clear URL, bearer token, and headers when switching to stdio
+          // Clear URL, bearer token, headers, and forward headers when switching to stdio
           editForm.setValue("url", "");
           editForm.setValue("bearerToken", "");
           editForm.setValue("headers", "");
+          editForm.setValue("forward_headers", "");
         } else if (
           value.type === McpServerTypeEnum.Enum.SSE ||
           value.type === McpServerTypeEnum.Enum.STREAMABLE_HTTP
@@ -199,6 +201,7 @@ export function EditMcpServer({
         headers: Object.entries(server.headers)
           .map(([key, value]) => `${key}=${value}`)
           .join("\n"),
+        forward_headers: (server.forward_headers || []).join("\n"),
         env: Object.entries(server.env)
           .map(([key, value]) => `${key}=${value}`)
           .join("\n"),
@@ -253,6 +256,15 @@ export function EditMcpServer({
         }
       }
 
+      // Parse forward_headers string into array (one header name per line)
+      const forwardHeadersArray = data.forward_headers
+        ? data.forward_headers
+            .trim()
+            .split("\n")
+            .map((h: string) => h.trim())
+            .filter((h: string) => h.length > 0)
+        : [];
+
       // Create the API request payload
       const apiPayload: UpdateMcpServerRequest = {
         uuid: server.uuid,
@@ -265,6 +277,7 @@ export function EditMcpServer({
         url: data.url,
         bearerToken: data.bearerToken,
         headers: headersObject,
+        forward_headers: forwardHeadersArray,
         user_id: data.user_id,
       };
 
@@ -507,6 +520,24 @@ export function EditMcpServer({
                 />
                 <p className="text-xs text-muted-foreground">
                   One header per line in KEY=VALUE format
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="edit-forward-headers"
+                  className="text-sm font-medium"
+                >
+                  {t("mcp-servers:forwardHeaders")}
+                </label>
+                <Textarea
+                  id="edit-forward-headers"
+                  {...editForm.register("forward_headers")}
+                  placeholder={t("mcp-servers:forwardHeadersPlaceholder")}
+                  className="h-24 whitespace-pre-wrap break-all overflow-x-hidden"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("mcp-servers:forwardHeadersHelp")}
                 </p>
               </div>
             </>

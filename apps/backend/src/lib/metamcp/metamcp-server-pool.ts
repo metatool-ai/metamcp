@@ -3,6 +3,8 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import logger from "@/utils/logger";
 
 import { configService } from "../config.service";
+import { getMcpServers } from "./fetch-metamcp";
+import { anyServerRequiresForwardedHeaders } from "./header-forwarding";
 import { mcpServerPool } from "./mcp-server-pool";
 import { createServer } from "./metamcp-proxy";
 
@@ -65,36 +67,50 @@ export class MetaMcpServerPool {
     sessionId: string,
     namespaceUuid: string,
     includeInactiveServers: boolean = false,
+    clientRequestHeaders?: Record<string, string>,
   ): Promise<MetaMcpServerInstance | undefined> {
     // Check if we already have an active server for this sessionId
     if (this.activeServers[sessionId]) {
       return this.activeServers[sessionId];
     }
 
-    // Check if we have an idle server for this namespace that we can convert
-    const idleServer = this.idleServers[namespaceUuid];
-    if (idleServer) {
-      // Convert idle server to active server
-      delete this.idleServers[namespaceUuid];
-      this.activeServers[sessionId] = idleServer;
-      this.sessionToNamespace[sessionId] = namespaceUuid;
-      this.sessionTimestamps[sessionId] = Date.now();
-
-      logger.info(
-        `Converted idle MetaMCP server to active for namespace ${namespaceUuid}, session ${sessionId}`,
-      );
-
-      // Create a new idle server to replace the one we just used (ASYNC - NON-BLOCKING)
-      this.createIdleServerAsync(namespaceUuid, includeInactiveServers);
-
-      return idleServer;
+    // Only reuse idle servers when the namespace has no servers requiring
+    // per-client header forwarding. Idle servers are created without
+    // clientRequestHeaders, so they can't forward per-user credentials.
+    // We check the actual server configs rather than just the presence of
+    // clientRequestHeaders (which is always truthy from the routers).
+    let needsFreshServer = false;
+    if (clientRequestHeaders) {
+      const serverParams = await getMcpServers(namespaceUuid, includeInactiveServers);
+      needsFreshServer = anyServerRequiresForwardedHeaders(serverParams);
     }
 
-    // No idle server available, create a new one
+    if (!needsFreshServer) {
+      const idleServer = this.idleServers[namespaceUuid];
+      if (idleServer) {
+        // Convert idle server to active server
+        delete this.idleServers[namespaceUuid];
+        this.activeServers[sessionId] = idleServer;
+        this.sessionToNamespace[sessionId] = namespaceUuid;
+        this.sessionTimestamps[sessionId] = Date.now();
+
+        logger.info(
+          `Converted idle MetaMCP server to active for namespace ${namespaceUuid}, session ${sessionId}`,
+        );
+
+        // Create a new idle server to replace the one we just used (ASYNC - NON-BLOCKING)
+        this.createIdleServerAsync(namespaceUuid, includeInactiveServers);
+
+        return idleServer;
+      }
+    }
+
+    // No idle server available (or client headers require a fresh server), create a new one
     const newServer = await this.createNewServer(
       sessionId,
       namespaceUuid,
       includeInactiveServers,
+      clientRequestHeaders,
     );
     if (!newServer) {
       return undefined;
@@ -121,6 +137,7 @@ export class MetaMcpServerPool {
     sessionId: string,
     namespaceUuid: string,
     includeInactiveServers: boolean = false,
+    clientRequestHeaders?: Record<string, string>,
   ): Promise<MetaMcpServerInstance | undefined> {
     try {
       // Create the MetaMCP server - MCP server pool is pre-warmed during startup
@@ -128,6 +145,7 @@ export class MetaMcpServerPool {
         namespaceUuid,
         sessionId,
         includeInactiveServers,
+        clientRequestHeaders,
       );
 
       return serverInstance;

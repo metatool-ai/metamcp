@@ -23,6 +23,7 @@ export const createServerFormSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.string().optional(),
+    forward_headers: z.string().optional(),
     env: z.string().optional(),
     user_id: z.string().nullable().optional(),
   })
@@ -85,6 +86,7 @@ export const EditServerFormSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.string().optional(),
+    forward_headers: z.string().optional(),
     env: z.string().optional(),
     user_id: z.string().nullable().optional(),
   })
@@ -150,6 +152,7 @@ export const CreateMcpServerRequestSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.record(z.string()).optional(),
+    forward_headers: z.array(z.string()).optional(),
     user_id: z.string().nullable().optional(),
   })
   .refine(
@@ -189,6 +192,7 @@ export const McpServerSchema = z.object({
   created_at: z.string(),
   bearerToken: z.string().nullable(),
   headers: z.record(z.string()),
+  forward_headers: z.array(z.string()),
   user_id: z.string().nullable(),
   error_status: McpServerErrorStatusEnum.optional(),
 });
@@ -219,6 +223,7 @@ export const BulkImportMcpServerSchema = z
     env: z.record(z.string()).optional(),
     url: z.string().optional(),
     headers: z.record(z.string()).optional(),
+    forward_headers: z.array(z.string()).optional(),
     description: z.string().optional(),
     type: z
       .string()
@@ -332,6 +337,7 @@ export const UpdateMcpServerRequestSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.record(z.string()).optional(),
+    forward_headers: z.array(z.string()).optional(),
     user_id: z.string().nullable().optional(),
   })
   .refine(
@@ -402,6 +408,7 @@ export const McpServerCreateInputSchema = z.object({
   url: z.string().nullable().optional(),
   bearerToken: z.string().nullable().optional(),
   headers: z.record(z.string()).optional(),
+  forward_headers: z.array(z.string()).optional(),
   user_id: z.string().nullable().optional(),
 });
 
@@ -426,6 +433,7 @@ export const McpServerUpdateInputSchema = z.object({
   url: z.string().nullable().optional(),
   bearerToken: z.string().nullable().optional(),
   headers: z.record(z.string()).optional(),
+  forward_headers: z.array(z.string()).optional(),
   user_id: z.string().nullable().optional(),
 });
 
@@ -446,6 +454,7 @@ export const DatabaseMcpServerSchema = z.object({
   created_at: z.date(),
   bearerToken: z.string().nullable(),
   headers: z.record(z.string()),
+  forward_headers: z.array(z.string()),
   user_id: z.string().nullable(),
 });
 

@@ -62,6 +62,10 @@ export const mcpServersTable = pgTable(
       .$type<{ [key: string]: string }>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    forward_headers: text("forward_headers")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     user_id: text("user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),

@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_servers" ADD COLUMN "forward_headers" text[] DEFAULT '{}'::text[] NOT NULL;

@@ -10,6 +10,7 @@ import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 import { rateLimitMiddleware } from "@/middleware/rate-limit.middleware";
 import logger from "@/utils/logger";
 
+import { extractClientHeaders } from "../../lib/metamcp/header-forwarding";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
 import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
 
@@ -72,10 +73,15 @@ sseRouter.get(
 
       const sessionId = webAppTransport.sessionId;
 
+      // Extract client request headers for per-server header forwarding
+      const clientRequestHeaders = extractClientHeaders(req.headers);
+
       // Get or create MetaMCP server instance from the pool
       const mcpServerInstance = await metaMcpServerPool.getServer(
         sessionId,
         namespaceUuid,
+        false,
+        clientRequestHeaders,
       );
       if (!mcpServerInstance) {
         throw new Error("Failed to get MetaMCP server instance from pool");
