@@ -1,4 +1,4 @@
-import { ServerParameters } from "@repo/zod-types";
+import { ForwardHeadersRecordSchema, ServerParameters } from "@repo/zod-types";
 import { describe, expect, it, vi } from "vitest";
 
 // Mock logger to avoid path alias resolution issues in tests
@@ -48,7 +48,7 @@ describe("extractForwardedHeaders", () => {
       "server-1": makeServer({
         uuid: "server-1",
         name: "octopus",
-        forward_headers: ["X-Octopus-ApiKey"],
+        forward_headers: { "X-Octopus-ApiKey": "X-Octopus-ApiKey" },
       }),
     };
 
@@ -69,12 +69,12 @@ describe("extractForwardedHeaders", () => {
       "server-1": makeServer({
         uuid: "server-1",
         name: "octopus",
-        forward_headers: ["X-Octopus-ApiKey"],
+        forward_headers: { "X-Octopus-ApiKey": "X-Octopus-ApiKey" },
       }),
       "server-2": makeServer({
         uuid: "server-2",
         name: "azure",
-        forward_headers: ["X-Azure-Token"],
+        forward_headers: { "X-Azure-Token": "X-Azure-Token" },
       }),
     };
 
@@ -86,7 +86,7 @@ describe("extractForwardedHeaders", () => {
     });
   });
 
-  it("should skip servers without forward_headers or with empty array", () => {
+  it("should skip servers without forward_headers or with empty record", () => {
     const clientHeaders: Record<string, string | string[] | undefined> = {
       "x-key": "value",
     };
@@ -100,7 +100,7 @@ describe("extractForwardedHeaders", () => {
       "server-2": makeServer({
         uuid: "server-2",
         name: "empty-forward",
-        forward_headers: [],
+        forward_headers: {},
       }),
     };
 
@@ -118,7 +118,7 @@ describe("extractForwardedHeaders", () => {
       "server-1": makeServer({
         uuid: "server-1",
         name: "octopus",
-        forward_headers: ["X-Octopus-ApiKey"],
+        forward_headers: { "X-Octopus-ApiKey": "X-Octopus-ApiKey" },
       }),
     };
 
@@ -136,7 +136,7 @@ describe("extractForwardedHeaders", () => {
       "server-1": makeServer({
         uuid: "server-1",
         name: "multi-header",
-        forward_headers: ["X-Multi"],
+        forward_headers: { "X-Multi": "X-Multi" },
       }),
     };
 
@@ -158,7 +158,11 @@ describe("extractForwardedHeaders", () => {
       "server-1": makeServer({
         uuid: "server-1",
         name: "multi-header-server",
-        forward_headers: ["X-API-Key", "X-Tenant-Id", "X-Region"],
+        forward_headers: {
+          "X-API-Key": "X-API-Key",
+          "X-Tenant-Id": "X-Tenant-Id",
+          "X-Region": "X-Region",
+        },
       }),
     };
 
@@ -178,12 +182,32 @@ describe("extractForwardedHeaders", () => {
       "server-1": makeServer({
         uuid: "server-1",
         name: "octopus",
-        forward_headers: ["X-Octopus-ApiKey"],
+        forward_headers: { "X-Octopus-ApiKey": "X-Octopus-ApiKey" },
       }),
     };
 
     expect(extractForwardedHeaders({}, serverWithHeaders)).toEqual({});
     expect(extractForwardedHeaders({ "x-key": "value" }, {})).toEqual({});
+  });
+
+  it("should rename headers when client and server names differ", () => {
+    const clientHeaders: Record<string, string | string[] | undefined> = {
+      authorization: "Bearer my-token",
+    };
+
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "backend",
+        forward_headers: { Authorization: "X-Backend-Auth" },
+      }),
+    };
+
+    const result = extractForwardedHeaders(clientHeaders, serverParams);
+
+    expect(result).toEqual({
+      "server-1": { "X-Backend-Auth": "Bearer my-token" },
+    });
   });
 });
 
@@ -200,12 +224,12 @@ describe("extractForwardedHeaders - security", () => {
       "server-1": makeServer({
         uuid: "server-1",
         name: "test",
-        forward_headers: [
-          "Host",
-          "Cookie",
-          "X-Forwarded-For",
-          "X-API-Key",
-        ],
+        forward_headers: {
+          Host: "Host",
+          Cookie: "Cookie",
+          "X-Forwarded-For": "X-Forwarded-For",
+          "X-API-Key": "X-API-Key",
+        },
       }),
     };
 
@@ -229,13 +253,13 @@ describe("extractForwardedHeaders - security", () => {
       "server-1": makeServer({
         uuid: "server-1",
         name: "test",
-        forward_headers: [
-          "Proxy-Connection",
-          "Proxy-Authenticate",
-          "Sec-Fetch-Dest",
-          "Sec-Ch-Ua",
-          "X-API-Key",
-        ],
+        forward_headers: {
+          "Proxy-Connection": "Proxy-Connection",
+          "Proxy-Authenticate": "Proxy-Authenticate",
+          "Sec-Fetch-Dest": "Sec-Fetch-Dest",
+          "Sec-Ch-Ua": "Sec-Ch-Ua",
+          "X-API-Key": "X-API-Key",
+        },
       }),
     };
 
@@ -254,7 +278,7 @@ describe("extractForwardedHeaders - security", () => {
       "server-1": makeServer({
         uuid: "server-1",
         name: "test",
-        forward_headers: ["X-API-Key"],
+        forward_headers: { "X-API-Key": "X-API-Key" },
       }),
     };
 
@@ -308,7 +332,11 @@ describe("serverRequiresForwardedHeaders", () => {
   it("should return true when forward_headers has entries", () => {
     expect(
       serverRequiresForwardedHeaders(
-        makeServer({ uuid: "s1", name: "test", forward_headers: ["X-Api-Key"] }),
+        makeServer({
+          uuid: "s1",
+          name: "test",
+          forward_headers: { "X-Api-Key": "X-Api-Key" },
+        }),
       ),
     ).toBe(true);
   });
@@ -316,7 +344,7 @@ describe("serverRequiresForwardedHeaders", () => {
   it("should return false when forward_headers is empty or undefined", () => {
     expect(
       serverRequiresForwardedHeaders(
-        makeServer({ uuid: "s1", name: "test", forward_headers: [] }),
+        makeServer({ uuid: "s1", name: "test", forward_headers: {} }),
       ),
     ).toBe(false);
     expect(
@@ -330,8 +358,16 @@ describe("serverRequiresForwardedHeaders", () => {
 describe("anyServerRequiresForwardedHeaders", () => {
   it("should return true when at least one server has forward_headers", () => {
     const serverParams: Record<string, ServerParameters> = {
-      "server-1": makeServer({ uuid: "server-1", name: "no-forward", forward_headers: [] }),
-      "server-2": makeServer({ uuid: "server-2", name: "has-forward", forward_headers: ["Authorization"] }),
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "no-forward",
+        forward_headers: {},
+      }),
+      "server-2": makeServer({
+        uuid: "server-2",
+        name: "has-forward",
+        forward_headers: { Authorization: "Authorization" },
+      }),
     };
 
     expect(anyServerRequiresForwardedHeaders(serverParams)).toBe(true);
@@ -339,8 +375,15 @@ describe("anyServerRequiresForwardedHeaders", () => {
 
   it("should return false when no servers have forward_headers", () => {
     const serverParams: Record<string, ServerParameters> = {
-      "server-1": makeServer({ uuid: "server-1", name: "no-forward", forward_headers: [] }),
-      "server-2": makeServer({ uuid: "server-2", name: "also-no-forward" }),
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "no-forward",
+        forward_headers: {},
+      }),
+      "server-2": makeServer({
+        uuid: "server-2",
+        name: "also-no-forward",
+      }),
     };
 
     expect(anyServerRequiresForwardedHeaders(serverParams)).toBe(false);
@@ -379,5 +422,43 @@ describe("extractClientHeaders", () => {
 
   it("should return empty object for empty headers", () => {
     expect(extractClientHeaders({})).toEqual({});
+  });
+});
+
+describe("ForwardHeadersRecordSchema - deny-list validation", () => {
+  it("should reject forbidden headers at schema level", () => {
+    expect(
+      ForwardHeadersRecordSchema.safeParse({ Host: "Host" }).success,
+    ).toBe(false);
+    expect(
+      ForwardHeadersRecordSchema.safeParse({ Cookie: "Cookie" }).success,
+    ).toBe(false);
+    expect(
+      ForwardHeadersRecordSchema.safeParse({
+        "Proxy-Connection": "Proxy-Connection",
+      }).success,
+    ).toBe(false);
+    expect(
+      ForwardHeadersRecordSchema.safeParse({
+        "Sec-Fetch-Dest": "Sec-Fetch-Dest",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("should accept valid non-denied headers", () => {
+    expect(
+      ForwardHeadersRecordSchema.safeParse({
+        Authorization: "Authorization",
+        "X-Api-Key": "X-Api-Key",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("should accept renamed mappings", () => {
+    expect(
+      ForwardHeadersRecordSchema.safeParse({
+        Authorization: "X-Backend-Auth",
+      }).success,
+    ).toBe(true);
   });
 });

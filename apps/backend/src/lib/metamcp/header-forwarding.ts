@@ -1,4 +1,8 @@
-import { ServerParameters } from "@repo/zod-types";
+import {
+  DENIED_FORWARD_HEADERS,
+  DENIED_HEADER_PREFIXES,
+  ServerParameters,
+} from "@repo/zod-types";
 import { IncomingHttpHeaders } from "http";
 
 import logger from "@/utils/logger";
@@ -10,40 +14,6 @@ import logger from "@/utils/logger";
 export function sanitizeHeaderValue(value: string): string {
   return value.replace(/[\r\n\0]/g, "");
 }
-
-/**
- * Headers that must never be forwarded to backend servers.
- * These are security-sensitive or transport-level headers that could
- * enable host injection, session hijacking, or request smuggling.
- */
-const DENIED_FORWARD_HEADERS = new Set([
-  "host",
-  "cookie",
-  "set-cookie",
-  "connection",
-  "transfer-encoding",
-  "content-length",
-  "content-encoding",
-  "te",
-  "trailer",
-  "upgrade",
-  "keep-alive",
-  "proxy-authorization",
-  "proxy-authenticate",
-  "proxy-connection",
-  "x-forwarded-for",
-  "x-forwarded-host",
-  "x-forwarded-proto",
-  "x-real-ip",
-  "mcp-session-id",
-]);
-
-/**
- * Header name prefixes that are always denied.
- * - `proxy-` covers all proxy-related headers
- * - `sec-` covers browser-controlled Fetch Metadata headers
- */
-const DENIED_HEADER_PREFIXES = ["proxy-", "sec-"];
 
 /**
  * Extracts client request headers into a flat Record, suitable for
@@ -85,14 +55,16 @@ export function extractForwardedHeaders(
   for (const [uuid, params] of Object.entries(serverParams)) {
     if (
       !params.forward_headers ||
-      params.forward_headers.length === 0
+      Object.keys(params.forward_headers).length === 0
     ) {
       continue;
     }
 
     const forwarded: Record<string, string> = {};
-    for (const headerName of params.forward_headers) {
-      const lowerName = headerName.toLowerCase();
+    for (const [clientHeaderName, serverHeaderName] of Object.entries(
+      params.forward_headers,
+    )) {
+      const lowerName = clientHeaderName.toLowerCase();
 
       // Skip denied headers for security (exact match + prefix match)
       if (
@@ -106,7 +78,7 @@ export function extractForwardedHeaders(
       const value = clientHeaders[lowerName];
       if (value !== undefined && value !== null) {
         const raw = Array.isArray(value) ? value[0] : value;
-        forwarded[headerName] = sanitizeHeaderValue(raw);
+        forwarded[serverHeaderName] = sanitizeHeaderValue(raw);
       }
     }
 
@@ -149,7 +121,9 @@ export function serverRequiresForwardedHeaders(
   params: ServerParameters,
 ): boolean {
   return (
-    Array.isArray(params.forward_headers) && params.forward_headers.length > 0
+    !!params.forward_headers &&
+    typeof params.forward_headers === "object" &&
+    Object.keys(params.forward_headers).length > 0
   );
 }
 

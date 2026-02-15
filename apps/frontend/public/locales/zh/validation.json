@@ -40,7 +40,7 @@
     "mismatch": "密码不匹配"
   },
   "forwardHeaders": {
-    "invalidHeaderName": "无效的请求头名称：仅允许字母、数字和 !#$%&'*+-.^_`|~"
+    "invalidHeaderName": "无效或禁止的请求头名称。禁止：Host、Cookie、Set-Cookie、Connection、Proxy-*、Sec-* 等"
   },
   "generic": {
     "invalid": "无效值",

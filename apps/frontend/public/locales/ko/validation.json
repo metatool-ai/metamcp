@@ -40,7 +40,7 @@
     "mismatch": "비밀번호가 일치하지 않습니다"
   },
   "forwardHeaders": {
-    "invalidHeaderName": "잘못된 Header 이름: 문자, 숫자 및 !#$%&'*+-.^_`|~만 허용됩니다"
+    "invalidHeaderName": "잘못되었거나 금지된 Header 이름입니다. 금지: Host, Cookie, Set-Cookie, Connection, Proxy-*, Sec-* 등"
   },
   "generic": {
     "invalid": "유효하지 않은 값입니다",

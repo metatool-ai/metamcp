@@ -640,19 +640,23 @@ export default function McpServerDetailPage({
                         {t("mcp-servers:forwardHeaders")}:
                       </span>
                       {server.forward_headers &&
-                      server.forward_headers.length > 0 ? (
+                      Object.keys(server.forward_headers).length > 0 ? (
                         <>
                           <div className="space-y-1">
-                            {server.forward_headers.map((header) => (
-                              <div
-                                key={header}
-                                className="bg-muted p-2 rounded"
-                              >
-                                <span className="text-sm font-mono">
-                                  {header}
-                                </span>
-                              </div>
-                            ))}
+                            {Object.entries(server.forward_headers).map(
+                              ([clientHeader, serverHeader]) => (
+                                <div
+                                  key={clientHeader}
+                                  className="bg-muted p-2 rounded"
+                                >
+                                  <span className="text-sm font-mono">
+                                    {clientHeader === serverHeader
+                                      ? clientHeader
+                                      : `${clientHeader} \u2192 ${serverHeader}`}
+                                  </span>
+                                </div>
+                              ),
+                            )}
                           </div>
                           <p className="text-xs text-amber-600 dark:text-amber-400">
                             {t("mcp-servers:forwardHeadersWarning")}

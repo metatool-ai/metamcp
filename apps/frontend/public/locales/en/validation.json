@@ -40,7 +40,7 @@
     "mismatch": "Passwords do not match"
   },
   "forwardHeaders": {
-    "invalidHeaderName": "Invalid header name: only letters, digits, and !#$%&'*+-.^_`|~ are allowed"
+    "invalidHeaderName": "Invalid or forbidden header name. Forbidden: Host, Cookie, Set-Cookie, Connection, Proxy-*, Sec-*, etc."
   },
   "generic": {
     "invalid": "Invalid value",

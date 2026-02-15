@@ -201,7 +201,9 @@ export function EditMcpServer({
         headers: Object.entries(server.headers)
           .map(([key, value]) => `${key}=${value}`)
           .join("\n"),
-        forward_headers: (server.forward_headers || []).join("\n"),
+        forward_headers: Object.entries(server.forward_headers || {})
+          .map(([k, v]) => (k === v ? k : `${k}=${v}`))
+          .join("\n"),
         env: Object.entries(server.env)
           .map(([key, value]) => `${key}=${value}`)
           .join("\n"),
@@ -256,14 +258,29 @@ export function EditMcpServer({
         }
       }
 
-      // Parse forward_headers string into array (one header name per line)
-      const forwardHeadersArray = data.forward_headers
-        ? data.forward_headers
-            .trim()
-            .split("\n")
-            .map((h: string) => h.trim())
-            .filter((h: string) => h.length > 0)
-        : [];
+      // Parse forward_headers string into record
+      // Each line is either "HeaderName" (1:1) or "ClientHeader=ServerHeader" (rename)
+      const forwardHeadersRecord: Record<string, string> = {};
+      if (data.forward_headers) {
+        const lines = data.forward_headers
+          .trim()
+          .split("\n")
+          .map((h: string) => h.trim())
+          .filter((h: string) => h.length > 0);
+        for (const line of lines) {
+          const eqIdx = line.indexOf("=");
+          if (eqIdx === -1) {
+            // Bare name: 1:1 mapping
+            forwardHeadersRecord[line] = line;
+          } else {
+            const clientName = line.slice(0, eqIdx).trim();
+            const serverName = line.slice(eqIdx + 1).trim();
+            if (clientName && serverName) {
+              forwardHeadersRecord[clientName] = serverName;
+            }
+          }
+        }
+      }
 
       // Create the API request payload
       const apiPayload: UpdateMcpServerRequest = {
@@ -277,7 +294,7 @@ export function EditMcpServer({
         url: data.url,
         bearerToken: data.bearerToken,
         headers: headersObject,
-        forward_headers: forwardHeadersArray,
+        forward_headers: forwardHeadersRecord,
         user_id: data.user_id,
       };
 
