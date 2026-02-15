@@ -539,6 +539,9 @@ export function EditMcpServer({
                 <p className="text-xs text-muted-foreground">
                   {t("mcp-servers:forwardHeadersHelp")}
                 </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  {t("mcp-servers:forwardHeadersWarning")}
+                </p>
               </div>
             </>
           )}

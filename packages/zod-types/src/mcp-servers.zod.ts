@@ -5,6 +5,24 @@ export const McpServerStatusEnum = z.enum(["ACTIVE", "INACTIVE"]);
 
 export const McpServerErrorStatusEnum = z.enum(["NONE", "ERROR"]);
 
+/**
+ * RFC 7230 token characters for HTTP header field names.
+ * Valid: letters, digits, and !#$%&'*+-.^_`|~
+ */
+const HTTP_HEADER_NAME_REGEX = /^[a-zA-Z0-9!#$%&'*+\-.^_`|~]+$/;
+
+/** Reusable Zod schema for a single HTTP header name */
+const httpHeaderName = z
+  .string()
+  .min(1, "Header name cannot be empty")
+  .regex(HTTP_HEADER_NAME_REGEX, "Invalid HTTP header name");
+
+/** Validated array of HTTP header names (API layer) */
+export const ForwardHeadersArraySchema = z.array(httpHeaderName).optional();
+
+/** Validated forward_headers from a form textarea (newline-separated string) */
+export const ForwardHeadersFormSchema = z.string().optional();
+
 // Define the form schema (includes UI-specific fields)
 export const createServerFormSchema = z
   .object({
@@ -23,7 +41,7 @@ export const createServerFormSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.string().optional(),
-    forward_headers: z.string().optional(),
+    forward_headers: ForwardHeadersFormSchema,
     env: z.string().optional(),
     user_id: z.string().nullable().optional(),
   })
@@ -86,7 +104,7 @@ export const EditServerFormSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.string().optional(),
-    forward_headers: z.string().optional(),
+    forward_headers: ForwardHeadersFormSchema,
     env: z.string().optional(),
     user_id: z.string().nullable().optional(),
   })
@@ -152,7 +170,7 @@ export const CreateMcpServerRequestSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.record(z.string()).optional(),
-    forward_headers: z.array(z.string()).optional(),
+    forward_headers: ForwardHeadersArraySchema,
     user_id: z.string().nullable().optional(),
   })
   .refine(
@@ -223,7 +241,7 @@ export const BulkImportMcpServerSchema = z
     env: z.record(z.string()).optional(),
     url: z.string().optional(),
     headers: z.record(z.string()).optional(),
-    forward_headers: z.array(z.string()).optional(),
+    forward_headers: ForwardHeadersArraySchema,
     description: z.string().optional(),
     type: z
       .string()
@@ -337,7 +355,7 @@ export const UpdateMcpServerRequestSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.record(z.string()).optional(),
-    forward_headers: z.array(z.string()).optional(),
+    forward_headers: ForwardHeadersArraySchema,
     user_id: z.string().nullable().optional(),
   })
   .refine(
@@ -408,7 +426,7 @@ export const McpServerCreateInputSchema = z.object({
   url: z.string().nullable().optional(),
   bearerToken: z.string().nullable().optional(),
   headers: z.record(z.string()).optional(),
-  forward_headers: z.array(z.string()).optional(),
+  forward_headers: ForwardHeadersArraySchema,
   user_id: z.string().nullable().optional(),
 });
 
@@ -433,7 +451,7 @@ export const McpServerUpdateInputSchema = z.object({
   url: z.string().nullable().optional(),
   bearerToken: z.string().nullable().optional(),
   headers: z.record(z.string()).optional(),
-  forward_headers: z.array(z.string()).optional(),
+  forward_headers: ForwardHeadersArraySchema,
   user_id: z.string().nullable().optional(),
 });
 

@@ -1,6 +1,15 @@
 import { ServerParameters } from "@repo/zod-types";
 import { IncomingHttpHeaders } from "http";
 
+import logger from "@/utils/logger";
+
+/**
+ * Strips CRLF characters from header values to prevent HTTP response splitting.
+ */
+export function sanitizeHeaderValue(value: string): string {
+  return value.replace(/[\r\n]/g, "");
+}
+
 /**
  * Headers that must never be forwarded to backend servers.
  * These are security-sensitive or transport-level headers that could
@@ -84,12 +93,17 @@ export function extractForwardedHeaders(
       // HTTP headers are case-insensitive; Node.js lowercases them
       const value = clientHeaders[lowerName];
       if (value !== undefined && value !== null) {
-        forwarded[headerName] = Array.isArray(value) ? value[0] : value;
+        const raw = Array.isArray(value) ? value[0] : value;
+        forwarded[headerName] = sanitizeHeaderValue(raw);
       }
     }
 
     if (Object.keys(forwarded).length > 0) {
       result[uuid] = forwarded;
+      // Audit log: record which header names were forwarded (values are redacted)
+      logger.info(
+        `Forwarding headers to server ${uuid}: [${Object.keys(forwarded).join(", ")}]`,
+      );
     }
   }
 

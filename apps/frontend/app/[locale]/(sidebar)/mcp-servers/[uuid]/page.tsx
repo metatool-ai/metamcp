@@ -633,24 +633,36 @@ export default function McpServerDetailPage({
                     </div>
                   </div>
                 )}
-                {server.forward_headers &&
-                  server.forward_headers.length > 0 && (
+                {(server.type === "SSE" ||
+                  server.type === "STREAMABLE_HTTP") && (
                     <div className="space-y-2">
                       <span className="text-sm font-medium text-muted-foreground">
                         {t("mcp-servers:forwardHeaders")}:
                       </span>
-                      <div className="space-y-1">
-                        {server.forward_headers.map((header) => (
-                          <div
-                            key={header}
-                            className="bg-muted p-2 rounded"
-                          >
-                            <span className="text-sm font-mono">
-                              {header}
-                            </span>
+                      {server.forward_headers &&
+                      server.forward_headers.length > 0 ? (
+                        <>
+                          <div className="space-y-1">
+                            {server.forward_headers.map((header) => (
+                              <div
+                                key={header}
+                                className="bg-muted p-2 rounded"
+                              >
+                                <span className="text-sm font-mono">
+                                  {header}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            {t("mcp-servers:forwardHeadersWarning")}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">
+                          {t("mcp-servers:forwardHeadersNone")}
+                        </p>
+                      )}
                     </div>
                   )}
               </div>

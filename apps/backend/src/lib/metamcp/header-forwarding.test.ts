@@ -1,9 +1,21 @@
 import { ServerParameters } from "@repo/zod-types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Mock logger to avoid path alias resolution issues in tests
+vi.mock("@/utils/logger", () => ({
+  default: {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
 
 import {
+  anyServerRequiresForwardedHeaders,
   extractForwardedHeaders,
   mergeHeaders,
+  sanitizeHeaderValue,
   serverRequiresForwardedHeaders,
 } from "./header-forwarding";
 
@@ -304,5 +316,108 @@ describe("serverRequiresForwardedHeaders", () => {
     });
 
     expect(serverRequiresForwardedHeaders(params)).toBe(false);
+  });
+});
+
+describe("extractForwardedHeaders - security", () => {
+  it("should block denied headers even if configured in forward_headers", () => {
+    const clientHeaders: Record<string, string | string[] | undefined> = {
+      host: "evil.com",
+      cookie: "session=abc",
+      "x-forwarded-for": "1.2.3.4",
+      "x-api-key": "legit-key",
+    };
+
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "test",
+        forward_headers: [
+          "Host",
+          "Cookie",
+          "X-Forwarded-For",
+          "X-API-Key",
+        ],
+      }),
+    };
+
+    const result = extractForwardedHeaders(clientHeaders, serverParams);
+
+    // Only X-API-Key should be forwarded; denied headers are silently dropped
+    expect(result).toEqual({
+      "server-1": { "X-API-Key": "legit-key" },
+    });
+  });
+
+  it("should strip CRLF characters from header values", () => {
+    const clientHeaders: Record<string, string | string[] | undefined> = {
+      "x-api-key": "value\r\nInjected-Header: evil",
+    };
+
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "test",
+        forward_headers: ["X-API-Key"],
+      }),
+    };
+
+    const result = extractForwardedHeaders(clientHeaders, serverParams);
+
+    expect(result).toEqual({
+      "server-1": { "X-API-Key": "valueInjected-Header: evil" },
+    });
+  });
+});
+
+describe("sanitizeHeaderValue", () => {
+  it("should strip \\r and \\n characters", () => {
+    expect(sanitizeHeaderValue("hello\r\nworld")).toBe("helloworld");
+    expect(sanitizeHeaderValue("line1\nline2")).toBe("line1line2");
+    expect(sanitizeHeaderValue("ok\rvalue")).toBe("okvalue");
+  });
+
+  it("should return clean values unchanged", () => {
+    expect(sanitizeHeaderValue("Bearer abc123")).toBe("Bearer abc123");
+    expect(sanitizeHeaderValue("")).toBe("");
+  });
+});
+
+describe("anyServerRequiresForwardedHeaders", () => {
+  it("should return true when at least one server has forward_headers", () => {
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "no-forward",
+        forward_headers: [],
+      }),
+      "server-2": makeServer({
+        uuid: "server-2",
+        name: "has-forward",
+        forward_headers: ["Authorization"],
+      }),
+    };
+
+    expect(anyServerRequiresForwardedHeaders(serverParams)).toBe(true);
+  });
+
+  it("should return false when no servers have forward_headers", () => {
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "no-forward",
+        forward_headers: [],
+      }),
+      "server-2": makeServer({
+        uuid: "server-2",
+        name: "also-no-forward",
+      }),
+    };
+
+    expect(anyServerRequiresForwardedHeaders(serverParams)).toBe(false);
+  });
+
+  it("should return false for empty server params", () => {
+    expect(anyServerRequiresForwardedHeaders({})).toBe(false);
   });
 });
