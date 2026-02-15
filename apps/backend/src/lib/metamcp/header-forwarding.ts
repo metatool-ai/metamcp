@@ -4,10 +4,11 @@ import { IncomingHttpHeaders } from "http";
 import logger from "@/utils/logger";
 
 /**
- * Strips CRLF characters from header values to prevent HTTP response splitting.
+ * Strips CRLF and null-byte characters from header values to prevent
+ * HTTP response splitting and null-byte truncation attacks.
  */
 export function sanitizeHeaderValue(value: string): string {
-  return value.replace(/[\r\n]/g, "");
+  return value.replace(/[\r\n\0]/g, "");
 }
 
 /**
@@ -29,12 +30,20 @@ const DENIED_FORWARD_HEADERS = new Set([
   "keep-alive",
   "proxy-authorization",
   "proxy-authenticate",
+  "proxy-connection",
   "x-forwarded-for",
   "x-forwarded-host",
   "x-forwarded-proto",
   "x-real-ip",
   "mcp-session-id",
 ]);
+
+/**
+ * Header name prefixes that are always denied.
+ * - `proxy-` covers all proxy-related headers
+ * - `sec-` covers browser-controlled Fetch Metadata headers
+ */
+const DENIED_HEADER_PREFIXES = ["proxy-", "sec-"];
 
 /**
  * Extracts client request headers into a flat Record, suitable for
@@ -85,8 +94,11 @@ export function extractForwardedHeaders(
     for (const headerName of params.forward_headers) {
       const lowerName = headerName.toLowerCase();
 
-      // Skip denied headers for security
-      if (DENIED_FORWARD_HEADERS.has(lowerName)) {
+      // Skip denied headers for security (exact match + prefix match)
+      if (
+        DENIED_FORWARD_HEADERS.has(lowerName) ||
+        DENIED_HEADER_PREFIXES.some((p) => lowerName.startsWith(p))
+      ) {
         continue;
       }
 
@@ -100,8 +112,9 @@ export function extractForwardedHeaders(
 
     if (Object.keys(forwarded).length > 0) {
       result[uuid] = forwarded;
-      // Audit log: record which header names were forwarded (values are redacted)
-      logger.info(
+      // Audit log: record which header names were forwarded (values are redacted).
+      // Using debug level since this fires per-handler, not just per-session.
+      logger.debug(
         `Forwarding headers to server ${uuid}: [${Object.keys(forwarded).join(", ")}]`,
       );
     }

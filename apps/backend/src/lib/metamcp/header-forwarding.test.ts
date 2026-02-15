@@ -13,6 +13,7 @@ vi.mock("@/utils/logger", () => ({
 
 import {
   anyServerRequiresForwardedHeaders,
+  extractClientHeaders,
   extractForwardedHeaders,
   mergeHeaders,
   sanitizeHeaderValue,
@@ -371,10 +372,12 @@ describe("extractForwardedHeaders - security", () => {
 });
 
 describe("sanitizeHeaderValue", () => {
-  it("should strip \\r and \\n characters", () => {
+  it("should strip \\r, \\n, and null-byte characters", () => {
     expect(sanitizeHeaderValue("hello\r\nworld")).toBe("helloworld");
     expect(sanitizeHeaderValue("line1\nline2")).toBe("line1line2");
     expect(sanitizeHeaderValue("ok\rvalue")).toBe("okvalue");
+    expect(sanitizeHeaderValue("val\0ue")).toBe("value");
+    expect(sanitizeHeaderValue("a\r\n\0b")).toBe("ab");
   });
 
   it("should return clean values unchanged", () => {
@@ -419,5 +422,115 @@ describe("anyServerRequiresForwardedHeaders", () => {
 
   it("should return false for empty server params", () => {
     expect(anyServerRequiresForwardedHeaders({})).toBe(false);
+  });
+});
+
+describe("extractForwardedHeaders - prefix deny rules", () => {
+  it("should block all proxy-* prefixed headers", () => {
+    const clientHeaders: Record<string, string | string[] | undefined> = {
+      "proxy-connection": "keep-alive",
+      "proxy-authenticate": "Basic",
+      "proxy-custom": "value",
+      "x-api-key": "legit",
+    };
+
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "test",
+        forward_headers: [
+          "Proxy-Connection",
+          "Proxy-Authenticate",
+          "Proxy-Custom",
+          "X-API-Key",
+        ],
+      }),
+    };
+
+    const result = extractForwardedHeaders(clientHeaders, serverParams);
+    expect(result).toEqual({
+      "server-1": { "X-API-Key": "legit" },
+    });
+  });
+
+  it("should block all sec-* prefixed headers", () => {
+    const clientHeaders: Record<string, string | string[] | undefined> = {
+      "sec-fetch-dest": "document",
+      "sec-fetch-mode": "navigate",
+      "sec-ch-ua": '"Chrome"',
+      "x-api-key": "legit",
+    };
+
+    const serverParams: Record<string, ServerParameters> = {
+      "server-1": makeServer({
+        uuid: "server-1",
+        name: "test",
+        forward_headers: [
+          "Sec-Fetch-Dest",
+          "Sec-Fetch-Mode",
+          "Sec-Ch-Ua",
+          "X-API-Key",
+        ],
+      }),
+    };
+
+    const result = extractForwardedHeaders(clientHeaders, serverParams);
+    expect(result).toEqual({
+      "server-1": { "X-API-Key": "legit" },
+    });
+  });
+});
+
+describe("extractClientHeaders", () => {
+  it("should extract string header values", () => {
+    const result = extractClientHeaders({
+      authorization: "Bearer token",
+      "content-type": "application/json",
+    });
+
+    expect(result).toEqual({
+      authorization: "Bearer token",
+      "content-type": "application/json",
+    });
+  });
+
+  it("should join array header values with comma-space", () => {
+    const result = extractClientHeaders({
+      "x-custom": ["val1", "val2", "val3"],
+    });
+
+    expect(result).toEqual({
+      "x-custom": "val1, val2, val3",
+    });
+  });
+
+  it("should skip undefined values", () => {
+    const result = extractClientHeaders({
+      "x-present": "yes",
+      "x-missing": undefined,
+    });
+
+    expect(result).toEqual({
+      "x-present": "yes",
+    });
+  });
+
+  it("should return empty object for empty headers", () => {
+    expect(extractClientHeaders({})).toEqual({});
+  });
+
+  it("should handle mixed string and array values", () => {
+    const result = extractClientHeaders({
+      authorization: "Bearer token",
+      "set-cookie": ["a=1", "b=2"],
+      host: "example.com",
+      "x-undef": undefined,
+    });
+
+    expect(result).toEqual({
+      authorization: "Bearer token",
+      "set-cookie": "a=1, b=2",
+      host: "example.com",
+    });
   });
 });

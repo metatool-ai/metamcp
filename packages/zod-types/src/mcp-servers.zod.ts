@@ -18,7 +18,10 @@ const httpHeaderName = z
   .regex(HTTP_HEADER_NAME_REGEX, "Invalid HTTP header name");
 
 /** Validated array of HTTP header names (API layer) */
-export const ForwardHeadersArraySchema = z.array(httpHeaderName).optional();
+export const ForwardHeadersArraySchema = z
+  .array(httpHeaderName)
+  .max(50, "Too many forward headers (max 50)")
+  .optional();
 
 /** Validated forward_headers from a form textarea (newline-separated string) */
 export const ForwardHeadersFormSchema = z

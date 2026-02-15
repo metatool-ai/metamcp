@@ -39,6 +39,13 @@ export class MetaMcpServerPool {
   // Track ongoing idle server creation to prevent duplicates
   private creatingIdleServers: Set<string> = new Set();
 
+  // TTL cache: namespaceUuid -> { needsFresh: boolean, expiresAt: number }
+  // Avoids a redundant getMcpServers() DB query on every getServer() call.
+  private needsFreshServerCache: Record<
+    string,
+    { needsFresh: boolean; expiresAt: number }
+  > = {};
+
   // Session cleanup timer
   private cleanupTimer: NodeJS.Timeout | null = null;
 
@@ -79,10 +86,21 @@ export class MetaMcpServerPool {
     // clientRequestHeaders, so they can't forward per-user credentials.
     // We check the actual server configs rather than just the presence of
     // clientRequestHeaders (which is always truthy from the routers).
+    // The result is cached with a 60-second TTL to avoid a DB roundtrip
+    // on every new session.
     let needsFreshServer = false;
     if (clientRequestHeaders) {
-      const serverParams = await getMcpServers(namespaceUuid, includeInactiveServers);
-      needsFreshServer = anyServerRequiresForwardedHeaders(serverParams);
+      const cached = this.needsFreshServerCache[namespaceUuid];
+      if (cached && Date.now() < cached.expiresAt) {
+        needsFreshServer = cached.needsFresh;
+      } else {
+        const serverParams = await getMcpServers(namespaceUuid, includeInactiveServers);
+        needsFreshServer = anyServerRequiresForwardedHeaders(serverParams);
+        this.needsFreshServerCache[namespaceUuid] = {
+          needsFresh: needsFreshServer,
+          expiresAt: Date.now() + 60_000, // 60s TTL
+        };
+      }
     }
 
     if (!needsFreshServer) {

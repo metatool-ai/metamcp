@@ -126,8 +126,12 @@ export class McpServerPool {
       `Created new active session for server ${serverUuid}, session ${sessionId}`,
     );
 
-    // Also create an idle session for future use (ASYNC - NON-BLOCKING)
-    this.createIdleSessionAsync(serverUuid, params, namespaceUuid);
+    // Only pre-warm idle pool for servers that don't require forwarded headers.
+    // Idle sessions are created without per-client headers, so they can't be
+    // reused when per-client header forwarding is configured.
+    if (!serverRequiresForwardedHeaders(params)) {
+      this.createIdleSessionAsync(serverUuid, params, namespaceUuid);
+    }
 
     return newClient;
   }
@@ -313,9 +317,10 @@ export class McpServerPool {
     const serverUuids = this.sessionToServers[sessionId];
     if (serverUuids) {
       // For each server this session was using, create new idle sessions if needed (ASYNC - NON-BLOCKING)
+      // Skip servers with forward_headers — idle sessions can't carry per-client headers.
       Array.from(serverUuids).forEach((serverUuid) => {
         const params = this.serverParamsCache[serverUuid];
-        if (params) {
+        if (params && !serverRequiresForwardedHeaders(params)) {
           // Note: We don't have namespaceUuid here, so we can't track crashes properly
           // This is a limitation of the current design - we'll need to pass namespaceUuid from the caller
           this.createIdleSessionAsync(serverUuid, params);
