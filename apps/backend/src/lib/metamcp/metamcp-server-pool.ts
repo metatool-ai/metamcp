@@ -303,11 +303,15 @@ export class MetaMcpServerPool {
     // Clean up session timestamp
     delete this.sessionTimestamps[sessionId];
 
-    // Get the namespace UUID and create a new idle server if needed
+    // Get the namespace UUID and create a new idle server if needed.
+    // Skip idle replenishment for namespaces that require forwarded headers
+    // since idle servers can't carry per-client headers.
     const namespaceUuid = this.sessionToNamespace[sessionId];
     if (namespaceUuid) {
-      // Create a new idle server to replace capacity (ASYNC - NON-BLOCKING)
-      this.createIdleServerAsync(namespaceUuid);
+      const cached = this.needsFreshServerCache[namespaceUuid];
+      if (!cached || !cached.needsFresh) {
+        this.createIdleServerAsync(namespaceUuid);
+      }
       delete this.sessionToNamespace[sessionId];
     }
 
@@ -340,6 +344,7 @@ export class MetaMcpServerPool {
     this.sessionToNamespace = {};
     this.sessionTimestamps = {};
     this.creatingIdleServers.clear();
+    this.needsFreshServerCache = {};
 
     // Clear cleanup timer
     if (this.cleanupTimer) {
@@ -415,6 +420,9 @@ export class MetaMcpServerPool {
 
     // Remove from creating set if it's in progress
     this.creatingIdleServers.delete(namespaceUuid);
+
+    // Clear needsFreshServer cache since config may have changed
+    delete this.needsFreshServerCache[namespaceUuid];
 
     // Create a new idle server with updated configuration
     await this.createIdleServer(namespaceUuid, includeInactiveServers);
