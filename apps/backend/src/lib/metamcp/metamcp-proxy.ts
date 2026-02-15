@@ -140,7 +140,13 @@ export const createServer = async (
     },
   );
 
-  // Create the handler context
+  // Create the handler context.
+  // NOTE: clientRequestHeaders are captured once at session initialisation
+  // (StreamableHTTP) or connection time (SSE). They are NOT refreshed on
+  // subsequent requests within the same session. This is acceptable because
+  // headers like Authorization are stable for a session's lifetime, but
+  // callers should be aware of this if session-scoped header staleness
+  // could be a concern.
   const handlerContext: MetaMCPHandlerContext = {
     namespaceUuid,
     sessionId,

@@ -124,8 +124,12 @@ export class MetaMcpServerPool {
       `Created new active MetaMCP server for namespace ${namespaceUuid}, session ${sessionId}`,
     );
 
-    // Also create an idle server for future use (ASYNC - NON-BLOCKING)
-    this.createIdleServerAsync(namespaceUuid, includeInactiveServers);
+    // Only pre-warm idle pool when headers aren't required — idle servers
+    // are created without clientRequestHeaders so they can't be reused when
+    // per-client header forwarding is needed.
+    if (!needsFreshServer) {
+      this.createIdleServerAsync(namespaceUuid, includeInactiveServers);
+    }
 
     return newServer;
   }
@@ -627,6 +631,7 @@ export class MetaMcpServerPool {
     if (age === undefined) return false;
 
     const sessionLifetime = await configService.getSessionLifetime();
+    if (sessionLifetime === null) return false; // null = no expiry configured
     return age > sessionLifetime;
   }
 }
