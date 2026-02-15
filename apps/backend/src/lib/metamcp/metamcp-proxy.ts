@@ -27,6 +27,10 @@ import { toolsImplementations } from "../../trpc/tools.impl";
 import { configService } from "../config.service";
 import { ConnectedClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
+import {
+  extractForwardedHeaders,
+  mergeHeaders,
+} from "./header-forwarding";
 import { mcpServerPool } from "./mcp-server-pool";
 import {
   createFilterCallToolMiddleware,
@@ -101,6 +105,7 @@ export const createServer = async (
   namespaceUuid: string,
   sessionId: string,
   includeInactiveServers: boolean = false,
+  clientRequestHeaders?: Record<string, string>,
 ) => {
   const toolToClient: Record<string, ConnectedClient> = {};
   const toolToServerUuid: Record<string, string> = {};
@@ -135,10 +140,17 @@ export const createServer = async (
     },
   );
 
-  // Create the handler context
+  // Create the handler context.
+  // NOTE: clientRequestHeaders are captured once at session initialisation
+  // (StreamableHTTP) or connection time (SSE). They are NOT refreshed on
+  // subsequent requests within the same session. This is acceptable because
+  // headers like Authorization are stable for a session's lifetime, but
+  // callers should be aware of this if session-scoped header staleness
+  // could be a concern.
   const handlerContext: MetaMCPHandlerContext = {
     namespaceUuid,
     sessionId,
+    clientRequestHeaders,
   };
 
   // Original List Tools Handler
@@ -155,6 +167,12 @@ export const createServer = async (
       context.namespaceUuid,
       includeInactiveServers,
     );
+
+    // Extract forwarded headers from client request for servers that need them
+    const forwardedHeadersByServer = context.clientRequestHeaders
+      ? extractForwardedHeaders(context.clientRequestHeaders, serverParams)
+      : {};
+
     const allTools: Tool[] = [];
 
     // Track visited servers to detect circular references - reset on each call
@@ -178,10 +196,22 @@ export const createServer = async (
           );
           return;
         }
+
+        // Merge forwarded headers into server params for this session
+        const effectiveParams = forwardedHeadersByServer[mcpServerUuid]
+          ? {
+              ...params,
+              headers: mergeHeaders(
+                params.headers,
+                forwardedHeadersByServer[mcpServerUuid],
+              ),
+            }
+          : params;
+
         const session = await mcpServerPool.getSession(
           context.sessionId,
           mcpServerUuid,
-          params,
+          effectiveParams,
           namespaceUuid,
         );
         if (!session) {
@@ -319,7 +349,7 @@ export const createServer = async (
   // Original Call Tool Handler
   const originalCallToolHandler: CallToolHandler = async (
     request,
-    _context,
+    context,
   ) => {
     const { name, arguments: args } = request.params;
 
@@ -344,12 +374,28 @@ export const createServer = async (
           includeInactiveServers,
         );
 
+        // Extract forwarded headers for dynamic tool routing
+        const forwardedHeadersByServer = context.clientRequestHeaders
+          ? extractForwardedHeaders(context.clientRequestHeaders, serverParams)
+          : {};
+
         // Find the server with the matching name prefix
         for (const [mcpServerUuid, params] of Object.entries(serverParams)) {
+          // Merge forwarded headers for this server
+          const effectiveParams = forwardedHeadersByServer[mcpServerUuid]
+            ? {
+                ...params,
+                headers: mergeHeaders(
+                  params.headers,
+                  forwardedHeadersByServer[mcpServerUuid],
+                ),
+              }
+            : params;
+
           const session = await mcpServerPool.getSession(
             sessionId,
             mcpServerUuid,
-            params,
+            effectiveParams,
             namespaceUuid,
           );
 
@@ -546,6 +592,11 @@ export const createServer = async (
     );
     const allPrompts: z.infer<typeof ListPromptsResultSchema>["prompts"] = [];
 
+    // Extract forwarded headers from client request for servers that need them
+    const forwardedHeadersByServer = handlerContext.clientRequestHeaders
+      ? extractForwardedHeaders(handlerContext.clientRequestHeaders, serverParams)
+      : {};
+
     // Track visited servers to detect circular references - reset on each call
     const visitedServers = new Set<string>();
 
@@ -576,10 +627,21 @@ export const createServer = async (
 
     await Promise.allSettled(
       validPromptServers.map(async ([uuid, params]) => {
+        // Merge forwarded headers into server params for this session
+        const effectiveParams = forwardedHeadersByServer[uuid]
+          ? {
+              ...params,
+              headers: mergeHeaders(
+                params.headers,
+                forwardedHeadersByServer[uuid],
+              ),
+            }
+          : params;
+
         const session = await mcpServerPool.getSession(
           sessionId,
           uuid,
-          params,
+          effectiveParams,
           namespaceUuid,
         );
         if (!session) return;
@@ -647,6 +709,11 @@ export const createServer = async (
     const allResources: z.infer<typeof ListResourcesResultSchema>["resources"] =
       [];
 
+    // Extract forwarded headers from client request for servers that need them
+    const forwardedHeadersByServer = handlerContext.clientRequestHeaders
+      ? extractForwardedHeaders(handlerContext.clientRequestHeaders, serverParams)
+      : {};
+
     // Track visited servers to detect circular references - reset on each call
     const visitedServers = new Set<string>();
 
@@ -677,10 +744,21 @@ export const createServer = async (
 
     await Promise.allSettled(
       validResourceServers.map(async ([uuid, params]) => {
+        // Merge forwarded headers into server params for this session
+        const effectiveParams = forwardedHeadersByServer[uuid]
+          ? {
+              ...params,
+              headers: mergeHeaders(
+                params.headers,
+                forwardedHeadersByServer[uuid],
+              ),
+            }
+          : params;
+
         const session = await mcpServerPool.getSession(
           sessionId,
           uuid,
-          params,
+          effectiveParams,
           namespaceUuid,
         );
         if (!session) return;
@@ -782,6 +860,11 @@ export const createServer = async (
       const visitedServers = new Set<string>();
 
       // Filter out self-referencing servers before processing
+      // Extract forwarded headers from client request for servers that need them
+      const forwardedHeadersByServer = handlerContext.clientRequestHeaders
+        ? extractForwardedHeaders(handlerContext.clientRequestHeaders, serverParams)
+        : {};
+
       const validTemplateServers = Object.entries(serverParams).filter(
         ([uuid, params]) => {
           // Skip if we've already visited this server to prevent circular references
@@ -808,10 +891,21 @@ export const createServer = async (
 
       await Promise.allSettled(
         validTemplateServers.map(async ([uuid, params]) => {
+          // Merge forwarded headers into server params for this session
+          const effectiveParams = forwardedHeadersByServer[uuid]
+            ? {
+                ...params,
+                headers: mergeHeaders(
+                  params.headers,
+                  forwardedHeadersByServer[uuid],
+                ),
+              }
+            : params;
+
           const session = await mcpServerPool.getSession(
             sessionId,
             uuid,
-            params,
+            effectiveParams,
             namespaceUuid,
           );
           if (!session) return;

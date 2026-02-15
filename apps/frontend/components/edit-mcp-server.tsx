@@ -157,6 +157,7 @@ export function EditMcpServer({
       url: "",
       bearerToken: "",
       headers: "",
+      forward_headers: "",
       env: "",
       user_id: undefined,
     },
@@ -167,10 +168,11 @@ export function EditMcpServer({
     const subscription = editForm.watch((value, { name }) => {
       if (name === "type" && value.type) {
         if (value.type === McpServerTypeEnum.Enum.STDIO) {
-          // Clear URL, bearer token, and headers when switching to stdio
+          // Clear URL, bearer token, headers, and forward headers when switching to stdio
           editForm.setValue("url", "");
           editForm.setValue("bearerToken", "");
           editForm.setValue("headers", "");
+          editForm.setValue("forward_headers", "");
         } else if (
           value.type === McpServerTypeEnum.Enum.SSE ||
           value.type === McpServerTypeEnum.Enum.STREAMABLE_HTTP
@@ -198,6 +200,9 @@ export function EditMcpServer({
         bearerToken: server.bearerToken || "",
         headers: Object.entries(server.headers)
           .map(([key, value]) => `${key}=${value}`)
+          .join("\n"),
+        forward_headers: Object.entries(server.forward_headers || {})
+          .map(([k, v]) => (k === v ? k : `${k}=${v}`))
           .join("\n"),
         env: Object.entries(server.env)
           .map(([key, value]) => `${key}=${value}`)
@@ -253,6 +258,30 @@ export function EditMcpServer({
         }
       }
 
+      // Parse forward_headers string into record
+      // Each line is either "HeaderName" (1:1) or "ClientHeader=ServerHeader" (rename)
+      const forwardHeadersRecord: Record<string, string> = {};
+      if (data.forward_headers) {
+        const lines = data.forward_headers
+          .trim()
+          .split("\n")
+          .map((h: string) => h.trim())
+          .filter((h: string) => h.length > 0);
+        for (const line of lines) {
+          const eqIdx = line.indexOf("=");
+          if (eqIdx === -1) {
+            // Bare name: 1:1 mapping
+            forwardHeadersRecord[line] = line;
+          } else {
+            const clientName = line.slice(0, eqIdx).trim();
+            const serverName = line.slice(eqIdx + 1).trim();
+            if (clientName && serverName) {
+              forwardHeadersRecord[clientName] = serverName;
+            }
+          }
+        }
+      }
+
       // Create the API request payload
       const apiPayload: UpdateMcpServerRequest = {
         uuid: server.uuid,
@@ -265,6 +294,7 @@ export function EditMcpServer({
         url: data.url,
         bearerToken: data.bearerToken,
         headers: headersObject,
+        forward_headers: forwardHeadersRecord,
         user_id: data.user_id,
       };
 
@@ -508,6 +538,33 @@ export function EditMcpServer({
                 <p className="text-xs text-muted-foreground">
                   One header per line in KEY=VALUE format
                 </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="edit-forward-headers"
+                  className="text-sm font-medium"
+                >
+                  {t("mcp-servers:forwardHeaders")}
+                </label>
+                <Textarea
+                  id="edit-forward-headers"
+                  {...editForm.register("forward_headers")}
+                  placeholder={t("mcp-servers:forwardHeadersPlaceholder")}
+                  className="h-24 whitespace-pre-wrap break-all overflow-x-hidden"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("mcp-servers:forwardHeadersHelp")}
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  {t("mcp-servers:forwardHeadersWarning")}
+                </p>
+                {editForm.formState.errors.forward_headers && (
+                  <p className="text-sm text-red-500">
+                    {editForm.formState.errors.forward_headers.message ||
+                      t("mcp-servers:forwardHeadersInvalid")}
+                  </p>
+                )}
               </div>
             </>
           )}

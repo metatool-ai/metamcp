@@ -117,6 +117,7 @@ export async function convertDbServerToParams(
       oauth_tokens: oauthTokens,
       bearerToken: server.bearerToken,
       headers: server.headers || {},
+      forward_headers: server.forward_headers || {},
     };
 
     // Process based on server type

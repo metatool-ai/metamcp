@@ -39,6 +39,9 @@
     "tooShort": "비밀번호는 최소 8자 이상이어야 합니다",
     "mismatch": "비밀번호가 일치하지 않습니다"
   },
+  "forwardHeaders": {
+    "invalidHeaderName": "잘못되었거나 금지된 Header 이름입니다. 금지: Host, Cookie, Set-Cookie, Connection, Proxy-*, Sec-* 등"
+  },
   "generic": {
     "invalid": "유효하지 않은 값입니다",
     "required": "필수 입력 항목입니다",

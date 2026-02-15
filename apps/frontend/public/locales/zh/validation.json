@@ -39,6 +39,9 @@
     "tooShort": "密码必须至少8个字符",
     "mismatch": "密码不匹配"
   },
+  "forwardHeaders": {
+    "invalidHeaderName": "无效或禁止的请求头名称。禁止：Host、Cookie、Set-Cookie、Connection、Proxy-*、Sec-* 等"
+  },
   "generic": {
     "invalid": "无效值",
     "required": "此字段为必填项",

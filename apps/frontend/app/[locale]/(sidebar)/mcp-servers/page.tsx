@@ -59,6 +59,7 @@ export default function McpServersPage() {
       url: "",
       bearerToken: "",
       headers: "",
+      forward_headers: "",
       user_id: undefined, // Default to private (current user)
     },
   });
@@ -125,6 +126,30 @@ export default function McpServersPage() {
       }
     }
 
+    // Parse forward_headers string into record
+    // Each line is either "HeaderName" (1:1) or "ClientHeader=ServerHeader" (rename)
+    const forwardHeadersRecord: Record<string, string> = {};
+    if (data.forward_headers) {
+      const lines = data.forward_headers
+        .trim()
+        .split("\n")
+        .map((h) => h.trim())
+        .filter((h) => h.length > 0);
+      for (const line of lines) {
+        const eqIdx = line.indexOf("=");
+        if (eqIdx === -1) {
+          // Bare name: 1:1 mapping
+          forwardHeadersRecord[line] = line;
+        } else {
+          const clientName = line.slice(0, eqIdx).trim();
+          const serverName = line.slice(eqIdx + 1).trim();
+          if (clientName && serverName) {
+            forwardHeadersRecord[clientName] = serverName;
+          }
+        }
+      }
+    }
+
     const request: CreateMcpServerRequest = {
       name: data.name,
       description: data.description,
@@ -135,6 +160,7 @@ export default function McpServersPage() {
       url: data.url,
       bearerToken: data.bearerToken,
       headers: headersObject,
+      forward_headers: forwardHeadersRecord,
       user_id: data.user_id,
     };
 
@@ -434,6 +460,35 @@ export default function McpServersPage() {
                                 className="whitespace-pre-wrap break-all overflow-x-hidden"
                               />
                             </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="forward_headers"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              {t("mcp-servers:forwardHeaders")}
+                            </FormLabel>
+                            <FormControl>
+                              <Textarea
+                                {...field}
+                                placeholder={t(
+                                  "mcp-servers:forwardHeadersPlaceholder",
+                                )}
+                                rows={3}
+                                className="whitespace-pre-wrap break-all overflow-x-hidden"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              {t("mcp-servers:forwardHeadersHelp")}
+                            </p>
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              {t("mcp-servers:forwardHeadersWarning")}
+                            </p>
                             <FormMessage />
                           </FormItem>
                         )}

@@ -5,6 +5,111 @@ export const McpServerStatusEnum = z.enum(["ACTIVE", "INACTIVE"]);
 
 export const McpServerErrorStatusEnum = z.enum(["NONE", "ERROR"]);
 
+/**
+ * RFC 7230 token characters for HTTP header field names.
+ * Valid: letters, digits, and !#$%&'*+-.^_`|~
+ */
+const HTTP_HEADER_NAME_REGEX = /^[a-zA-Z0-9!#$%&'*+\-.^_`|~]+$/;
+
+/**
+ * Headers that must never be forwarded to backend servers.
+ * Shared between Zod validation (reject at save time) and runtime filtering.
+ */
+export const DENIED_FORWARD_HEADERS = new Set([
+  "host",
+  "cookie",
+  "set-cookie",
+  "connection",
+  "transfer-encoding",
+  "content-length",
+  "content-encoding",
+  "te",
+  "trailer",
+  "upgrade",
+  "keep-alive",
+  "proxy-authorization",
+  "proxy-authenticate",
+  "proxy-connection",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-real-ip",
+  "mcp-session-id",
+]);
+
+/**
+ * Header name prefixes that are always denied.
+ * - `proxy-` covers all proxy-related headers
+ * - `sec-` covers browser-controlled Fetch Metadata headers
+ */
+export const DENIED_HEADER_PREFIXES = ["proxy-", "sec-"];
+
+/** Check whether a header name is denied (exact or prefix match) */
+function isDeniedHeader(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    DENIED_FORWARD_HEADERS.has(lower) ||
+    DENIED_HEADER_PREFIXES.some((p) => lower.startsWith(p))
+  );
+}
+
+/** Reusable Zod schema for a single HTTP header name */
+const httpHeaderName = z
+  .string()
+  .min(1, "Header name cannot be empty")
+  .regex(HTTP_HEADER_NAME_REGEX, "Invalid HTTP header name");
+
+/**
+ * Validated Record mapping client header names to server header names.
+ * Keys are validated against the deny-list; values are free-form header names.
+ */
+export const ForwardHeadersRecordSchema = z
+  .record(httpHeaderName, httpHeaderName)
+  .refine(
+    (rec) => Object.keys(rec).length <= 50,
+    "Too many forward headers (max 50)",
+  )
+  .refine(
+    (rec) => Object.keys(rec).every((k) => !isDeniedHeader(k)),
+    "Forbidden header name in keys",
+  )
+  .optional();
+
+/**
+ * Validated forward_headers from a form textarea (newline-separated string).
+ * Each line is either:
+ *  - `HeaderName` (1:1 mapping, shorthand for HeaderName=HeaderName)
+ *  - `ClientHeader=ServerHeader` (rename mapping)
+ */
+export const ForwardHeadersFormSchema = z
+  .string()
+  .optional()
+  .refine(
+    (val) => {
+      if (!val || val.trim() === "") return true;
+      const lines = val
+        .trim()
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      return lines.every((line) => {
+        const eqIdx = line.indexOf("=");
+        if (eqIdx === -1) {
+          // Bare name: must be valid header and not denied
+          return HTTP_HEADER_NAME_REGEX.test(line) && !isDeniedHeader(line);
+        }
+        const clientName = line.slice(0, eqIdx).trim();
+        const serverName = line.slice(eqIdx + 1).trim();
+        return (
+          HTTP_HEADER_NAME_REGEX.test(clientName) &&
+          !isDeniedHeader(clientName) &&
+          HTTP_HEADER_NAME_REGEX.test(serverName)
+        );
+      });
+    },
+    { message: "validation:forwardHeaders.invalidHeaderName" },
+  );
+
 // Define the form schema (includes UI-specific fields)
 export const createServerFormSchema = z
   .object({
@@ -23,6 +128,7 @@ export const createServerFormSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.string().optional(),
+    forward_headers: ForwardHeadersFormSchema,
     env: z.string().optional(),
     user_id: z.string().nullable().optional(),
   })
@@ -85,6 +191,7 @@ export const EditServerFormSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.string().optional(),
+    forward_headers: ForwardHeadersFormSchema,
     env: z.string().optional(),
     user_id: z.string().nullable().optional(),
   })
@@ -150,6 +257,7 @@ export const CreateMcpServerRequestSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.record(z.string()).optional(),
+    forward_headers: ForwardHeadersRecordSchema,
     user_id: z.string().nullable().optional(),
   })
   .refine(
@@ -189,6 +297,7 @@ export const McpServerSchema = z.object({
   created_at: z.string(),
   bearerToken: z.string().nullable(),
   headers: z.record(z.string()),
+  forward_headers: z.record(z.string()),
   user_id: z.string().nullable(),
   error_status: McpServerErrorStatusEnum.optional(),
 });
@@ -219,6 +328,7 @@ export const BulkImportMcpServerSchema = z
     env: z.record(z.string()).optional(),
     url: z.string().optional(),
     headers: z.record(z.string()).optional(),
+    forward_headers: ForwardHeadersRecordSchema,
     description: z.string().optional(),
     type: z
       .string()
@@ -332,6 +442,7 @@ export const UpdateMcpServerRequestSchema = z
     url: z.string().optional(),
     bearerToken: z.string().optional(),
     headers: z.record(z.string()).optional(),
+    forward_headers: ForwardHeadersRecordSchema,
     user_id: z.string().nullable().optional(),
   })
   .refine(
@@ -402,6 +513,7 @@ export const McpServerCreateInputSchema = z.object({
   url: z.string().nullable().optional(),
   bearerToken: z.string().nullable().optional(),
   headers: z.record(z.string()).optional(),
+  forward_headers: ForwardHeadersRecordSchema,
   user_id: z.string().nullable().optional(),
 });
 
@@ -426,6 +538,7 @@ export const McpServerUpdateInputSchema = z.object({
   url: z.string().nullable().optional(),
   bearerToken: z.string().nullable().optional(),
   headers: z.record(z.string()).optional(),
+  forward_headers: ForwardHeadersRecordSchema,
   user_id: z.string().nullable().optional(),
 });
 
@@ -446,6 +559,7 @@ export const DatabaseMcpServerSchema = z.object({
   created_at: z.date(),
   bearerToken: z.string().nullable(),
   headers: z.record(z.string()),
+  forward_headers: z.record(z.string()),
   user_id: z.string().nullable(),
 });
 
