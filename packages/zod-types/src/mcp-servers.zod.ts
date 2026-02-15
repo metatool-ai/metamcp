@@ -21,7 +21,21 @@ const httpHeaderName = z
 export const ForwardHeadersArraySchema = z.array(httpHeaderName).optional();
 
 /** Validated forward_headers from a form textarea (newline-separated string) */
-export const ForwardHeadersFormSchema = z.string().optional();
+export const ForwardHeadersFormSchema = z
+  .string()
+  .optional()
+  .refine(
+    (val) => {
+      if (!val || val.trim() === "") return true;
+      const lines = val
+        .trim()
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      return lines.every((line) => HTTP_HEADER_NAME_REGEX.test(line));
+    },
+    { message: "validation:forwardHeaders.invalidHeaderName" },
+  );
 
 // Define the form schema (includes UI-specific fields)
 export const createServerFormSchema = z

@@ -542,6 +542,11 @@ export function EditMcpServer({
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   {t("mcp-servers:forwardHeadersWarning")}
                 </p>
+                {editForm.formState.errors.forward_headers && (
+                  <p className="text-xs text-destructive">
+                    {t("mcp-servers:forwardHeadersInvalid")}
+                  </p>
+                )}
               </div>
             </>
           )}

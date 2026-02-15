@@ -39,6 +39,9 @@
     "tooShort": "Password must be at least 8 characters long",
     "mismatch": "Passwords do not match"
   },
+  "forwardHeaders": {
+    "invalidHeaderName": "Invalid header name: only letters, digits, and !#$%&'*+-.^_`|~ are allowed"
+  },
   "generic": {
     "invalid": "Invalid value",
     "required": "This field is required",
