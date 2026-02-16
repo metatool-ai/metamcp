@@ -26,9 +26,9 @@
 
 ---
 
-欲了解更多详情，请访问我们的文档站点：https://docs.metamcp.com （暂时没有中文）
+欲了解更多详情，请访问我们的文档站点：https://docs.metamcp.com （支持简体中文）
 
-[English](./README.md) | 中文
+[English](./README.md) | 简体中文
 
 ## 📋 目录
 
