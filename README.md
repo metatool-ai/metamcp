@@ -30,7 +30,7 @@
 
 For more details, consider visiting our documentation site: https://docs.metamcp.com
 
-English | [中文](./README_cn.md)
+English | [简体中文](./README_cn.md)
 ## 📋 Table of Contents <!-- omit in toc -->
 
 - [🎯 Use Cases](#-use-cases)
