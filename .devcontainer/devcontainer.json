@@ -28,7 +28,6 @@
         "ms-playwright.playwright"
       ],
       "settings": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
           "source.fixAll.eslint": "explicit"
@@ -53,7 +52,7 @@
       }
     }
   },
-  "forwardPorts": [12008, 12009, 9433],
+  "forwardPorts": [12008, 12009, "9433:5432"],
   "portsAttributes": {
     "12008": {
       "label": "Frontend (Next.js)",
@@ -71,12 +70,7 @@
   "overrideCommand": true,
   "remoteUser": "root",
   "shutdownAction": "stopCompose",
-  "onCreateCommand": {
-    "initialize": "CI=true pnpm install && cd apps/backend && pnpm drizzle-kit migrate --config=drizzle.config.ts"
-  },
-  "postAttachCommand": {
-    "finalMessage": "echo \"\\033[1mWhat's next:\\n\\t\\033[0;36m💡\\033[0m Open the terminal and run \\033[0;36mpnpm dev\\033[0m to start the development servers.\""
-  },
+  "postAttachCommand": "CI=true pnpm install --no-frozen-lockfile && cd apps/backend && pnpm drizzle-kit migrate --config=drizzle.config.ts && echo \"\\033[1mWhat's next:\\n\\t\\033[0;36m💡\\033[0m Open the terminal and run \\033[0;36mpnpm dev\\033[0m to start the development servers.\"",
   "remoteEnv": {
     "NODE_ENV": "development",
     "NEXT_TELEMETRY_DISABLED": "1"
