@@ -21,15 +21,28 @@ export class AuthRateLimiter {
     const record = this.attempts.get(identifier);
 
     if (!record) {
+      this.attempts.set(identifier, {
+        count: 1,
+        resetTime: now + this.windowMs,
+      });
       return false;
     }
 
     if (now > record.resetTime) {
-      this.attempts.delete(identifier);
+      // Reset window
+      this.attempts.set(identifier, {
+        count: 1,
+        resetTime: now + this.windowMs,
+      });
       return false;
     }
 
-    return record.count >= this.maxAttempts;
+    if (record.count >= this.maxAttempts) {
+      return true;
+    }
+
+    record.count++;
+    return false;
   }
 
   recordFailedAttempt(identifier: string): void {
