@@ -13,13 +13,38 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
-    "dotenv-cli": "^8.0.0",
-    "prettier": "^3.5.3",
-    "turbo": "^2.5.5",
-    "typescript": "5.8.2"
+    "dotenv-cli": "^11.0.0",
+    "prettier": "^3.8.1",
+    "turbo": "^2.8.9",
+    "typescript": "5.9.3"
   },
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@10.29.3",
   "engines": {
     "node": ">=18"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild@<=0.24.2": ">=0.25.0",
+      "brace-expansion@>=1.0.0 <=1.1.11": ">=1.1.12",
+      "brace-expansion@>=2.0.0 <=2.0.1": ">=2.0.2",
+      "prismjs@<1.30.0": ">=1.30.0",
+      "@eslint/plugin-kit@<0.3.4": ">=0.3.4",
+      "glob@>=10.2.0 <10.5.0": ">=10.5.0",
+      "@modelcontextprotocol/sdk@<1.24.0": ">=1.24.0",
+      "@trpc/server@>=11.0.0 <11.8.0": ">=11.8.0",
+      "@modelcontextprotocol/sdk@<1.25.2": ">=1.25.2",
+      "tar@<=7.5.2": ">=7.5.3",
+      "tar@<=7.5.3": ">=7.5.4",
+      "lodash@>=4.0.0 <=4.17.22": ">=4.17.23",
+      "tar@<7.5.7": ">=7.5.7",
+      "js-yaml@>=4.0.0 <4.1.1": ">=4.1.1",
+      "@modelcontextprotocol/sdk@>=1.10.0 <=1.25.3": ">=1.26.0",
+      "qs@<6.14.1": ">=6.14.1",
+      "qs@>=6.7.0 <=6.14.1": ">=6.14.2"
+    },
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
   }
 }
