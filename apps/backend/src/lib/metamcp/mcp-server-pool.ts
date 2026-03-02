@@ -38,6 +38,9 @@ export class McpServerPool {
   // Session cleanup timer
   private cleanupTimer: NodeJS.Timeout | null = null;
 
+  // Health check timer for idle sessions
+  private healthCheckTimer: NodeJS.Timeout | null = null;
+
   // Background idle sessions by namespace: namespaceUuid -> any
   private backgroundIdleSessionsByNamespace: Map<string, any> = new Map();
 
@@ -54,6 +57,7 @@ export class McpServerPool {
     this.defaultIdleCount = defaultIdleCount;
     this.maxTotalConnections = maxTotalConnections;
     this.startCleanupTimer();
+    this.startHealthCheckTimer();
   }
 
   /**
@@ -80,6 +84,8 @@ export class McpServerPool {
 
     // Check if we already have an active session for this sessionId and server
     if (this.activeSessions[sessionId]?.[serverUuid]) {
+      // Touch timestamp on every access so SESSION_LIFETIME acts as idle timeout, not hard TTL
+      this.sessionTimestamps[sessionId] = Date.now();
       return this.activeSessions[sessionId][serverUuid];
     }
 
@@ -283,7 +289,8 @@ export class McpServerPool {
   }
 
   /**
-   * Cleanup a session by sessionId
+   * Cleanup a session by sessionId.
+   * Recycles healthy connections back to the idle pool instead of destroying them.
    */
   async cleanupSession(sessionId: string): Promise<void> {
     const activeSession = this.activeSessions[sessionId];
@@ -291,12 +298,31 @@ export class McpServerPool {
       return;
     }
 
-    // Cleanup all connections for this session
-    await Promise.allSettled(
-      Object.entries(activeSession).map(async ([_serverUuid, client]) => {
-        await client.cleanup();
-      }),
-    );
+    let recycled = 0;
+    let destroyed = 0;
+
+    // Try to recycle each connection back to idle pool
+    for (const [serverUuid, client] of Object.entries(activeSession)) {
+      if (!this.idleSessions[serverUuid]) {
+        // No idle session for this server — recycle the connection
+        this.idleSessions[serverUuid] = client;
+        recycled++;
+        logger.info(
+          `Recycled active connection for server ${serverUuid} to idle pool (session ${sessionId})`,
+        );
+      } else {
+        // Already have an idle session — destroy the extra
+        try {
+          await client.cleanup();
+        } catch (error) {
+          logger.error(
+            `Error cleaning up extra connection for server ${serverUuid}:`,
+            error,
+          );
+        }
+        destroyed++;
+      }
+    }
 
     // Remove from active sessions
     delete this.activeSessions[sessionId];
@@ -305,22 +331,11 @@ export class McpServerPool {
     delete this.sessionTimestamps[sessionId];
 
     // Clean up session to servers mapping
-    const serverUuids = this.sessionToServers[sessionId];
-    if (serverUuids) {
-      // For each server this session was using, create new idle sessions if needed (ASYNC - NON-BLOCKING)
-      Array.from(serverUuids).forEach((serverUuid) => {
-        const params = this.serverParamsCache[serverUuid];
-        if (params) {
-          // Note: We don't have namespaceUuid here, so we can't track crashes properly
-          // This is a limitation of the current design - we'll need to pass namespaceUuid from the caller
-          this.createIdleSessionAsync(serverUuid, params);
-        }
-      });
+    delete this.sessionToServers[sessionId];
 
-      delete this.sessionToServers[sessionId];
-    }
-
-    logger.info(`Cleaned up MCP server pool session ${sessionId}`);
+    logger.info(
+      `Cleaned up session ${sessionId} (recycled: ${recycled}, destroyed: ${destroyed})`,
+    );
   }
 
   /**
@@ -352,6 +367,12 @@ export class McpServerPool {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
+    }
+
+    // Clear health check timer
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
     }
 
     logger.info("Cleaned up all MCP server pool sessions");
@@ -692,6 +713,79 @@ export class McpServerPool {
       }
     } catch (error) {
       logger.error("Error during automatic session cleanup:", error);
+    }
+  }
+
+  /**
+   * Start the health check timer for idle sessions
+   */
+  private startHealthCheckTimer(): void {
+    // Check idle session health every 60 seconds
+    this.healthCheckTimer = setInterval(
+      async () => {
+        await this.checkIdleSessionHealth();
+      },
+      60 * 1000,
+    ); // 60 seconds
+  }
+
+  /**
+   * Check health of idle sessions by pinging them.
+   * Dead sessions are cleaned up and recreated.
+   * Servers in ERROR state whose crash counters have been reset are retried.
+   */
+  private async checkIdleSessionHealth(): Promise<void> {
+    const serverUuids = Object.keys(this.idleSessions);
+    if (serverUuids.length === 0) {
+      return;
+    }
+
+    for (const serverUuid of serverUuids) {
+      const client = this.idleSessions[serverUuid];
+      if (!client) continue;
+
+      try {
+        // Ping with a 5-second timeout
+        await client.client.ping({ timeout: 5000 });
+      } catch {
+        logger.warn(
+          `Idle session health check failed for server ${serverUuid}, recreating...`,
+        );
+
+        // Clean up the dead session
+        try {
+          await client.cleanup();
+        } catch {
+          // Already dead, ignore cleanup errors
+        }
+        delete this.idleSessions[serverUuid];
+
+        // Reset error state so we can retry
+        await serverErrorTracker.resetServerErrorState(serverUuid);
+
+        // Recreate if we have cached params
+        const params = this.serverParamsCache[serverUuid];
+        if (params) {
+          this.createIdleSessionAsync(serverUuid, params);
+        }
+      }
+    }
+
+    // Also check for servers in ERROR state that have cached params but no idle session.
+    // If they were reset (e.g., on startup), we should try to recreate them.
+    for (const [serverUuid, params] of Object.entries(this.serverParamsCache)) {
+      if (
+        !this.idleSessions[serverUuid] &&
+        !this.creatingIdleSessions.has(serverUuid)
+      ) {
+        const isError = await serverErrorTracker.isServerInErrorState(
+          serverUuid,
+        );
+        if (!isError) {
+          // Not in error and no idle session - try to create one
+          this.createIdleSessionAsync(serverUuid, params);
+        }
+      }
     }
   }
 

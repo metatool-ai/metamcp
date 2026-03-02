@@ -3,6 +3,7 @@ import { ServerParameters } from "@repo/zod-types";
 import { mcpServersRepository, namespacesRepository } from "../db/repositories";
 import { initializeEnvironmentConfiguration } from "./bootstrap.service";
 import { metaMcpServerPool } from "./metamcp";
+import { serverErrorTracker } from "./metamcp/server-error-tracker";
 import { convertDbServerToParams } from "./metamcp/utils";
 
 /**
@@ -47,6 +48,16 @@ export async function initializeIdleServers() {
     console.log(
       "Initializing idle servers for all namespaces and all MCP servers...",
     );
+
+    // Reset all ERROR statuses so servers get a fresh chance on restart
+    const resetCount = await mcpServersRepository.resetAllErrorStatuses();
+    if (resetCount > 0) {
+      console.log(
+        `Reset ${resetCount} server(s) from ERROR to NONE status on startup`,
+      );
+    }
+    // Also clear in-memory crash attempt counters
+    serverErrorTracker.resetAllAttempts();
 
     // Fetch all namespaces from the database
     const namespaces = await namespacesRepository.findAll();
