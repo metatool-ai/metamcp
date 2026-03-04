@@ -1,0 +1,130 @@
+---
+title: "네임스페이스"
+description: "통합 엔드포인트로 MCP 서버를 그룹화하고 도구를 관리하세요"
+---
+
+MetaMCP의 **네임스페이스**는 여러 서버를 단일 통합 MCP 엔드포인트로 구성할 수 있는 MCP 서버의 논리적 그룹입니다.
+
+## 네임스페이스란?
+
+네임스페이스를 사용하면:
+
+- **여러 MCP 서버**를 통합된 컬렉션으로 그룹화할 수 있습니다
+- **모든 서버의 도구를 집계**하는 단일 MCP 엔드포인트를 생성할 수 있습니다
+- 네임스페이스 내에서 **개별 서버를 활성화/비활성화**할 수 있습니다
+- 특정 도구를 활성화/비활성화하여 **도구 가시성을 제어**할 수 있습니다
+- **비공개 및 공개** 네임스페이스 접근을 모두 지원합니다
+
+## 네임스페이스 작동 방식
+
+네임스페이스를 생성하면:
+
+1. 네임스페이스에 포함할 **MCP 서버를 선택**합니다
+2. 모든 활성 서버에서 **도구가 자동으로 검색**됩니다
+3. 도구 이름 앞에 **서버 이름이 접두사로 붙습니다** (예: `ServerName__toolName`)
+4. 네임스페이스를 외부에 노출하기 위한 **공개 엔드포인트를 생성**합니다
+
+## 네임스페이스 생성
+
+1. MetaMCP 대시보드에서 **네임스페이스**로 이동합니다
+2. **"네임스페이스 생성"** 클릭
+3. 기본 세부 정보를 **설정**합니다:
+   - **이름**: 네임스페이스의 고유 식별자
+   - **설명**: 네임스페이스 목적에 대한 선택적 설명
+   - **소유권**: 비공개 (본인 사용) 또는 공개 (조직 전체)
+4. 네임스페이스에 포함할 **MCP 서버를 선택**합니다
+5. 네임스페이스를 **저장**합니다
+
+### 소유권 유형
+
+- **비공개 네임스페이스**: 생성자만 접근 가능
+- **공개 네임스페이스**: 전체 조직이 접근 가능
+
+**참고**: 공개 네임스페이스는 공개 MCP 서버만 포함할 수 있습니다.
+
+## 서버 및 도구 관리
+
+### 서버 관리
+
+- 네임스페이스 서버 테이블에서 **서버 상태 보기**
+- 상태 토글을 사용하여 **개별 서버 활성화/비활성화**
+- 네임스페이스를 편집하여 **서버 추가 또는 제거**
+- 서버 상태 및 연결 **모니터링**
+
+### 도구 관리
+
+- **자동 검색**: 모든 활성 서버에서 도구가 검색됩니다
+- **도구 접두사**: 충돌을 피하기 위해 서버 이름이 도구 앞에 붙습니다
+- **상태 제어**: 네임스페이스별로 개별 도구를 활성화/비활성화합니다
+- **도구 재정의**: 각 네임스페이스에 대한 도구 이름, 제목, 설명을 커스터마이징합니다
+- **도구 필터링**: 비활성 도구는 목록에서 자동으로 필터링됩니다
+
+### 도구 이름 규칙
+
+도구는 `{ServerName}__{originalToolName}` 패턴을 따릅니다. MetaMCP 게이트웨이를 체이닝할 때 `originalToolName` 자체가 중첩 접두사를 포함할 수 있습니다 (예: `OuterServer__InnerServer__my_tool`).
+
+예시: "WebSearch" 서버의 `search` 도구는 `WebSearch__search`가 됩니다
+
+## 공개 접근
+
+네임스페이스를 외부에 노출하려면:
+
+1. 네임스페이스를 가리키는 **엔드포인트를 생성**합니다
+2. **인증을 설정**합니다 (API 키 권장)
+3. 외부 사용자와 **엔드포인트 URL을 공유**합니다
+
+엔드포인트는 다음을 제공합니다:
+- **MCP 접근**: 표준 MCP 프로토콜 지원
+- **REST API**: 각 도구에 대한 HTTP 엔드포인트
+- **OpenAPI 문서**: 자동 생성된 API 문서
+
+## 예시
+
+파일시스템 및 git 서버를 포함한 개발 네임스페이스:
+
+```json
+{
+  "name": "development-tools",
+  "description": "Essential development tools",
+  "servers": [
+    {
+      "name": "filesystem",
+      "status": "ACTIVE",
+      "tools": ["read_file", "write_file", "list_directory"]
+    },
+    {
+      "name": "git-helper",
+      "status": "ACTIVE",
+      "tools": ["git_status", "git_commit", "git_diff"]
+    }
+  ]
+}
+```
+
+네임스페이스를 통해 사용 가능한 도구:
+- `filesystem__read_file`
+- `filesystem__write_file`
+- `filesystem__list_directory`
+- `git-helper__git_status`
+- `git-helper__git_commit`
+- `git-helper__git_diff`
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="엔드포인트 생성" icon="link" href="/ko/concepts/endpoints">
+    공개 엔드포인트를 통해 네임스페이스를 노출합니다
+  </Card>
+
+  <Card title="MCP 서버" icon="server" href="/ko/concepts/mcp-servers">
+    MCP 서버 구성에 대해 알아봅니다
+  </Card>
+
+  <Card title="통합 설정" icon="plug" href="/ko/integrations/cursor">
+    네임스페이스를 MCP 클라이언트에 연결합니다
+  </Card>
+
+  <Card title="검사기" icon="search-code" href="/ko/concepts/inspector">
+    네임스페이스 도구를 테스트하고 디버그합니다
+  </Card>
+</CardGroup>

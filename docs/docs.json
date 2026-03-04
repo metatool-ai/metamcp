@@ -137,6 +137,58 @@
             ]
           }
         ]
+      },
+      {
+        "language": "ko",
+        "groups": [
+          {
+            "group": "시작하기",
+            "pages": [
+              "ko/index",
+              "ko/quickstart"
+            ]
+          },
+          {
+            "group": "핵심 개념",
+            "pages": [
+              "ko/concepts/mcp-servers",
+              "ko/concepts/namespaces",
+              "ko/concepts/endpoints",
+              "ko/concepts/middleware",
+              "ko/concepts/inspector"
+            ]
+          },
+          {
+            "group": "배포",
+            "pages": [
+              "ko/deployment/custom-deployment"
+            ]
+          },
+          {
+            "group": "통합",
+            "pages": [
+              "ko/integrations/cursor",
+              "ko/integrations/claude-desktop",
+              "ko/integrations/open-web-ui",
+              "ko/integrations/general-stdio-with-api-key",
+              "ko/integrations/general-stdio-with-oauth"
+            ]
+          },
+          {
+            "group": "개발",
+            "pages": [
+              "ko/development/contributing",
+              "ko/development/i18n",
+              "ko/development/architecture"
+            ]
+          },
+          {
+            "group": "문제 해결",
+            "pages": [
+              "ko/troubleshooting/oauth-troubleshooting"
+            ]
+          }
+        ]
       }
     ]
   },

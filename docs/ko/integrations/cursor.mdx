@@ -1,0 +1,134 @@
+---
+title: "Cursor 통합"
+description: "mcp.json을 통해 MetaMCP 엔드포인트를 사용하도록 Cursor IDE를 설정하세요"
+---
+
+**Cursor**는 MCP (Model Context Protocol) 통합을 지원하는 인기 있는 AI 기반 코드 편집기입니다. 이 가이드는 향상된 코딩 기능을 위해 Cursor를 MetaMCP 엔드포인트에 연결하는 방법을 보여줍니다.
+
+MCP에 대한 Cursor 공식 문서도 참고하세요: https://docs.cursor.com/context/mcp
+
+## 사전 요구사항
+
+시작하기 전에 다음이 필요합니다:
+
+- **Cursor IDE** 설치 및 실행
+- **MetaMCP** 로컬 실행 또는 배포됨
+- MetaMCP에서 설정된 **활성 엔드포인트**
+- **API 키** 생성 (인증이 활성화된 경우)
+
+## 기본 설정
+
+### 간단한 mcp.json 설정
+
+Cursor의 설정 디렉토리에서 `mcp.json` 파일을 생성하거나 편집합니다:
+
+<CodeGroup>
+```json 기본 설정
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "url": "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+    }
+  }
+}
+```
+
+```json 인증 포함
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "url": "http://localhost:12008/metamcp/your-endpoint-name/mcp",
+      "headers": {
+        "Authorization": "Bearer sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json 여러 엔드포인트
+{
+  "mcpServers": {
+    "MetaMCP-Dev": {
+      "url": "http://localhost:12008/metamcp/dev-tools/mcp",
+      "headers": {
+        "Authorization": "Bearer sk_mt_dev_key"
+      }
+    },
+    "MetaMCP-Research": {
+      "url": "http://localhost:12008/metamcp/research-tools/mcp",
+      "headers": {
+        "Authorization": "Bearer sk_mt_research_key"
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## 설정 옵션
+
+### 전송 유형
+
+MetaMCP는 다양한 전송 프로토콜을 지원합니다. Cursor에는 **Streamable HTTP가 권장**됩니다:
+
+<AccordionGroup>
+  <Accordion title="Streamable HTTP (권장)">
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "url": "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="SSE (대안)">
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "url": "http://localhost:12008/metamcp/your-endpoint-name/sse"
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### 인증 방법
+
+<AccordionGroup>
+  <Accordion icon="key" title="API 키 인증">
+    Authorization 헤더를 사용하는 **가장 일반적인 방법**:
+
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "url": "http://localhost:12008/metamcp/your-endpoint-name/mcp",
+          "headers": {
+            "Authorization": "Bearer sk_mt_your_key_here"
+          }
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="shield-minus" title="인증 없음">
+    인증이 없는 **공개 엔드포인트**의 경우:
+
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "url": "http://localhost:12008/metamcp/public-tools/sse"
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>

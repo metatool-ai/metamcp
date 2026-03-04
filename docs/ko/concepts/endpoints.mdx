@@ -1,0 +1,63 @@
+---
+title: "엔드포인트"
+description: "네임스페이스를 접근 가능한 MCP 서버로 노출하는 공개 엔드포인트를 생성하세요"
+---
+
+**MetaMCP 엔드포인트**는 네임스페이스를 접근 가능한 MCP 서버로 노출하는 공개 인터페이스입니다. 엔드포인트는 인증을 처리하고 MCP 클라이언트가 연결할 수 있는 URL을 제공합니다.
+
+## 엔드포인트란?
+
+엔드포인트는 내부 네임스페이스와 외부 MCP 클라이언트 사이의 다리 역할을 합니다:
+
+- **네임스페이스**를 공개 MCP 서버로 노출합니다
+- API 키를 통한 **인증을 처리**합니다
+- **다양한 전송 방식** (SSE, Streamable HTTP, OpenAPI)을 지원합니다
+
+<Card title="엔드포인트 URL 예시" icon="link">
+```
+https://your-metamcp.com/metamcp/my-endpoint/sse
+https://your-metamcp.com/metamcp/my-endpoint/mcp
+https://your-metamcp.com/metamcp/my-endpoint/api
+https://your-metamcp.com/metamcp/my-endpoint/api/openapi.json
+```
+</Card>
+
+## 엔드포인트 관리
+
+### 사용 가능한 작업
+
+엔드포인트 대시보드에서 다음을 수행할 수 있습니다:
+
+- 엔드포인트 설정 **편집**
+- 다양한 전송 유형의 **URL 복사**
+- 연결된 네임스페이스 **보기**
+- 엔드포인트 **삭제**
+
+### URL 형식
+
+각 엔드포인트는 여러 URL 형식을 제공합니다:
+
+- **SSE**: `/metamcp/{name}/sse`
+- **Streamable HTTP**: `/metamcp/{name}/mcp`
+- **OpenAPI**: `/metamcp/{name}/api`
+- **OpenAPI 스키마**: `/metamcp/{name}/api/openapi.json`
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="API 키" icon="key" href="/ko/api-keys">
+    안전한 엔드포인트 접근을 위한 API 키를 생성합니다
+  </Card>
+
+  <Card title="네임스페이스" icon="package" href="/ko/namespaces">
+    MCP 서버를 네임스페이스로 구성하는 방법을 알아봅니다
+  </Card>
+
+  <Card title="통합 가이드" icon="plug" href="/ko/integrations/cursor">
+    엔드포인트를 MCP 클라이언트에 연결합니다
+  </Card>
+
+  <Card title="MCP 서버" icon="server" href="/ko/mcp-servers">
+    네임스페이스 내의 MCP 서버를 관리합니다
+  </Card>
+</CardGroup>

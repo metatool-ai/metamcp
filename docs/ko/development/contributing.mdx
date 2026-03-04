@@ -1,0 +1,411 @@
+---
+title: "MetaMCP에 기여하기"
+description: "MetaMCP 개발에 기여하고 프로젝트 개선에 도움을 주는 방법을 알아보세요"
+---
+
+MetaMCP에 대한 기여를 환영합니다! 이 종합 가이드는 버그 수정, 기능 추가, 문서 개선 등 프로젝트에 기여를 시작하는 데 도움이 됩니다.
+
+## 시작하기
+
+### 사전 요구사항
+
+기여하기 전에 다음이 필요합니다:
+
+- **Node.js 18+** 및 **pnpm** 설치
+- PostgreSQL 실행 및 테스트를 위한 **Docker**
+- 버전 관리를 위한 **Git**
+- TypeScript, React, MCP 프로토콜에 대한 **기본 이해**
+
+### 개발 환경 설정
+
+<AccordionGroup>
+  <Accordion icon="github" title="Fork 및 Clone">
+    1. GitHub에서 **저장소를 Fork**합니다
+    2. Fork를 로컬에 **Clone**합니다:
+       ```bash
+       git clone https://github.com/YOUR_USERNAME/metamcp.git
+       cd metamcp
+       ```
+    3. **upstream 원격 추가**:
+       ```bash
+       git remote add upstream https://github.com/metatool-ai/metamcp.git
+       ```
+  </Accordion>
+
+  <Accordion icon="package" title="의존성 설치">
+    pnpm을 사용하여 프로젝트 의존성을 설치합니다:
+
+    ```bash
+    pnpm install
+    ```
+
+    이것은 모노레포의 모든 워크스페이스에 대한 의존성을 설치합니다.
+  </Accordion>
+
+  <Accordion icon="cog" title="환경 설정">
+    개발 환경을 설정합니다:
+
+    ```bash
+    cp example.env .env
+    ```
+
+    개발 설정에 맞게 `.env` 파일을 수정합니다.
+  </Accordion>
+
+  <Accordion icon="database" title="데이터베이스 설정">
+    Docker를 사용하여 PostgreSQL을 시작합니다:
+
+    ```bash
+    docker compose up -d postgres
+    # 또는 전체 스택 시작
+    docker compose up -d
+    ```
+
+    최초 마이그레이션 (먼저 `.env.local` 편집)
+    ```bash
+    cd apps/backend
+
+    pnpm db:migrate:dev
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## 개발 워크플로우
+
+### 기능 브랜치 생성 (이름 규칙 불필요)
+
+<CodeGroup>
+```bash 기능 브랜치
+git checkout -b feature/your-feature-name
+```
+
+```bash 버그 수정 브랜치
+git checkout -b fix/issue-description
+```
+
+```bash 문서 브랜치
+git checkout -b docs/documentation-update
+```
+</CodeGroup>
+
+### 변경사항 만들기
+
+변경사항을 만들 때 다음 가이드라인을 따르세요:
+
+<Card title="코드 품질 기준" icon="code">
+- **TypeScript 모범 사례 준수**
+- **일관된 포맷을 위한 ESLint 및 Prettier 사용**
+- **설명적인 커밋 메시지 작성**
+- **복잡한 함수에 JSDoc 주석 추가**
+- **코드베이스 전체에서 타입 안정성 보장**
+- **변경사항 수동 테스트**
+</Card>
+
+### 변경사항 테스트
+
+<AccordionGroup>
+  <Accordion icon="flask-conical" title="로컬 테스트">
+    개발 서버를 실행하고 변경사항을 테스트합니다:
+
+    ```bash
+    pnpm dev
+    ```
+
+    이것은 프론트엔드와 백엔드를 개발 모드로 시작합니다.
+  </Accordion>
+
+  <Accordion icon="check" title="린팅 및 포맷">
+    코드 품질 확인:
+
+    ```bash
+    # 린팅 실행
+    pnpm lint
+
+    # 린팅 문제 수정
+    pnpm lint:fix
+    ```
+  </Accordion>
+
+  <Accordion icon="docker" title="Docker 테스트">
+    운영 호환성을 위해 Docker로 테스트합니다:
+
+    ```bash
+    docker compose build
+    docker compose up
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## 기여 유형
+
+### 버그 수정
+
+<AccordionGroup>
+  <Accordion icon="bug" title="버그 보고">
+    **버그를 보고하기 전:**
+
+    1. 중복을 피하기 위해 기존 이슈 확인
+    2. 문제를 일관되게 재현하려고 시도
+    3. 관련 정보 수집 (OS, 브라우저, MetaMCP 버전)
+    4. 문제 재현 단계 포함
+
+    **버그 보고 템플릿:**
+    ```markdown
+    ## 버그 설명
+    문제에 대한 간략한 설명
+
+    ## 재현 단계
+    1. 1단계
+    2. 2단계
+    3. 예상 동작 vs 실제 동작
+
+    ## 환경
+    - OS: [예: macOS 14.0]
+    - 브라우저: [예: Chrome 120]
+    - MetaMCP 버전: [예: 1.0.0]
+
+    ## 추가 컨텍스트
+    스크린샷, 로그 또는 기타 관련 정보
+    ```
+  </Accordion>
+
+  <Accordion icon="wrench" title="버그 수정">
+    **버그를 수정할 때:**
+
+    1. 브랜치 생성: `fix/issue-number-description`
+    2. 수정 구현
+    3. 수정이 작동하는지 수동으로 테스트
+    4. 필요한 경우 문서 업데이트
+  </Accordion>
+</AccordionGroup>
+
+### 기능 개발
+
+<AccordionGroup>
+  <Accordion icon="lightbulb" title="기능 제안">
+    **새 기능을 구현하기 전:**
+
+    1. 기능에 대해 논의하기 위해 **이슈 열기**
+    2. **사용 사례** 및 정당성 제공
+    3. 기존 기능에 대한 **영향 고려**
+    4. 유지관리자로부터 **피드백 받기**
+    5. 구현 방법 **계획하기**
+  </Accordion>
+
+  <Accordion icon="code" title="기능 구현">
+    **기능 개발 프로세스:**
+
+    1. main에서 **기능 브랜치 생성**
+    2. 정기적인 커밋으로 **점진적 구현**
+    3. **문서 업데이트**
+    4. **실제 MCP 서버로 테스트**
+    5. UI 변경사항에 대한 **i18n 영향 고려**
+  </Accordion>
+</AccordionGroup>
+
+### 문서
+
+<AccordionGroup>
+  <Accordion icon="book" title="문서 가이드라인">
+    **문서를 업데이트할 때:**
+
+    - 명확하고 간결한 언어 사용
+    - 도움이 되는 곳에 코드 예시 포함
+    - UI 변경사항에 대한 스크린샷 추가
+    - README와 문서 사이트 모두 업데이트
+    - 모든 코드 예시 테스트
+    - 여러 대상 (초보자, 고급 사용자) 고려
+  </Accordion>
+
+  <Accordion icon="book-type" title="번역 기여">
+    **새 언어 지원 추가:**
+
+    1. 새 로케일 디렉토리 생성: `public/locales/[locale]/`
+    2. 템플릿으로 영어 파일 복사
+    3. 키 구조를 유지하면서 콘텐츠 번역
+    4. i18n 설정 업데이트
+    5. 새 로케일 철저히 테스트
+    6. 번역 파일과 함께 PR 제출
+  </Accordion>
+</AccordionGroup>
+
+## Pull Request 프로세스
+
+### 제출 전
+
+<Card title="제출 전 체크리스트" icon="checklist">
+- ✅ **코드가 프로젝트 기준을 따름**
+- ✅ **가능한 한 린팅 수정** (`pnpm lint`)
+- ✅ **TypeScript 오류 없음**
+- ✅ **필요한 경우 문서 업데이트됨**
+- ✅ **변경사항 수동 테스트됨**
+- ✅ **필요한 경우 데이터베이스 마이그레이션 포함**
+- ✅ **커밋에 민감한 정보 없음**
+</Card>
+
+## 전문 기여
+
+### OIDC 공급자 설정
+
+MetaMCP는 엔터프라이즈 SSO를 위한 OpenID Connect를 지원합니다. OIDC 기능 작업 시:
+
+<AccordionGroup>
+  <Accordion icon="shield" title="OIDC 설정">
+    **필요한 환경 변수:**
+
+    ```bash
+    # 필수
+    OIDC_CLIENT_ID=your-oidc-client-id
+    OIDC_CLIENT_SECRET=your-oidc-client-secret
+    OIDC_DISCOVERY_URL=https://your-provider.com/.well-known/openid-configuration
+    OIDC_AUTHORIZATION_URL=https://your-provider.com/auth/authorize
+
+    # 선택사항
+    OIDC_PROVIDER_ID=oidc
+    OIDC_SCOPES=openid email profile
+    OIDC_PKCE=true
+    ```
+  </Accordion>
+
+  <Accordion icon="flask-conical" title="OIDC 테스트">
+    **OIDC 개발을 위해:**
+
+    1. 테스트 공급자 사용 (Auth0, Keycloak)
+    2. 리디렉션 URI 설정: `${APP_URL}/api/auth/oauth2/callback/oidc`
+    3. 인증 흐름 테스트
+    4. 데이터베이스에서 사용자 생성 확인
+    5. 문제 해결을 위한 디버그 로깅 활성화
+  </Accordion>
+</AccordionGroup>
+
+### 데이터베이스 변경
+
+데이터베이스 스키마를 변경할 때:
+
+<AccordionGroup>
+  <Accordion icon="database" title="스키마 마이그레이션">
+    **마이그레이션 생성:**
+
+    ```bash
+    # 스키마 변경 후 마이그레이션 생성
+    cd apps/backend
+    pnpm db:generate
+
+    # 마이그레이션 적용
+    pnpm db:migrate:dev # PG 관련 환경 변수에 env.local 사용
+
+    # 데이터베이스 초기화 (개발 전용)
+    pnpm db:reset
+    ```
+  </Accordion>
+
+  <Accordion icon="table" title="새 테이블 추가">
+    **데이터베이스 개발 워크플로우:**
+
+    1. `apps/backend/src/db/schema.ts`에서 스키마 업데이트
+    2. `apps/backend/src/db/repositories/`에 저장소 생성
+    3. `apps/backend/src/db/serializers/`에 직렬화기 생성
+    4. `apps/backend/src/trpc/`에 tRPC 프로시저 추가
+    5. `packages/zod-types/`에서 프론트엔드 타입 업데이트
+    6. 마이그레이션 생성 및 적용
+  </Accordion>
+</AccordionGroup>
+
+### 프론트엔드 개발
+
+<AccordionGroup>
+  <Accordion icon="component" title="UI 컴포넌트">
+    **shadcn/ui 컴포넌트 사용:**
+
+    ```bash
+    # 새 컴포넌트 추가
+    cd apps/frontend
+    npx shadcn-ui@latest add [component-name]
+    ```
+
+    **컴포넌트 가이드라인:**
+    - 기존 디자인 패턴 따르기
+    - 접근성 규정 준수 보장
+    - 적절한 TypeScript 타입 추가
+    - 로딩 및 오류 상태 포함
+  </Accordion>
+
+  <Accordion icon="globe" title="국제화">
+    **UI 변경사항의 경우:**
+
+    1. 먼저 영어 번역 추가
+    2. 다른 로케일 업데이트 또는 번역 표시
+    3. `useTranslations()` 훅 사용
+    4. 다른 언어로 테스트
+    5. 텍스트 확장이 레이아웃을 깨뜨리지 않는지 확인
+  </Accordion>
+</AccordionGroup>
+
+## 커뮤니티 가이드라인
+
+### 행동 강령
+
+환영하고 포용적인 환경 제공에 전념합니다:
+
+<Card title="커뮤니티 기준" icon="heart">
+- **모든 상호작용에서 존중하고 포용적**이세요
+- **건설적인 피드백을 제공**하고 받을 준비를 하세요
+- **협력에 집중**하고 서로가 성공하도록 도우세요
+- **다양한 관점과 경험 수준을 존중**하세요
+- **프로젝트 가이드라인을 따르고** 코드 품질을 유지하세요
+</Card>
+
+### 소통
+
+<AccordionGroup>
+  <Accordion icon="discord" title="Discord 커뮤니티">
+    Discord 서버에 참여하세요:
+
+    - 개발 토론
+    - 기여에 대한 도움 받기
+    - 아이디어 및 피드백 공유
+    - 커뮤니티 공지사항
+
+    [MetaMCP Discord 참여](https://discord.gg/mNsyat7mFX)
+  </Accordion>
+
+  <Accordion icon="github" title="GitHub 토론">
+    다음을 위해 GitHub 이슈와 토론을 사용합니다:
+
+    - 버그 보고 및 기능 요청
+    - 기술적 토론
+    - 문서 피드백
+    - 프로젝트 로드맵 토론
+  </Accordion>
+</AccordionGroup>
+
+## 도움받기
+
+### 리소스
+
+<CardGroup cols={2}>
+  <Card title="Discord 커뮤니티" icon="discord" href="https://discord.gg/mNsyat7mFX">
+    커뮤니티에서 도움을 받으세요
+  </Card>
+
+  <Card title="GitHub 이슈" icon="github" href="https://github.com/metatool-ai/metamcp/issues">
+    기존 이슈 및 토론 확인
+  </Card>
+</CardGroup>
+
+## 인정
+
+MetaMCP에 대한 모든 기여에 감사드립니다! 기여자는 다음을 통해 인정받습니다:
+
+- 저장소의 **GitHub 기여자 목록**
+- 중요한 기여를 언급하는 **릴리즈 노트**
+
+모든 분께서 MetaMCP를 더 좋게 만드는 데 도움을 주셔서 감사합니다! 🚀
+
+## 다음 단계
+
+<CardGroup cols={1}>
+  <Card title="기여 시작" icon="rocket" href="https://github.com/metatool-ai/metamcp/issues">
+    열린 이슈를 찾아보고 기여를 시작하세요
+  </Card>
+</CardGroup>

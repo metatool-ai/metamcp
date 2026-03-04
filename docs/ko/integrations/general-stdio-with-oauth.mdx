@@ -1,0 +1,104 @@
+---
+title: "OAuth를 사용하는 `mcp-remote` 일반 Stdio 통합"
+description: "OAuth 인증으로 mcp-remote를 사용하여 stdio 기반 MCP 클라이언트를 MetaMCP 엔드포인트에 연결하세요"
+---
+
+**OAuth를 사용하는 일반 Stdio 통합**을 통해 stdio 서버를 지원하는 모든 MCP 클라이언트가 OAuth 인증을 사용하여 MetaMCP의 원격 엔드포인트에 연결할 수 있습니다. MetaMCP 엔드포인트는 원격 전용 (SSE, Streamable HTTP)이므로, 연결을 브릿지하기 위해 로컬 프록시가 필요합니다.
+
+## 사전 요구사항
+
+시작하기 전에 다음이 필요합니다:
+
+- stdio 서버를 지원하는 **MCP 클라이언트** (Claude Desktop, Cursor 등)
+- OAuth가 활성화된 상태로 로컬 실행 또는 배포된 **MetaMCP**
+- MetaMCP에서 설정된 **활성 엔드포인트**
+- MetaMCP에 등록된 **OAuth 애플리케이션**
+- npx를 통해 사용 가능한 **mcp-remote** (`npx -y mcp-remote`)
+
+## 기본 설정
+
+### mcp-remote 사용 (필수)
+
+MetaMCP 엔드포인트는 원격 전용이므로, OAuth 인증으로 stdio와 HTTP/SSE 프로토콜 간을 변환하기 위해 `mcp-remote`가 필요합니다.
+
+<CodeGroup>
+```json 기본 OAuth 설정
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ]
+    }
+  }
+}
+```
+
+```json 여러 엔드포인트
+{
+  "mcpServers": {
+    "MetaMCP-Dev": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:12008/metamcp/dev-tools/mcp"
+      ]
+    },
+    "MetaMCP-Research": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:12008/metamcp/research-tools/mcp"
+      ]
+    }
+  }
+}
+```
+</CodeGroup>
+
+## OAuth 흐름
+
+처음 연결할 때 `mcp-remote`는:
+
+1. OAuth 인증 URL로 **브라우저를 엽니다**
+2. 애플리케이션을 **승인하도록 요청**합니다
+3. 로컬 콜백 서버로 **리디렉션**됩니다
+4. 향후 사용을 위해 **토큰을 로컬에 저장**합니다
+5. 인증된 접근으로 **MCP 연결을 설정**합니다
+
+### 토큰 관리
+
+- **토큰은 로컬에 저장**됩니다 (mcp-remote가 관리)
+- **액세스 토큰 만료 시** 리프레시 토큰이 자동으로 사용됩니다
+- 필요한 경우 mcp-remote 캐시 디렉토리를 삭제하여 **토큰을 지울 수 있습니다**
+
+## 중요 사항
+
+- 공개 엔드포인트에 OAuth 인증을 사용하려면 `http://localhost:12008/metamcp/your-endpoint-name/mcp`를 **사용**하세요
+- `your-endpoint-name`을 실제 엔드포인트 이름으로 **교체**하세요
+- **mcp-remote**는 stdio와 HTTP/SSE 간의 프로토콜 변환을 처리합니다
+- **OAuth 흐름**은 첫 번째 연결 시 브라우저 상호작용이 필요합니다
+- **수동 OAuth 설정 불필요** - MetaMCP가 자동으로 처리합니다
+
+<CardGroup cols={2}>
+  <Card title="MCP OAuth 문제 해결" icon="lock" href="/ko/troubleshooting/oauth-troubleshooting">
+    일반적인 OAuth 관련 문제를 해결합니다
+  </Card>
+
+  <Card title="API 키를 사용하는 `mcp-proxy` 일반 Stdio 통합" icon="globe" href="/ko/integrations/general-stdio-with-api-key">
+    mcp-proxy로 MetaMCP 엔드포인트에 연결하세요
+  </Card>
+
+  <Card title="Cursor에 연결" icon="mouse-pointer-2" href="/ko/integrations/cursor">
+    MetaMCP 엔드포인트를 사용하도록 Cursor IDE를 설정합니다
+  </Card>
+
+  <Card title="Claude Desktop에 연결" icon="monitor-dot" href="/ko/integrations/claude-desktop">
+    mcp-proxy를 사용하여 MetaMCP와 Claude Desktop을 설정합니다
+  </Card>
+</CardGroup>
