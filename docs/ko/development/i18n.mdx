@@ -1,0 +1,517 @@
+---
+title: "국제화 (i18n)"
+description: "Next.js 로케일 라우팅과 클라이언트 사이드 번역으로 MetaMCP에 다국어 지원을 추가하세요"
+---
+
+MetaMCP는 **Next.js 로케일 기반 라우팅**과 **클라이언트 사이드 번역**을 사용하여 여러 언어를 지원합니다. 이 가이드는 i18n 시스템과 새 언어를 추가하는 방법을 설명합니다.
+
+## 현재 언어 지원
+
+MetaMCP는 현재 다음을 지원합니다:
+
+- **영어 (en)** - 기본 언어
+- **중국어 간체 (zh)** - 전체 번역 제공
+
+작성자는 번역 정확성을 위해 두 언어를 유지하지만, 추가 언어에 대한 기여를 환영합니다.
+
+## 프로젝트 구조
+
+국제화 시스템은 다음과 같이 구성됩니다:
+
+```bash
+apps/frontend/
+├── app/
+│   └── [locale]/                  # 로케일 기반 라우팅
+│       ├── layout.tsx            # 로케일 레이아웃
+│       ├── (sidebar)/            # 사이드바 레이아웃 그룹
+│       └── ...
+├── public/locales/
+│   ├── en/                       # 영어 번역
+│   │   ├── common.json
+│   │   ├── auth.json
+│   │   ├── navigation.json
+│   │   ├── mcp-servers.json
+│   │   ├── namespaces.json
+│   │   ├── endpoints.json
+│   │   ├── api-keys.json
+│   │   ├── settings.json
+│   │   ├── search.json
+│   │   ├── inspector.json
+│   │   ├── logs.json
+│   │   └── validation.json
+│   └── zh/                       # 중국어 번역
+│       └── (동일한 구조)
+├── lib/
+│   └── i18n.ts                  # 클라이언트 사이드 i18n 유틸리티
+├── hooks/
+│   ├── useLocale.ts             # 현재 로케일을 가져오는 훅
+│   └── useTranslations.ts       # 클라이언트 사이드 번역 훅
+├── components/
+│   └── language-switcher.tsx    # 언어 전환 컴포넌트
+└── middleware.ts                # 로케일 감지 및 라우팅
+```
+
+## 작동 방식
+
+### URL 구조
+
+MetaMCP는 로케일 기반 라우팅을 사용합니다:
+
+- **영어 (기본)**: `/mcp-servers`, `/settings`, `/namespaces`
+- **중국어**: `/zh/mcp-servers`, `/zh/settings`, `/zh/namespaces`
+
+### 미들웨어
+
+`middleware.ts` 파일은 다음을 처리합니다:
+
+- URL, 쿠키, Accept-Language 헤더에서 **로케일 감지**
+- 적절한 로케일로의 **자동 리디렉션**
+- **인증 확인**
+
+<CodeGroup>
+```typescript middleware.ts
+import { NextRequest } from 'next/server';
+import { getLocale, getLocalizedPath } from '@/lib/i18n';
+
+export function middleware(request: NextRequest) {
+  // URL, 쿠키 또는 헤더에서 로케일 감지
+  const locale = getLocale(request);
+
+  // 필요한 경우 리디렉션
+  if (!request.nextUrl.pathname.startsWith(`/${locale}`)) {
+    const localizedPath = getLocalizedPath(request.nextUrl.pathname, locale);
+    return Response.redirect(new URL(localizedPath, request.url));
+  }
+}
+```
+
+```typescript lib/i18n.ts
+export function getLocalizedPath(path: string, locale: string): string {
+  if (locale === 'en') {
+    return path; // 기본 로케일은 접두사가 필요 없음
+  }
+  return `/${locale}${path}`;
+}
+
+export function detectLocale(request: NextRequest): string {
+  // URL 먼저 확인, 그 다음 쿠키, Accept-Language
+  // 감지된 로케일 또는 'en' 폴백 반환
+}
+```
+</CodeGroup>
+
+## 번역 사용
+
+### 클라이언트 컴포넌트
+
+클라이언트 사이드 컴포넌트의 경우 `useTranslations` 훅을 사용합니다:
+
+<CodeGroup>
+```tsx 기본 사용법
+"use client";
+
+import { useTranslations } from "@/hooks/useTranslations";
+
+function ClientComponent() {
+  const { t, isLoading, locale } = useTranslations();
+
+  if (isLoading) return <div>Loading...</div>;
+
+  return (
+    <div>
+      <h1>{t('common:title')}</h1>
+      <button>{t('auth:signIn')}</button>
+    </div>
+  );
+}
+```
+
+```tsx 파라미터 포함
+// 번역 파일에서: "welcome": "Welcome, {{name}}!"
+<span>{t('common:welcome', { name: 'John' })}</span>
+
+// count 포함: "itemCount": "{{count}} items found"
+<span>{t('search:itemCount', { count: 42 })}</span>
+```
+
+```tsx 조건부 번역
+const { t, locale } = useTranslations();
+
+return (
+  <div>
+    <p>{t('common:currentLanguage')}: {locale}</p>
+    {locale === 'zh' && (
+      <p>{t('common:chineseSpecificMessage')}</p>
+    )}
+  </div>
+);
+```
+</CodeGroup>
+
+### 번역 키 형식
+
+구성을 위해 콜론으로 구분된 네임스페이스를 사용합니다:
+
+```json
+{
+  "server": {
+    "create": "Create Server",
+    "edit": "Edit Server",
+    "delete": "Delete Server",
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "error": "Error"
+    },
+    "validation": {
+      "nameRequired": "Server name is required",
+      "commandRequired": "Command is required"
+    }
+  }
+}
+```
+
+**사용법**: `t('mcp-servers:server.create')`, `t('mcp-servers:server.status.online')`
+
+## 번역 파일 구성
+
+### 네임스페이스 구조
+
+각 번역 네임스페이스는 특정 목적을 제공합니다:
+
+<AccordionGroup>
+  <Accordion icon="globe" title="common.json">
+    **공유 UI 요소 및 일반 용어**
+
+    ```json
+    {
+      "actions": {
+        "save": "Save",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "edit": "Edit",
+        "create": "Create",
+        "search": "Search"
+      },
+      "status": {
+        "loading": "Loading...",
+        "error": "Error",
+        "success": "Success"
+      },
+      "form": {
+        "required": "This field is required",
+        "invalid": "Invalid input"
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="lock" title="auth.json">
+    **인증 관련 텍스트**
+
+    ```json
+    {
+      "signIn": "Sign In",
+      "signOut": "Sign Out",
+      "signUp": "Sign Up",
+      "email": "Email",
+      "password": "Password",
+      "forgotPassword": "Forgot Password?",
+      "createAccount": "Create Account",
+      "loginWithOIDC": "Login with OIDC"
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="navigation" title="navigation.json">
+    **메뉴 항목 및 내비게이션 텍스트**
+
+    ```json
+    {
+      "dashboard": "Dashboard",
+      "mcpServers": "MCP Servers",
+      "namespaces": "Namespaces",
+      "endpoints": "Endpoints",
+      "apiKeys": "API Keys",
+      "settings": "Settings",
+      "inspector": "MCP Inspector",
+      "logs": "Live Logs"
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="server" title="mcp-servers.json">
+    **MCP 서버 관련 번역**
+
+    ```json
+    {
+      "server": {
+        "create": "Create Server",
+        "edit": "Edit Server",
+        "name": "Server Name",
+        "type": "Server Type",
+        "command": "Command",
+        "args": "Arguments",
+        "env": "Environment Variables"
+      },
+      "types": {
+        "stdio": "STDIO",
+        "http": "HTTP",
+        "websocket": "WebSocket"
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### 번역 키 모범 사례
+
+<Card title="번역 키 가이드라인" icon="key">
+- **설명적이고 계층적인 키 사용**: `server.validation.nameRequired`
+- **일관성을 위해 camelCase 사용**: `signIn`, `mcpServers`
+- **관련 번역 그룹화**: `server` 아래의 모든 서버 관련 용어
+- **컨텍스트를 명확히**: 다른 경우 `auth:signIn` vs `form:signIn`
+- **동적 콘텐츠에 보간 사용**: `"welcome": "Welcome, {{name}}!"`
+</Card>
+
+## 새 언어 추가
+
+### 1단계: 번역 파일 생성
+
+1. `public/locales/`에 **언어 디렉토리 생성**:
+   ```bash
+   mkdir -p public/locales/es  # 스페인어의 경우
+   ```
+
+2. 템플릿으로 **영어 파일 복사**:
+   ```bash
+   cp -r public/locales/en/* public/locales/es/
+   ```
+
+3. 각 JSON 파일에서 **콘텐츠 번역**:
+   ```json
+   // public/locales/es/common.json
+   {
+     "actions": {
+       "save": "Guardar",
+       "cancel": "Cancelar",
+       "delete": "Eliminar",
+       "edit": "Editar",
+       "create": "Crear"
+     }
+   }
+   ```
+
+### 2단계: 설정 업데이트
+
+i18n 설정에 새 로케일을 추가합니다:
+
+<CodeGroup>
+```typescript lib/i18n.ts
+export const SUPPORTED_LOCALES = ['en', 'zh', 'es'] as const;
+export type Locale = typeof SUPPORTED_LOCALES[number];
+
+export const LOCALE_NAMES: Record<Locale, string> = {
+  en: 'English',
+  zh: '中文',
+  es: 'Español'
+};
+```
+
+```typescript middleware.ts
+import { SUPPORTED_LOCALES } from '@/lib/i18n';
+
+export function middleware(request: NextRequest) {
+  // 새 언어를 포함하도록 로케일 감지 업데이트
+  const supportedLocales = SUPPORTED_LOCALES;
+  // ... 나머지 미들웨어 로직
+}
+```
+</CodeGroup>
+
+### 3단계: 언어 전환기 업데이트
+
+언어 전환기는 자동으로 새 언어를 포함합니다:
+
+```tsx
+// components/language-switcher.tsx
+import { LOCALE_NAMES, SUPPORTED_LOCALES } from '@/lib/i18n';
+
+export function LanguageSwitcher() {
+  return (
+    <select>
+      {SUPPORTED_LOCALES.map(locale => (
+        <option key={locale} value={locale}>
+          {LOCALE_NAMES[locale]}
+        </option>
+      ))}
+    </select>
+  );
+}
+```
+
+### 4단계: 구현 테스트
+
+1. 새 언어로 **테스트 콘텐츠 추가**
+2. `/{locale}/` URL로 이동 (예: `/es/mcp-servers`)
+3. **번역이 올바르게 표시**되는지 확인
+4. **언어 전환 기능** 테스트
+5. 누락된 번역에 대한 **폴백 작동** 확인
+
+## 번역 워크플로우
+
+### 새 기능의 경우
+
+MetaMCP에 새 기능을 추가할 때:
+
+1. 적절한 네임스페이스에 **영어 번역 먼저 추가**
+2. 컨텍스트에서 의미가 있는 **설명적인 키 사용**
+3. **영어로 테스트**하여 키가 올바르게 작동하는지 확인
+4. **다른 언어 추가** (또는 번역 표시)
+5. 배포 전 **모든 언어 테스트**
+
+### 기여자를 위해
+
+<AccordionGroup>
+  <Accordion icon="translate" title="번역 기여자">
+    **번역에 기여하려면:**
+
+    1. 저장소를 Fork합니다
+    2. 새 언어 파일을 생성하거나 기존 파일을 업데이트합니다
+    3. 기존 키 구조를 따릅니다
+    4. 로컬에서 번역을 테스트합니다
+    5. 변경사항과 함께 Pull Request를 제출합니다
+
+    **팁:**
+    - 번역을 간결하지만 명확하게 유지하세요
+    - 일관된 용어 사용
+    - 문자 그대로의 번역이 아닌 문화적 맥락 고려
+    - 더 긴 텍스트로 테스트하여 UI가 여전히 작동하는지 확인
+  </Accordion>
+
+  <Accordion icon="robot" title="AI 지원 번역">
+    **Cursor/Claude와 같은 AI 도구 사용:**
+
+    ```prompt
+    이 영어 JSON 파일을 스페인어로 번역하되, 동일한 구조와 키를 유지하세요:
+
+    {
+      "server": {
+        "create": "Create Server",
+        "edit": "Edit Server"
+      }
+    }
+
+    "MCP" 및 "API"와 같은 기술 용어는 그대로 유지하세요.
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## 문제 해결
+
+### 일반적인 문제
+
+<AccordionGroup>
+  <Accordion icon="warning" title="누락된 번역">
+    **번역이 표시되지 않을 때:**
+
+    1. JSON 파일에 번역 키가 존재하는지 확인
+    2. 네임스페이스가 올바른지 확인 (`common:save` vs `auth:save`)
+    3. 로케일 파일이 존재하고 유효한 JSON인지 확인
+    4. 누락된 키 경고를 위한 브라우저 콘솔 확인
+    5. 컴포넌트가 `useTranslations`를 올바르게 사용하는지 확인
+  </Accordion>
+
+  <Accordion icon="bug" title="하이드레이션 오류">
+    **서버/클라이언트 번역 불일치:**
+
+    1. 서버와 클라이언트 간 일관된 로케일 감지 확인
+    2. `useTranslations`의 `isLoading` 상태 사용
+    3. 로케일이 변경될 수 있는 경우 SSR 중에 번역 렌더링 방지
+    4. JavaScript 비활성화로 테스트하여 SSR 동작 확인
+  </Accordion>
+
+  <Accordion icon="globe" title="로케일 라우팅 문제">
+    **URL 라우팅 문제:**
+
+    1. 새 로케일에 대한 미들웨어 설정 확인
+    2. `getLocalizedPath` 함수가 새 언어를 처리하는지 확인
+    3. 로컬화된 URL로의 직접 탐색 테스트
+    4. 폴백 동작이 올바르게 작동하는지 확인
+  </Accordion>
+</AccordionGroup>
+
+### 디버깅 도구
+
+<CodeGroup>
+```bash 개발 디버깅
+# 누락된 번역 키 확인
+grep -r "t('" apps/frontend/app --include="*.tsx" | \
+  grep -v "useTranslations"
+
+# JSON 파일 유효성 검사
+for file in public/locales/*/*.json; do
+  echo "Checking $file"
+  cat "$file" | jq . > /dev/null
+done
+```
+
+```typescript 디버그 컴포넌트
+"use client";
+
+import { useTranslations } from "@/hooks/useTranslations";
+
+export function TranslationDebugger() {
+  const { t, locale, isLoading } = useTranslations();
+
+  return (
+    <div className="debug-panel">
+      <p>현재 로케일: {locale}</p>
+      <p>로딩 중: {isLoading.toString()}</p>
+      <p>테스트 번역: {t('common:save')}</p>
+    </div>
+  );
+}
+```
+</CodeGroup>
+
+## 향후 개선사항
+
+### 계획된 기능
+
+- 아랍어, 히브리어를 위한 **RTL 언어 지원**
+- 올바른 형식의 **날짜/시간 로컬화**
+- 로케일 기반 **숫자 형식**
+- 가격 기능을 위한 **통화 형식**
+- 복잡한 언어 요구사항을 위한 **복수형 규칙**
+
+### 기여 가이드라인
+
+<Card title="i18n 기여 가이드라인" icon="checklist">
+- 📝 **영어 먼저 추가**: 항상 영어 번역으로 시작하세요
+- 🔍 **철저히 테스트**: 모든 로케일이 올바르게 작동하는지 확인하세요
+- 📊 **일관된 용어 사용**: 기술 용어에 대한 용어집 유지
+- 🌍 **컨텍스트 고려**: 언어만이 아닌 문화적 차이에 적응
+- 📱 **UI 영향 테스트**: 더 긴 번역이 레이아웃을 깨뜨리지 않는지 확인
+- 🤝 **협력**: 가능한 경우 원어민과 함께 작업
+</Card>
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="기여 가이드" icon="handshake" href="/ko/development/contributing">
+    MetaMCP 개발에 기여하는 방법을 알아보세요
+  </Card>
+
+  <Card title="프론트엔드 개발" icon="code" href="/ko/development">
+    프론트엔드 아키텍처와 개발 설정을 이해하세요
+  </Card>
+
+  <Card title="컴포넌트 개발" icon="component" href="/ko/development#frontend-development">
+    i18n이 포함된 UI 컴포넌트 개발에 대해 알아보세요
+  </Card>
+
+  <Card title="테스트 가이드" icon="test" href="/ko/development#testing">
+    국제화 변경사항을 테스트하세요
+  </Card>
+</CardGroup>

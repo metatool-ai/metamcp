@@ -1,0 +1,191 @@
+---
+title: "API 키를 사용하는 `mcp-proxy` 일반 Stdio 통합"
+description: "mcp-proxy를 사용하여 stdio 기반 MCP 클라이언트를 MetaMCP 엔드포인트에 연결하세요"
+---
+
+**일반 Stdio 통합**을 통해 stdio 서버를 지원하는 모든 MCP 클라이언트가 MetaMCP의 원격 엔드포인트에 연결할 수 있습니다. MetaMCP 엔드포인트는 원격 전용 (SSE, Streamable HTTP)이므로, 연결을 브릿지하기 위해 로컬 프록시가 필요합니다.
+
+## 사전 요구사항
+
+시작하기 전에 다음이 필요합니다:
+
+- stdio 서버를 지원하는 **MCP 클라이언트** (Claude Desktop, Cursor 등)
+- **MetaMCP** 로컬 실행 또는 배포됨
+- MetaMCP에서 설정된 **활성 엔드포인트**
+- **API 키** 생성 (인증이 활성화된 경우)
+- **mcp-proxy** 설치 (`uvx mcp-proxy`)
+
+## 기본 설정
+
+### mcp-proxy 사용 (필수)
+
+MetaMCP 엔드포인트는 원격 전용이므로, stdio와 HTTP/SSE 프로토콜 간을 변환하기 위해 `mcp-proxy`가 필요합니다.
+
+<CodeGroup>
+```json Streamable HTTP (권장)
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json SSE (대안)
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/your-endpoint-name/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json 여러 엔드포인트
+{
+  "mcpServers": {
+    "MetaMCP-Dev": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/dev-tools/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_dev_key"
+      }
+    },
+    "MetaMCP-Research": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/research-tools/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_research_key"
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## 인증 방법
+
+<AccordionGroup>
+  <Accordion icon="key" title="API 키 인증">
+    환경 변수를 사용하는 **가장 일반적인 방법**:
+
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "--transport",
+            "streamablehttp",
+            "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+          ],
+          "env": {
+            "API_ACCESS_TOKEN": "sk_mt_your_key_here"
+          }
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="shield-minus" title="인증 없음">
+    인증이 없는 **공개 엔드포인트**의 경우:
+
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "http://localhost:12008/metamcp/your-endpoint-name/sse"
+          ]
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## 문제 해결
+
+### 일반적인 문제
+
+1. **연결 거부**: MetaMCP가 실행 중이고 접근 가능한지 확인하세요
+2. **인증 실패**: API 키가 올바르고 적절한 권한이 있는지 확인하세요
+3. **mcp-proxy를 찾을 수 없음**: `pip install mcp-proxy` 또는 `uvx mcp-proxy`로 설치하세요
+
+### 디버그 모드
+
+mcp-proxy에 대한 디버그 로깅을 활성화합니다:
+
+```json
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "--debug",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+## 중요 사항
+
+- `your-endpoint-name`을 실제 엔드포인트 이름으로 **교체**하세요
+- `sk_mt_your_api_key_here`를 MetaMCP API 키로 **교체**하세요
+- **mcp-proxy**는 stdio와 Streamable HTTP/SSE 간의 프로토콜 변환을 처리합니다
+- **환경 변수**는 API 키를 전달하는 안전한 방법입니다
+
+<CardGroup cols={2}>
+  <Card title="OAuth를 사용하는 `mcp-remote` 일반 Stdio 통합" icon="globe" href="/ko/integrations/general-stdio-with-oauth">
+    OAuth를 사용하는 mcp-remote로 MetaMCP 엔드포인트에 연결하세요
+  </Card>
+
+  <Card title="MCP OAuth 문제 해결" icon="lock" href="/ko/troubleshooting/oauth-troubleshooting">
+    일반적인 OAuth 관련 문제를 해결합니다
+  </Card>
+
+  <Card title="Cursor에 연결" icon="mouse-pointer-2" href="/ko/integrations/cursor">
+    MetaMCP 엔드포인트를 사용하도록 Cursor IDE를 설정합니다
+  </Card>
+
+  <Card title="Claude Desktop에 연결" icon="monitor-dot" href="/ko/integrations/claude-desktop">
+    mcp-proxy를 사용하여 MetaMCP와 Claude Desktop을 설정합니다
+  </Card>
+</CardGroup>

@@ -1,0 +1,333 @@
+---
+title: "빠른 시작"
+description: "몇 분 안에 MetaMCP를 실행하고 첫 번째 MCP 서버를 구성하세요"
+---
+
+몇 분 안에 MetaMCP를 실행하고 첫 번째 MCP 서버 집계를 구성하세요.
+
+## 사전 요구사항
+
+시작하기 전에 다음이 필요합니다:
+- Docker 및 Docker Compose 설치
+- 저장소 클론을 위한 Git
+- MCP (Model Context Protocol)에 대한 기본 이해
+
+## 1단계: 설치
+
+<AccordionGroup>
+  <Accordion icon="github" title="저장소 클론">
+    GitHub에서 MetaMCP를 클론하고 프로젝트 디렉토리로 이동합니다:
+
+    ```bash
+    git clone https://github.com/metatool-ai/metamcp.git
+    cd metamcp
+    ```
+  </Accordion>
+
+  <Accordion icon="settings" title="환경 설정">
+    예시 환경 파일을 복사하고 필요에 따라 수정합니다:
+
+    ```bash
+    cp example.env .env
+    ```
+
+    <Note>
+      `.env` 파일에서 `APP_URL`을 수정하는 경우, CORS 정책 적용으로 인해 해당 URL에서만 MetaMCP에 접근해야 합니다.
+    </Note>
+    <Warning>운영 환경에서는 반드시 POSTGRES_PASSWORD와 BETTER_AUTH_SECRET을 변경하세요. 또한 HTTPS를 사용하세요. 시크릿을 생성하는 일반적인 방법은 `openssl rand -hex 32 | base64`입니다.</Warning>
+  </Accordion>
+
+  <Accordion icon="docker" title="Docker Compose로 시작">
+    Docker Compose를 사용하여 MetaMCP를 시작합니다:
+
+    ```bash
+    docker compose up -d
+    ```
+
+    다음이 시작됩니다:
+    - MetaMCP 풀스택 Docker 이미지
+    - PostgreSQL 데이터베이스
+
+    <Tip>
+      Docker 이미지를 처음 다운로드하는 경우 첫 번째 시작에는 몇 분이 걸릴 수 있습니다.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+## 2단계: MetaMCP 접속
+
+컨테이너가 실행되면:
+
+1. **브라우저를 열고** `http://localhost:12008` (또는 설정한 `APP_URL`)으로 이동합니다
+2. **계정을 생성**하거나 로그인합니다
+3. **대시보드를 탐색**합니다 - MCP 서버, 네임스페이스, 엔드포인트 섹션이 보입니다
+4. **(선택사항) 회원가입 비활성화** 팀만 MetaMCP에 접근하도록 하려면, 계정 설정 후 설정 페이지에서 새 사용자 등록을 비활성화할 수 있습니다.
+
+## 3단계: 첫 번째 MCP 서버 구성
+
+<AccordionGroup>
+  <Accordion icon="server" title="3.1단계: MCP 서버 추가">
+    1. 사이드바에서 **MCP 서버**로 이동합니다 (**탐색 & 검색** 페이지에서 빠르게 추가할 수도 있습니다)
+    2. **"서버 추가"** 버튼 클릭 (오른쪽 상단)
+    3. 열리는 대화상자에서 서버 설정을 입력합니다:
+
+    **기본 정보:**
+    - **이름**: `hackernews-server` (URL 호환 가능해야 함: 문자, 숫자, 언더스코어, 하이픈만 사용)
+    - **설명**: `HackerNews MCP server for fetching stories and comments`
+    - **유형**: 드롭다운에서 `STDIO` 선택
+
+    **서버 설정:**
+    - **명령어**: `uvx`
+    - **인수**: `mcp-hn` (공백으로 구분된 인수)
+    - **환경 변수**: 비워두기 (형식: `KEY=value`, 한 줄에 하나씩)
+
+    **소유권:**
+    - **"나만 (비공개)"** 또는 **"모두 (공개)"** 선택
+    - 비공개 서버는 본인만 접근 가능
+    - 공개 서버는 모든 사용자가 접근 가능
+
+    4. **"서버 생성"** 클릭
+    5. "MCP 서버가 생성되었습니다" 성공 메시지가 표시됩니다
+
+    <Note>
+      서버 생성 후 클릭하면 세부 정보를 보고, 연결을 테스트하고, 사용 가능한 도구를 확인할 수 있습니다.
+    </Note>
+  </Accordion>
+
+  <Accordion icon="package" title="3.2단계: 네임스페이스 생성">
+    **네임스페이스가 필요한 이유?** 네임스페이스는 여러 MCP 서버를 그룹화하고 외부 접근을 위한 통합 엔드포인트를 제공합니다.
+
+    1. 사이드바에서 **네임스페이스**로 이동합니다
+    2. **"네임스페이스 생성"** 버튼 클릭 (오른쪽 상단)
+    3. 네임스페이스 양식을 작성합니다:
+
+    **기본 정보:**
+    - **이름**: `news-information` (서버 그룹에 대한 설명적 이름)
+    - **설명**: `Namespace containing news and information retrieval tools`
+
+    **소유권:**
+    - **"나만 (비공개)"** 또는 **"모두 (공개)"** 선택
+
+    **MCP 서버 선택:**
+    - 체크박스가 있는 사용 가능한 MCP 서버 목록이 표시됩니다
+    - **"hackernews-server"** 옆의 체크박스를 선택합니다
+    - 하나의 네임스페이스에 여러 서버를 선택할 수 있습니다
+    - 각 서버는 유형(STDIO, SSE 등)과 설명을 표시합니다
+
+    4. **"네임스페이스 생성"** 클릭
+    5. 성공 메시지: "네임스페이스가 생성되었습니다"
+
+    <Tip>
+      나중에 네임스페이스를 편집하여 서버를 추가하거나 제거할 수 있습니다.
+    </Tip>
+  </Accordion>
+
+
+</AccordionGroup>
+
+## 4단계: 네임스페이스의 도구 관리
+
+<AccordionGroup>
+  <Accordion icon="wrench" title="불필요한 도구 검토 및 비활성화">
+    **도구를 관리하는 이유?** 각 MCP 서버는 많은 도구를 제공할 수 있지만, 엔드포인트를 통해 특정 도구만 제공하고 싶을 수 있습니다.
+
+    1. 사이드바에서 **네임스페이스**로 이동합니다
+    2. **"news-information"** 네임스페이스를 클릭하여 세부 정보를 봅니다
+    3. 세 가지 주요 섹션이 표시됩니다:
+
+    **연결 상태:**
+    - 네임스페이스가 MCP 서버에 연결할 수 있는지 확인합니다
+    - 초록색 상태는 모든 서버에 연결 가능함을 의미합니다
+    - 필요한 경우 **"연결"**을 클릭하여 연결을 설정합니다
+
+    **MCP 서버:**
+    - 이 네임스페이스에 할당된 모든 서버를 봅니다
+    - 서버 상태 (활성/비활성/오류) 확인
+    - 서버 상태 및 설정 모니터링
+
+    **도구 관리:**
+    - 서버에서 사용 가능한 모든 도구를 봅니다
+    - 각 도구는 다음을 표시합니다:
+      - **도구 이름** (예: `get_top_stories`, `get_story`)
+      - **소스 서버** (어떤 서버가 이 도구를 제공하는지)
+      - **설명** 및 입력 스키마
+      - **상태** (활성화/비활성화)
+
+    4. **불필요한 도구 비활성화:**
+    - 엔드포인트를 통해 노출하지 않을 도구의 체크를 해제합니다
+    - 예를 들어, `get_top_stories`는 유지하고 `get_user_info`는 비활성화할 수 있습니다
+    - 이를 통해 엔드포인트를 집중적으로 유지하고 보안을 강화합니다
+
+    5. 필요한 경우 **도구 새로고침**으로 서버의 최신 도구를 가져옵니다
+
+    <Note>
+      활성화된 도구만 외부 애플리케이션이 엔드포인트를 사용할 때 사용할 수 있습니다.
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+## 5단계: 엔드포인트 생성
+
+<AccordionGroup>
+  <Accordion icon="link" title="공개 엔드포인트 생성">
+    **엔드포인트란?** 엔드포인트는 다른 애플리케이션이 사용할 수 있는 HTTP API를 통해 네임스페이스에 외부 접근을 제공합니다.
+
+    1. 사이드바에서 **엔드포인트**로 이동합니다
+    2. **"엔드포인트 생성"** 버튼 클릭 (오른쪽 상단)
+    3. 엔드포인트를 설정합니다:
+
+    **기본 정보:**
+    - **이름**: `news-endpoint` (URL 호환 이름 - `/metamcp/news-endpoint`가 됩니다)
+    - **설명 (선택사항)**: `Public endpoint for news and information tools`
+
+    **소유권:**
+    - **"나만 (비공개)"** 또는 **"모두 (공개)"** 선택
+
+    **네임스페이스 선택:**
+    - **"네임스페이스 선택"** 드롭다운 클릭
+    - **"news-information"** 네임스페이스를 선택합니다
+    - 드롭다운에서 네임스페이스 이름과 설명을 확인할 수 있습니다
+
+    **API 키 인증:**
+    - **API 키 인증 활성화**: 켜기 (권장)
+      - 엔드포인트 접근 시 API 키가 필요합니다
+    - **쿼리 파라미터 인증 사용**: 켜기/끄기
+      - 켜기: URL에서 `?api_key=xxx`를 허용합니다
+      - 끄기: `Authorization: Bearer xxx` 헤더의 API 키만 허용합니다
+
+    **MCP 서버 생성:**
+    - **"이 엔드포인트용 MCP 서버 자동 생성"**: 체크박스 선택
+    - 검사를 위한 Streamable HTTP MCP 서버 설정을 생성합니다
+
+    4. **"엔드포인트 생성"** 클릭
+    5. 성공 메시지: "엔드포인트가 생성되었습니다"
+
+    **엔드포인트는 다음 주소에서 사용할 수 있습니다:**
+    - SSE: `http://localhost:12008/metamcp/news-endpoint/sse`
+    - Streamable HTTP: `http://localhost:12008/metamcp/news-endpoint/mcp`
+    - OpenAPI: `http://localhost:12008/metamcp/news-endpoint/api`
+    - 스키마: `http://localhost:12008/metamcp/news-endpoint/api/openapi.json`
+  </Accordion>
+</AccordionGroup>
+
+## 6단계: API 키 생성
+
+<AccordionGroup>
+  <Accordion icon="key" title="API 키 생성">
+    1. 사이드바에서 **API 키**로 이동합니다
+    2. **"키 생성"** 버튼 클릭
+    3. API 키 양식을 작성합니다:
+
+    **키 정보:**
+    - **설명**: `My first MetaMCP API key for news endpoint`
+    - **범위**:
+      - **비공개**: 본인만 이 키를 사용할 수 있습니다
+      - **공개**: 모든 사용자가 이 키를 사용할 수 있습니다
+
+    4. **"키 생성"** 클릭
+    5. **중요**: 키를 안전하게 복사하여 보관하세요 - `sk_mt_`로 시작합니다
+    6. 이 키는 엔드포인트에 대한 요청을 인증하는 데 사용됩니다
+
+    <Warning>
+      API 키는 한 번만 표시됩니다. 즉시 복사하세요.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## 7단계: 설정 관리
+
+<AccordionGroup>
+  <Accordion icon="settings" title="MCP 서버 관리">
+    **서버 세부 정보 보기:**
+    - MCP 서버 목록에서 서버를 클릭합니다
+    - 연결 상태, 사용 가능한 도구, 설정을 확인합니다
+    - 서버 연결을 테스트하고 도구를 검사합니다
+
+    **서버 편집:**
+    - 각 서버 옆의 작업 메뉴(⋯)를 사용합니다
+    - 설정 수정, 환경 변수 추가
+    - 명령어 및 인수 업데이트
+
+    **서버 상태:**
+    - **활성**: 서버가 실행 중이며 사용 가능
+    - **비활성**: 서버가 구성되었지만 실행 중이지 않음
+    - **오류**: 서버에 연결 문제가 있음
+  </Accordion>
+
+  <Accordion icon="layers" title="네임스페이스 관리">
+    **네임스페이스 세부 정보 보기:**
+    - 네임스페이스를 클릭하여 서버 및 도구를 확인합니다
+    - 네임스페이스에서 활성화된 서버 모니터링
+    - 모든 서버의 집계된 도구 보기
+
+    **네임스페이스 편집:**
+    - 기존 네임스페이스에 서버 추가 또는 제거
+    - 이름 및 설명 업데이트
+    - 소유권 설정 변경
+
+    **도구 관리:**
+    - 네임스페이스의 서버에서 사용 가능한 모든 도구 보기
+    - 특정 도구 활성화/비활성화
+    - 도구 스키마 및 문서 보기
+  </Accordion>
+
+  <Accordion icon="link" title="엔드포인트 관리">
+    **엔드포인트 URL:**
+    각 엔드포인트는 여러 접근 방법을 제공합니다:
+    - **SSE**: 실시간 통신을 위한 Server-Sent Events
+    - **Streamable HTTP**: HTTP 기반 MCP 통신
+    - **OpenAPI**: OpenAPI 문서가 포함된 REST API
+    - **스키마**: 통합을 위한 OpenAPI JSON 스키마
+
+    **URL 복사:**
+    - 작업 메뉴(⋯)를 사용하여 특정 URL을 복사합니다
+    - API 키 포함 또는 미포함 URL 복사
+    - 다양한 통합을 위한 다른 형식 사용
+
+    **엔드포인트 편집:**
+    - 엔드포인트가 매핑하는 네임스페이스 변경
+    - 인증 설정 업데이트
+    - 접근 권한 수정
+  </Accordion>
+</AccordionGroup>
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="서버 추가" icon="plus" href="/ko/concepts/mcp-servers">
+    다양한 유형의 MCP 서버(STDIO, HTTP 등)를 구성하는 방법을 알아보세요
+  </Card>
+
+  <Card title="미들웨어 설정" icon="filter" href="/ko/concepts/middleware">
+    도구를 필터링하고 요청/응답을 변환하는 미들웨어를 적용하세요
+  </Card>
+
+  <Card title="Cursor에 연결" icon="mouse-pointer-2" href="/ko/integrations/cursor">
+    MetaMCP 엔드포인트를 사용하도록 Cursor IDE를 설정합니다
+  </Card>
+
+  <Card title="Claude Desktop에 연결" icon="monitor-dot" href="/ko/integrations/claude-desktop">
+    mcp-proxy를 사용하여 MetaMCP와 Claude Desktop을 설정합니다
+  </Card>
+</CardGroup>
+
+## 문제 해결
+
+<AccordionGroup>
+  <Accordion icon="warning" title="일반적인 문제">
+    **CORS 오류**: `APP_URL`에 지정된 URL에서 MetaMCP에 접근하고 있는지 확인하세요.
+
+    **데이터베이스 연결**: `docker ps`로 PostgreSQL 컨테이너가 실행 중인지 확인하세요.
+
+    **메모리 문제**: MetaMCP는 최적 성능을 위해 최소 2GB RAM이 필요합니다.
+
+    **서버 연결 실패**: 서버 세부 정보 페이지에서 MCP 서버 로그를 확인하세요.
+
+    **인증 문제**: API 키가 활성화되어 있고 올바르게 형식화되어 있는지 확인하세요.
+  </Accordion>
+
+  <Accordion icon="question" title="도움이 필요하신가요?">
+    - [GitHub 이슈](https://github.com/metatool-ai/metamcp/issues) 확인
+    - [Discord 커뮤니티](https://discord.gg/mNsyat7mFX) 참여
+  </Accordion>
+</AccordionGroup>

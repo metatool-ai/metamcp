@@ -1,0 +1,224 @@
+---
+title: "MCP OAuth 문제 해결"
+description: "이 페이지는 MetaMCP 노출 MCP 엔드포인트의 인증 로직을 설명하고 일반적인 OAuth 관련 문제를 해결하는 데 도움을 줍니다."
+---
+
+> **구현 참조**: 이 페이지에 설명된 인증 로직은 [`apps/backend/src/middleware/api-key-oauth.middleware.ts`](https://github.com/metatool-ai/metamcp/blob/main/apps/backend/src/middleware/api-key-oauth.middleware.ts)에 구현되어 있습니다.
+
+## 인증 시나리오
+
+MetaMCP는 네 가지 다른 인증 설정을 지원하며, 각각 특정 동작이 있습니다:
+
+### 1. API 키와 OAuth 모두 비활성화
+
+**설정**: `enable_api_key_auth: false`, `enable_oauth: false`
+
+**동작**:
+- 모든 요청이 인증 없이 통과됩니다
+- 인증 헤더가 필요 없습니다
+- 인증이 필요 없는 공개 엔드포인트에 적합합니다
+
+**예시 응답**:
+```json
+{
+  "message": "Public endpoint - no authentication required"
+}
+```
+
+### 2. API 키만 사용 (OAuth 비활성화)
+
+**설정**: `enable_api_key_auth: true`, `enable_oauth: false`
+
+**동작**:
+- `X-API-Key` 헤더 또는 쿼리 파라미터를 통한 유효한 API 키가 필요합니다
+- **중요한 문제**: API 키가 없거나 유효하지 않은 경우, 일부 MCP 클라이언트 (Inspector 등)가 OAuth 흐름을 시도할 수 있습니다
+- 이로 인해 무한 새로고침 루프 및 429 속도 제한 오류가 발생할 수 있습니다
+
+**유효한 요청**:
+```bash
+curl -H "X-API-Key: mcp_1234567890abcdef" \
+  https://your-domain.com/api/endpoint
+```
+
+**유효하지 않거나 누락된 API 키 응답**:
+```json
+{
+  "error": "authentication_required",
+  "error_description": "Authentication required via API key",
+  "supported_methods": [
+    "X-API-Key header",
+    "query parameter (api_key or apikey)"
+  ],
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+**⚠️ 일반적인 문제**: API 키만 활성화된 경우에도 MCP Inspector가 OAuth 흐름을 시도할 수 있어 다음이 발생합니다:
+- 무한 토큰 새로고침 시도
+- 429 "Too Many Requests" 오류
+- Inspector를 사용할 수 없게 됨
+
+**해결 방법**: OAuth가 비활성화된 경우 MCP 클라이언트가 API 키만 사용하도록 설정되어 있는지 확인하세요. 올바른 API 키를 제공하고 있는지 확인하지 않으면 429 속도 제한 오류가 발생할 수 있습니다.
+
+### 3. API 키와 OAuth 모두 활성화
+
+**설정**: `enable_api_key_auth: true`, `enable_oauth: true`
+
+**동작**:
+- API 키와 OAuth Bearer 토큰을 모두 허용합니다
+- 제공된 경우 API 키가 우선합니다
+- API 키가 없으면 OAuth로 폴백합니다
+- 가장 유연한 설정
+
+**인증 흐름**:
+
+1. **토큰 없음**: OAuth 흐름 시작
+   ```json
+   {
+     "error": "authentication_required",
+     "error_description": "Authentication required via OAuth bearer token or API key",
+     "supported_methods": [
+       "Authorization header (Bearer token)",
+       "X-API-Key header",
+       "query parameter (api_key or apikey)"
+     ]
+   }
+   ```
+
+2. **유효한 API 키**: 통과
+   ```bash
+   curl -H "X-API-Key: mcp_1234567890abcdef" \
+     https://your-domain.com/api/endpoint
+   ```
+
+3. **유효한 OAuth 토큰**: 통과
+   ```bash
+   curl -H "Authorization: Bearer mcp_token_1234567890abcdef" \
+     https://your-domain.com/api/endpoint
+   ```
+
+4. **유효하지 않은 자격증명**: 속도 제한과 함께 401 반환
+   ```json
+   {
+     "error": "invalid_credentials",
+     "error_description": "Authentication failed. Invalid credentials provided.",
+     "timestamp": "2024-01-01T00:00:00.000Z"
+   }
+   ```
+
+### 4. OAuth만 사용 (API 키 비활성화)
+
+**설정**: `enable_api_key_auth: false`, `enable_oauth: true`
+
+**동작**:
+- OAuth Bearer 토큰이 필요합니다
+- API 키 지원 없음
+- 깔끔한 OAuth 전용 인증
+
+**유효한 요청**:
+```bash
+curl -H "Authorization: Bearer mcp_token_1234567890abcdef" \
+  https://your-domain.com/api/endpoint
+```
+
+**토큰 없음 응답**:
+```json
+{
+  "error": "authentication_required",
+  "error_description": "Authentication required via OAuth bearer token",
+  "supported_methods": ["Authorization header (Bearer token)"],
+  "WWW-Authenticate": "Bearer realm=\"MetaMCP\", scope=\"admin\""
+}
+```
+
+**유효하지 않은 토큰 응답**:
+```json
+{
+  "error": "invalid_token",
+  "error_description": "The provided OAuth token is invalid or has expired.",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+## 일반적인 문제와 해결 방법
+
+### 문제 1: 무한 OAuth 새로고침 루프
+
+**증상**:
+- MCP Inspector가 지속적으로 토큰을 새로고침합니다
+- 429 "Too Many Requests" 오류
+- Inspector가 응답하지 않게 됩니다
+
+**근본 원인**: API 키만 활성화된 경우 MCP 클라이언트가 OAuth 흐름을 시도합니다
+
+**해결 방법**:
+
+1. **엔드포인트 설정에서 OAuth 활성화**:
+   ```json
+   {
+     "enable_api_key_auth": true,
+     "enable_oauth": true
+   }
+   ```
+
+2. **API 키만 사용하도록 MCP 클라이언트 설정**:
+   - `X-API-Key` 헤더를 사용하도록 클라이언트 설정 업데이트
+   - 클라이언트 설정에서 OAuth 흐름 비활성화
+
+3. **OAuth 전용 설정 사용**:
+   ```json
+   {
+     "enable_api_key_auth": false,
+     "enable_oauth": true
+   }
+   ```
+
+### 문제 2: 429 속도 제한 오류
+
+**증상**:
+- "Too many failed authentication attempts" 오류
+- 인증 시도의 임시 잠금
+
+**해결 방법**:
+
+1. **속도 제한이 초기화될 때까지 대기** (1분)
+2. Auth를 활성화한 경우, 잘못된 API 키를 절대 전달하지 마세요.
+   ```
+
+### 문제 3: 접근 거부 (403) 오류
+
+**증상**:
+- 유효한 자격증명으로도 "Access denied" 오류
+- "Public API keys cannot access private endpoints" 메시지
+
+**근본 원인**: 엔드포인트 소유권에 기반한 접근 제어
+
+**해결 방법**:
+
+1. **비공개 엔드포인트의 경우**: 엔드포인트 생성자가 소유한 API 키 사용
+2. **공개 엔드포인트의 경우**: 유효한 API 키 또는 OAuth 토큰이 작동합니다
+3. **엔드포인트 소유권 확인**:
+   ```bash
+   # 엔드포인트 세부 정보 가져오기
+   curl -H "Authorization: Bearer your-token" \
+     https://your-domain.com/api/endpoints/endpoint-uuid
+   ```
+
+### 문제 4: 잘못된 인증 방법
+
+**증상**:
+- OAuth 사용 시 "Authentication required via API key"
+- API 키 사용 시 "Authentication required via OAuth bearer token"
+
+**해결 방법**:
+
+1. **엔드포인트 설정 확인**:
+   ```bash
+   # 엔드포인트 설정 가져오기
+   curl -H "Authorization: Bearer your-token" \
+     https://your-domain.com/api/endpoints/endpoint-uuid
+   ```
+
+2. **올바른 인증 방법 사용**:
+   - API 키: `X-API-Key` 헤더 또는 `api_key` 쿼리 파라미터
+   - OAuth: `Authorization: Bearer` 헤더

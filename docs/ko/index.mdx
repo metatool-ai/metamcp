@@ -1,0 +1,137 @@
+---
+title: "MetaMCP 문서"
+description: "하나의 Docker에서 MCP 집계기, 오케스트레이터, 미들웨어, 게이트웨이를 모두"
+---
+
+<div align="center">
+
+<img src="/images/metamcp.svg" alt="MetaMCP Diagram" style={{ width: "100%", maxWidth: "600px", margin: "2rem 0" }} />
+
+**MetaMCP**는 MCP 서버를 동적으로 집계하여 통합된 MCP 서버로 만들고, 미들웨어를 적용할 수 있는 MCP 프록시입니다. MetaMCP 자체가 MCP 서버이므로 **모든** MCP 클라이언트에 쉽게 연결할 수 있습니다.
+
+</div>
+
+## 🎯 사용 사례
+
+<CardGroup cols={2}>
+  <Card title="MCP 서버 그룹화 & 호스팅" icon="folder-open">
+    MCP 서버를 네임스페이스로 그룹화하고, 메타 MCP로 호스팅하며, 인증이 포함된 공개 엔드포인트(SSE 또는 Streamable HTTP)를 할당합니다.
+  </Card>
+  <Card title="도구 선택" icon="pointer">
+    MCP 서버를 재조합할 때 필요한 도구만 선택하세요. 관찰 가능성과 보안을 위한 플러그인 방식의 미들웨어를 적용할 수 있습니다.
+  </Card>
+  <Card title="향상된 검사기" icon="search-code">
+    저장된 서버 설정으로 향상된 MCP 검사기로 사용하고, MetaMCP 엔드포인트를 검사합니다.
+  </Card>
+  <Card title="MCP용 컨텍스트 엔지니어링 엔진" icon="search">
+    MCP 도구 선택을 위한 Elasticsearch로 사용합니다 (출시 예정).
+  </Card>
+</CardGroup>
+
+일반적으로 개발자는 MetaMCP를 **인프라**로 활용하여 통합된 엔드포인트를 통해 동적으로 구성된 MCP 서버를 호스팅하고, 그 위에 에이전트를 구축할 수 있습니다.
+
+<div align="center">
+  <img src="/images/metamcp_screenshot.png" alt="MetaMCP Screenshot" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+</div>
+
+## 빠른 시작
+
+Docker Compose로 몇 분 안에 MetaMCP를 실행하세요:
+
+<CodeGroup>
+```bash 클론 & 설정
+git clone https://github.com/metatool-ai/metamcp.git
+cd metamcp
+cp example.env .env
+```
+
+```bash Docker로 시작
+docker compose up -d
+```
+</CodeGroup>
+
+<Card title="빠른 시작 가이드 계속하기" icon="rocket" href="/ko/quickstart">
+  첫 번째 MCP 서버와 네임스페이스를 설정하는 전체 가이드를 따라해보세요.
+</Card>
+
+## 핵심 개념
+
+MetaMCP를 최대한 활용하기 위해 알아야 할 주요 개념들입니다:
+
+<CardGroup cols={2}>
+  <Card title="MCP 서버" icon="server" href="/ko/concepts/mcp-servers">
+    MCP 서버 인스턴스를 구성하고 관리하는 방법을 알아보세요.
+  </Card>
+  <Card title="네임스페이스" icon="package" href="/ko/concepts/namespaces">
+    MCP 서버를 그룹화하고 네임스페이스 수준에서 미들웨어를 적용하세요.
+  </Card>
+  <Card title="엔드포인트" icon="globe" href="/ko/concepts/endpoints">
+    다양한 전송 옵션으로 네임스페이스에 공개 엔드포인트를 생성하세요.
+  </Card>
+  <Card title="미들웨어" icon="filter" href="/ko/concepts/middleware">
+    플러그인 방식의 미들웨어로 MCP 요청과 응답을 변환하세요.
+  </Card>
+</CardGroup>
+
+## 통합
+
+MetaMCP를 즐겨 사용하는 도구 및 플랫폼에 연결하세요:
+
+<CardGroup cols={2}>
+  <Card title="Cursor" icon="mouse-pointer-2" href="/ko/integrations/cursor">
+    mcp.json을 통해 MetaMCP 엔드포인트를 사용하도록 Cursor를 설정합니다
+  </Card>
+  <Card title="Claude Desktop" icon="monitor-dot" href="/ko/integrations/claude-desktop">
+    STDIO 호환을 위해 mcp-proxy를 사용하여 Claude Desktop을 연결합니다
+  </Card>
+</CardGroup>
+
+## 기능
+
+<AccordionGroup>
+  <Accordion icon="shield" title="엔터프라이즈 인증">
+    - 프론트엔드 & 백엔드를 위한 Better Auth
+    - 보안 연결을 위한 세션 쿠키
+    - 외부 액세스를 위한 API 키 인증
+    - 엔터프라이즈 SSO를 위한 OpenID Connect (OIDC) 지원
+    - 공개/비공개 범위의 멀티테넌시
+  </Accordion>
+
+  <Accordion icon="network" title="다양한 전송 옵션">
+    - **SSE (Server-Sent Events)**: MCP 하위 호환성 및 실시간 연결
+    - **Streamable HTTP**: Streamable HTTP 기반 MCP 통신 (현재 표준 원격 MCP 연결)
+    - **OpenAPI 엔드포인트**: Open WebUI와 같은 클라이언트와 호환
+    - **STDIO 호환**: 로컬 프록시를 통한 지원
+  </Accordion>
+
+  <Accordion icon="globe" title="국제화">
+    - 영어 및 중국어 기본 지원
+    - 추가 언어를 쉽게 추가 가능
+    - 로케일 기반 라우팅 및 콘텐츠
+  </Accordion>
+
+  <Accordion icon="chart-line" title="성능 & 확장성">
+    - 콜드 스타트 시간을 줄이기 위한 사전 할당된 유휴 세션
+    - 구성 가능한 세션 관리
+    - 최소 2GB-4GB 메모리 인스턴스용으로 설계
+    - nginx 지원이 포함된 Docker 기반 배포
+    - 클러스터 확장 및 MCP 매니저/워커 분리는 향후 출시 예정
+  </Accordion>
+</AccordionGroup>
+
+## 도움말
+
+<CardGroup cols={2}>
+  <Card title="MetaMCP에 기여하기" icon="code" href="/ko/development/contributing">
+    로컬 개발 환경을 설정하고 MetaMCP에 기여하세요.
+  </Card>
+   <Card title="API 레퍼런스" icon="book" href="/en/api-reference/introduction">
+    MetaMCP 엔드포인트에 대한 전체 API 문서를 살펴보세요.
+  </Card>
+  <Card title="GitHub 이슈" icon="github" href="https://github.com/metatool-ai/metamcp/issues">
+    버그를 보고하거나, 기능을 요청하거나, 기존 이슈를 확인하세요.
+  </Card>
+  <Card title="Discord 커뮤니티" icon="discord" href="https://discord.gg/mNsyat7mFX">
+    지원 및 커뮤니티 토론을 위해 Discord 서버에 참여하세요.
+  </Card>
+</CardGroup>

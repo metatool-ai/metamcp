@@ -1,0 +1,253 @@
+---
+title: "Open WebUI 통합"
+description: "MetaMCP를 사용하여 Open WebUI의 도구를 관리하세요"
+---
+
+## 사전 요구사항
+
+시작하기 전에 다음이 필요합니다:
+- Docker 및 Docker Compose 설치
+- Open WebUI 실행 중 (로컬 또는 배포됨)
+- 적절하게 설정된 `APP_URL`로 MetaMCP 배포됨 (기본값: `http://localhost:12008`)
+
+## 1단계: 적절한 설정으로 MetaMCP 배포
+
+<AccordionGroup>
+  <Accordion icon="github" title="MetaMCP 클론 및 설정">
+    아직 하지 않았다면 MetaMCP를 클론하고 설정합니다:
+
+    ```bash
+    git clone https://github.com/metatool-ai/metamcp.git
+    cd metamcp
+    cp example.env .env
+    ```
+  </Accordion>
+
+  <Accordion icon="settings" title="Open WebUI 접근을 위한 APP_URL 설정">
+    **중요**: Open WebUI 통합을 위해 `.env` 파일에서 `APP_URL`을 올바르게 설정합니다:
+
+    ```bash
+    # 로컬 MetaMCP에 접근하는 로컬 Open WebUI의 경우
+    APP_URL=http://localhost:12008
+
+    # 배포된 MetaMCP에 접근하는 배포된 Open WebUI의 경우
+    APP_URL=https://your-metamcp-domain.com
+
+    # 배포된 MetaMCP에 접근하는 로컬 Open WebUI의 경우
+    APP_URL=https://your-metamcp-domain.com
+    ```
+
+    <Warning>
+      Open WebUI는 설정된 `APP_URL`에서 MetaMCP 인스턴스에 접근할 수 있어야 합니다. 방화벽 규칙과 네트워크 설정이 이 접근을 허용하는지 확인하세요.
+    </Warning>
+
+    다른 운영 설정도 설정합니다:
+    ```bash
+    POSTGRES_PASSWORD=your_secure_password
+    BETTER_AUTH_SECRET=your_auth_secret  # 생성 방법: openssl rand -hex 32 | base64
+    ```
+  </Accordion>
+
+  <Accordion icon="docker" title="MetaMCP 시작">
+    Docker Compose를 사용하여 MetaMCP를 시작합니다:
+
+    ```bash
+    docker compose up -d
+    ```
+
+    설정된 `APP_URL`을 방문하여 실행 중인지 확인합니다.
+  </Accordion>
+</AccordionGroup>
+
+## 2단계: Open WebUI를 위한 MetaMCP 설정
+
+<AccordionGroup>
+  <Accordion icon="user" title="MetaMCP 계정 생성">
+    1. 브라우저를 열고 `APP_URL`로 이동합니다 (예: `http://localhost:12008`)
+    2. **계정을 생성**하거나 로그인합니다
+    3. **(권장)** 보안을 위해 **설정**에서 새 사용자 등록을 비활성화합니다
+  </Accordion>
+
+  <Accordion icon="server" title="MCP 서버 추가">
+    Open WebUI에 노출할 MCP 서버를 추가합니다:
+
+    1. 사이드바에서 **MCP 서버**로 이동합니다
+    2. **"서버 추가"** 버튼 클릭
+    3. 서버를 설정합니다 (파일시스템 서버 예시):
+
+    **기본 정보:**
+    - **이름**: `hacker-news-server`
+    - **설명**: `Hacker News integration for fetching stories and comments`
+    - **유형**: `STDIO`
+
+    **서버 설정:**
+    - **명령어**: `uvx`
+    - **인수**: `mcp-hn`
+    - **환경 변수**: (필요한 경우)
+
+    **소유권:**
+    - Open WebUI 접근을 위해 **"모두 (공개)"** 선택
+
+    4. **"서버 생성"** 클릭
+
+    <Tip>
+      Open WebUI에서 사용할 수 있게 하려는 모든 MCP 서버에 이 과정을 반복합니다.
+    </Tip>
+  </Accordion>
+
+  <Accordion icon="package" title="네임스페이스 생성">
+    Open WebUI를 위해 MCP 서버를 네임스페이스로 그룹화합니다:
+
+    1. 사이드바에서 **네임스페이스**로 이동합니다
+    2. **"네임스페이스 생성"** 클릭
+    3. 네임스페이스를 설정합니다:
+
+    **기본 정보:**
+    - **이름**: `openwebui-tools`
+    - **설명**: `Aggregated tools for Open WebUI integration`
+
+    **소유권:**
+    - **"모두 (공개)"** 선택
+
+    **MCP 서버 선택:**
+    - 포함하려는 모든 서버 체크
+    - 이들은 하나의 엔드포인트로 집계됩니다
+
+    4. **"네임스페이스 생성"** 클릭
+  </Accordion>
+
+  <Accordion icon="wrench" title="도구 관리 (선택사항)">
+    사용 가능한 도구를 세밀하게 조정합니다:
+
+    1. **"openwebui-tools"** 네임스페이스를 클릭합니다
+    2. **도구 관리** 섹션을 검토합니다
+    3. Open WebUI에서 접근하지 않을 도구를 비활성화합니다
+    4. 이를 통해 도구 세트를 집중적으로 유지하고 보안을 강화합니다
+  </Accordion>
+</AccordionGroup>
+
+## 3단계: OpenAPI 엔드포인트 생성
+
+<AccordionGroup>
+  <Accordion icon="link" title="공개 엔드포인트 생성">
+    Open WebUI가 사용할 수 있는 엔드포인트를 생성합니다:
+
+    1. 사이드바에서 **엔드포인트**로 이동합니다
+    2. **"엔드포인트 생성"** 클릭
+    3. 엔드포인트를 설정합니다:
+
+    **기본 정보:**
+    - **이름**: `openwebui-api`
+    - **설명**: `OpenAPI endpoint for Open WebUI integration`
+
+    **소유권:**
+    - **"모두 (공개)"** 선택
+
+    **네임스페이스 선택:**
+    - **"openwebui-tools"** 네임스페이스 선택
+
+    **API 키 인증:**
+    - **API 키 인증 활성화**: 켜기
+    - **쿼리 파라미터 인증 사용**: 끄기 (Open WebUI는 Bearer 토큰 지원)
+
+    **MCP 서버 생성:**
+    - **"이 엔드포인트용 MCP 서버 자동 생성"** 체크
+
+    4. **"엔드포인트 생성"** 클릭
+
+    **OpenAPI 엔드포인트는 다음 주소에서 사용할 수 있습니다:**
+    - OpenAPI UI: `{APP_URL}/metamcp/openwebui-api/api`
+    - OpenAPI 스키마: `{APP_URL}/metamcp/openwebui-api/api/openapi.json`
+  </Accordion>
+</AccordionGroup>
+
+## 4단계: API 키 생성
+
+<Tip>마지막 단계에서 **"이 엔드포인트용 MCP 서버 자동 생성"** 옵션을 선택하면 적어도 하나의 API 키가 자동으로 생성됩니다. 새로 생성하는 대신 이것을 사용해도 됩니다.</Tip>
+<AccordionGroup>
+  <Accordion icon="key" title="Open WebUI용 API 키 생성">
+    1. 사이드바에서 **API 키**로 이동합니다
+    2. **"키 생성"** 클릭
+    3. API 키를 설정합니다:
+
+    **키 정보:**
+    - **설명**: `Open WebUI Integration Key`
+    - **범위**: **공개** (Open WebUI에서 사용할 수 있도록)
+
+    4. **"키 생성"** 클릭
+    5. **중요**: 생성된 키를 복사합니다 (`sk_mt_`로 시작)
+
+    <Warning>
+      이 키를 안전하게 저장하세요 - 한 번만 표시되며 Open WebUI 설정에 필요합니다.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## 5단계: Open WebUI 설정
+
+<AccordionGroup>
+  <Accordion title="5.1단계: Open Web UI 열기">
+    Open Web UI 페이지를 열고 설정을 찾습니다.
+    <img src="/images/open-web-ui/1.png" alt="OpenWebUI Screenshot 1" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+  <Accordion title="5.2단계: 설정 > 도구">
+    설정 팝업에서 "도구"로 이동합니다.
+    <img src="/images/open-web-ui/2.png" alt="OpenWebUI Screenshot 2" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+  <Accordion title="5.3단계: 설정 > 도구 > 연결 추가">
+    **"도구 서버 관리"** 오른쪽 상단의 **"+"** 버튼을 클릭하여 연결을 추가합니다.
+    <br />
+    **URL > Base URL**에 `{APP_URL}/metamcp/openwebui-api/api`를 입력합니다. 예를 들어 `APP_URL`이 `http://localhost:12008`인 경우 `http://localhost:12008/metamcp/openwebui-api/api`를 입력합니다.
+    <br />
+    **URL > openapi.json 경로**에 `{APP_URL}/metamcp/openwebui-api/api/openapi.json`을 입력합니다. 예를 들어 `APP_URL`이 `http://localhost:12008`인 경우 `http://localhost:12008/metamcp/openwebui-api/api/openapi.json`을 입력합니다.
+    <br />
+    이전 단계에서 생성한 **"API 키"**를 **"Auth Bearer"** 필드에 입력합니다.
+    <br />
+    "새로고침" 버튼으로 연결을 테스트합니다.
+    <img src="/images/open-web-ui/3.png" alt="OpenWebUI Screenshot 3" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+  <Accordion title="5.4단계: 채팅으로 돌아가서 나열된 도구 확인">
+    모든 팝업을 닫습니다. 홈 페이지에서 새 채팅을 클릭합니다. 그런 다음 사용 가능한 도구를 확인합니다.
+    <img src="/images/open-web-ui/4.png" alt="OpenWebUI Screenshot 4" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+    <img src="/images/open-web-ui/5.png" alt="OpenWebUI Screenshot 5" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+  <Accordion title="5.5단계: 도구 호출로 채팅">
+    새 채팅에서 "show top hacker news" 쿼리는 다음과 같이 보입니다:
+    <img src="/images/open-web-ui/6.png" alt="OpenWebUI Screenshot 5" style={{ width: "100%", maxWidth: "800px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+  </Accordion>
+</AccordionGroup>
+
+<Tip>그런 다음 새 채팅에서 도구 호출을 지원하는 모델은 필요한 경우 자동으로 도구를 호출하려고 시도합니다.</Tip>
+
+## 문제 해결
+
+<AccordionGroup>
+  <Accordion icon="warning" title="일반적인 문제">
+    **연결 오류:**
+    - Open WebUI에서 `APP_URL`에 접근할 수 있는지 확인하세요
+    - 방화벽 및 네트워크 설정 확인
+    - API 키가 올바르게 설정되어 있는지 확인하세요. 먼저 Auth를 끄고 작동하는지 테스트해보세요.
+    - Auth를 끈 상태에서 `http://localhost:12008/metamcp/openwebui-api/api/openapi.json`을 직접 방문하여 `openapi.json`을 확인할 수 있습니다.
+
+    **인증 문제:**
+    - API 키 형식 확인 (`sk_mt_`로 시작해야 함)
+    - Open WebUI에서 Bearer 토큰 인증이 올바르게 설정되어 있는지 확인
+    - Authorization 헤더 형식 확인: `Bearer {your_api_key}`
+
+    **도구 실행 실패:**
+    - MetaMCP 대시보드에서 MCP 서버 상태 확인
+    - 네임스페이스 설정에서 도구 권한 검토
+    - 특정 오류 메시지를 위한 로그 모니터링
+
+    **CORS 오류:**
+    - Open WebUI 도메인이 허용되어 있는지 확인
+    - MetaMCP CORS 설정 확인
+    - APP_URL이 접근 URL과 일치하는지 확인
+  </Accordion>
+
+  <Accordion icon="question" title="도움이 필요하신가요?">
+    - [MetaMCP GitHub 이슈](https://github.com/metatool-ai/metamcp/issues) 확인
+    - [Discord 커뮤니티](https://discord.gg/mNsyat7mFX) 참여
+    - 필요한 경우 Open WebUI 문서 검토
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,434 @@
+---
+title: "MCP 서버"
+description: "MetaMCP에서 MCP 서버 인스턴스를 구성하고 관리하는 방법을 알아보세요"
+---
+
+**MCP 서버**는 MetaMCP에게 Model Context Protocol 서버를 시작하고 관리하는 방법을 알려주는 설정입니다. 이 서버들은 MetaMCP 엔드포인트를 통해 집계되고 노출될 수 있는 도구, 리소스, 프롬프트를 제공합니다.
+
+## MCP 서버란?
+
+MCP 서버는 MetaMCP의 구성 요소입니다. 각 서버 설정은 다음을 정의합니다:
+
+- **서버 시작 방법** (명령어, 인수, 환경)
+- **서버 유형** (STDIO, SSE, Streamable HTTP)
+- **인증 요구사항** (있는 경우)
+- **리소스 의존성** (Python 패키지, Node 모듈 등)
+
+<Card title="설정 예시" icon="code">
+```json
+{
+  "name": "HackerNews",
+  "type": "STDIO",
+  "command": "uvx",
+  "args": ["mcp-hn"],
+  "description": "Access HackerNews stories and comments"
+}
+```
+</Card>
+
+## 서버 유형
+
+MetaMCP는 세 가지 유형의 MCP 서버를 지원합니다:
+
+<AccordionGroup>
+  <Accordion icon="terminal" title="STDIO 서버">
+    **가장 일반적인 유형** - 표준 입출력 스트림을 통해 통신합니다
+
+    ```json
+    {
+      "type": "STDIO",
+      "command": "uvx",
+      "args": ["mcp-server-package"],
+      "env": {
+        "API_KEY": "your-api-key"
+      }
+    }
+    ```
+
+    **사용 사례:**
+    - `uvx`로 설치된 Python 패키지
+    - `npx`로 설치된 Node.js 패키지
+    - 커스텀 실행 스크립트
+  </Accordion>
+
+  <Accordion icon="globe" title="SSE 서버">
+    **Server-Sent Events** - SSE를 통해 통신합니다
+
+    ```json
+    {
+      "type": "SSE",
+      "url": "https://api.example.com/sse",
+      "bearerToken": "your-bearer-token",
+      "headers": {
+        "X-Custom-Header": "value"
+      }
+    }
+    ```
+
+    <Info>서버가 OAuth를 사용하는 경우 bearerToken을 비워두어도 됩니다.</Info>
+  </Accordion>
+
+  <Accordion icon="globe" title="Streamable HTTP 서버">
+    **HTTP 기반 스트리밍** - Streamable HTTP는 이제 원격 MCP의 표준입니다
+
+    ```json
+    {
+      "type": "STREAMABLE_HTTP",
+      "url": "https://api.example.com/mcp",
+      "bearerToken": "your-bearer-token",
+      "headers": {
+        "X-Custom-Header": "value"
+      }
+    }
+    ```
+
+    <Info>서버가 OAuth를 사용하는 경우 bearerToken을 비워두어도 됩니다.</Info>
+  </Accordion>
+</AccordionGroup>
+
+## 설정 옵션
+
+### 기본 설정
+
+<CodeGroup>
+```json 필수 필드
+{
+  "name": "unique-server-name",
+  "type": "STDIO|SSE|STREAMABLE_HTTP",
+  "command": "command-to-run", // STDIO만 해당
+  "args": ["arg1", "arg2"],     // STDIO만 해당
+  "url": "https://...",         // SSE/STREAMABLE_HTTP만 해당
+}
+```
+
+```json 선택적 필드
+{
+  "description": "사람이 읽을 수 있는 설명",
+  "env": {
+    "KEY": "value"
+  },
+  "bearerToken": "auth-token",  // SSE/STREAMABLE_HTTP만 해당
+  "headers": {                  // SSE/STREAMABLE_HTTP만 해당
+    "X-Custom-Header": "value"
+  }
+}
+```
+</CodeGroup>
+
+### 환경 변수
+
+STDIO 서버에 환경 변수를 전달합니다:
+
+```json
+{
+  "name": "TimeServer",
+  "type": "STDIO",
+  "command": "uvx",
+  "args": ["mcp-server-time", "--local-timezone=America/New_York"],
+  "env": {
+    "TZ": "America/New_York"
+  }
+}
+```
+
+#### 환경 변수 보간
+
+런타임에 환경 변수를 참조하려면 `${ENV_VAR}` 구문을 사용합니다:
+
+```json
+{
+  "name": "ExampleServer",
+  "type": "STDIO",
+  "command": "uvx",
+  "args": ["mcp-example"],
+  "env": {
+    "API_KEY": "${API_KEY}",
+    "DEBUG": "true"
+  }
+}
+```
+
+**장점:**
+- **보안**: API 키와 시크릿이 설정에 하드코딩되지 않습니다
+- **유연성**: 컨테이너 환경에서 값이 해석됩니다
+- **하위 호환성**: 기존 값도 계속 작동합니다
+
+**작동 방식:**
+- `${VAR_NAME}`은 런타임에 `process.env.VAR_NAME`으로 대체됩니다
+- 누락된 변수는 경고를 로그에 남기지만 서버를 중단시키지 않습니다
+- 시크릿은 로그에서 자동으로 마스킹됩니다
+
+### 인증
+
+인증이 필요한 서버의 경우:
+
+<CodeGroup>
+```json API 키를 사용하는 STDIO
+{
+  "env": {
+    "API_KEY": "your-secret-key"
+  }
+}
+```
+
+```json Bearer 토큰을 사용하는 원격
+{
+  "bearerToken": "your-bearer-token"
+}
+```
+</CodeGroup>
+
+### 커스텀 헤더
+
+**SSE 및 Streamable HTTP 서버**에 커스텀 HTTP 헤더를 추가합니다:
+
+```json
+{
+  "type": "SSE",
+  "url": "https://api.example.com/sse",
+  "headers": {
+    "X-API-Key": "your-api-key",
+    "X-API-Version": "v2",
+    "Organization-ID": "org-123"
+  }
+}
+```
+
+<Tip>
+다음이 필요한 서버에 유용합니다:
+- 여러 인증 헤더 (API 키 + Bearer 토큰)
+- 게이트웨이 또는 프록시 인증
+- 조직별 헤더
+</Tip>
+
+## MCP 서버 관리
+
+### 서버 추가
+
+1. MetaMCP 대시보드에서 **MCP 서버**로 이동합니다
+2. **"서버 추가"** 클릭
+3. 서버 세부 정보를 **설정**합니다
+4. 설정을 **테스트**합니다
+5. 네임스페이스에서 사용할 수 있도록 **저장**합니다
+
+### 대량 가져오기/내보내기
+
+MetaMCP는 쉬운 마이그레이션과 백업을 위한 MCP 서버 설정의 대량 가져오기 및 내보내기를 지원합니다.
+
+#### 서버 내보내기
+
+설정된 모든 MCP 서버를 JSON 파일로 내보냅니다:
+
+1. 대시보드에서 **MCP 서버**로 이동합니다
+2. **"JSON 내보내기"** 버튼 클릭
+3. 파일 다운로드 또는 클립보드에 복사 선택
+
+<Card title="내보내기 형식" icon="code">
+```json
+{
+  "mcpServers": {
+    "HackerNews": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-hn"],
+      "description": "Access HackerNews stories and comments"
+    },
+    "TimeServer": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-time"],
+      "env": {
+        "TZ": "America/New_York"
+      },
+      "description": "Time and timezone utilities"
+    },
+    "RemoteAPI": {
+      "type": "streamable_http",
+      "url": "https://api.example.com/mcp",
+      "bearerToken": "your-bearer-token",
+      "headers": {
+        "X-API-Version": "v2"
+      },
+      "description": "Remote MCP server via HTTP"
+    }
+  }
+}
+```
+</Card>
+
+#### 서버 가져오기
+
+JSON 설정에서 여러 MCP 서버를 가져옵니다:
+
+1. 대시보드에서 **MCP 서버**로 이동합니다
+2. **"JSON 가져오기"** 버튼 클릭
+3. JSON 설정을 **붙여넣기** 또는 입력합니다
+4. **"가져오기"**를 클릭하여 서버를 추가합니다
+
+<CodeGroup>
+```json STDIO 서버 형식
+{
+  "mcpServers": {
+    "ServerName": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["package-name"],
+      "env": {
+        "API_KEY": "your-key"
+      },
+      "description": "선택적 설명"
+    }
+  }
+}
+```
+
+```json SSE 서버 형식
+{
+  "mcpServers": {
+    "ServerName": {
+      "type": "sse",
+      "url": "https://api.example.com/sse",
+      "bearerToken": "your-token",
+      "headers": {
+        "X-Custom-Header": "value"
+      },
+      "description": "선택적 설명"
+    }
+  }
+}
+```
+
+```json Streamable HTTP 형식
+{
+  "mcpServers": {
+    "ServerName": {
+      "type": "streamable_http",
+      "url": "https://api.example.com/mcp",
+      "bearerToken": "your-token",
+      "headers": {
+        "X-Custom-Header": "value"
+      },
+      "description": "선택적 설명"
+    }
+  }
+}
+```
+</CodeGroup>
+
+<Note>
+**유형 값 (대소문자 구분 없음):**
+- `"stdio"`, `"STDIO"`, `"std"` → STDIO
+- `"sse"`, `"SSE"` → SSE
+- `"streamable_http"`, `"STREAMABLE_HTTP"`, `"streamablehttp"`, `"http"` → STREAMABLE_HTTP
+</Note>
+
+<Note>
+**가져오기 동작:**
+- 기존 이름의 서버는 새 설정으로 **업데이트**됩니다
+- 새 서버는 **생성**됩니다
+- 유효하지 않은 설정은 오류 메시지와 함께 **건너뜁니다**
+- 가져오기 프로세스는 성공/실패 수를 표시합니다
+</Note>
+
+<Tip>
+대량 가져오기/내보내기 사용 사례:
+- **환경 마이그레이션** (개발 → 스테이징 → 운영)
+- **팀 협업** (서버 설정 공유)
+- **백업 및 복원** (설정 백업)
+- **빠른 설정** (여러 서버 한 번에 배포)
+</Tip>
+
+### 유휴 세션 관리
+
+MetaMCP는 더 나은 성능을 위해 유휴 세션을 사전 할당합니다:
+
+<Card title="콜드 스타트 최적화" icon="zap">
+- **기본값**: 서버당 1개의 유휴 세션
+- **구성 가능**: 사용 패턴에 따라 조정
+- **자동 확장**: 필요에 따라 세션 생성
+- **정리**: 타임아웃 후 유휴 세션 재사용
+</Card>
+
+## 의존성을 위한 커스텀 Dockerfile
+
+MCP 서버가 `uvx` 또는 `npx` 이상의 추가 의존성이 필요한 경우, MetaMCP Dockerfile을 커스터마이징할 수 있습니다:
+
+```dockerfile
+FROM metamcp:latest
+
+# Python 의존성 설치
+RUN pip install requests beautifulsoup4
+
+# 시스템 패키지 설치
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 패키지를 전역으로 설치
+RUN npm install -g some-mcp-package
+```
+
+<Warning>
+커스텀 의존성은 Docker 이미지 크기와 시작 시간을 늘립니다. 가능한 경우 경량 대안 사용을 고려하세요.
+</Warning>
+
+## 문제 해결
+
+<AccordionGroup>
+  <Accordion icon="triangle-alert" title="서버가 시작되지 않음">
+    **일반적인 원인:**
+    - 누락된 의존성 (커스텀 Dockerfile을 통해 설치)
+    - 잘못된 명령어 또는 인수
+    - 환경 변수가 설정되지 않음
+    - 네트워크 연결 문제 (SSE/Streamable HTTP의 경우)
+
+    **디버그 단계:**
+    1. MetaMCP 대시보드에서 서버 로그 확인
+    2. 터미널에서 명령어 수동 테스트
+    3. 환경 변수 확인
+    4. 네트워크 연결 확인
+  </Accordion>
+
+  <Accordion icon="clock" title="느린 성능">
+    **최적화 전략:**
+    - 자주 사용되는 서버의 유휴 세션 수 늘리기
+    - 가능한 경우 원격 대신 로컬 서버 사용
+    - 커스텀 Docker 이미지에 의존성 사전 설치
+    - 적절한 타임아웃 값 설정
+  </Accordion>
+
+  <Accordion icon="shield" title="인증 문제">
+    **일반적인 문제:**
+    - 만료된 API 키 또는 Bearer 토큰
+    - 잘못된 환경 변수 이름
+    - 필요한 헤더 누락
+    - 외부 API의 속도 제한
+
+    **해결 방법:**
+    1. API 키/토큰 갱신
+    2. 필요한 인증에 대한 서버 문서 확인
+    3. 적절한 오류 처리 구현
+    4. 백오프를 포함한 재시도 로직 추가
+  </Accordion>
+</AccordionGroup>
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="네임스페이스 생성" icon="package" href="/ko/concepts/namespaces">
+    MCP 서버를 체계적인 네임스페이스로 그룹화합니다
+  </Card>
+
+  <Card title="엔드포인트 설정" icon="link" href="/ko/concepts/endpoints">
+    서버에 접근하기 위한 공개 엔드포인트를 생성합니다
+  </Card>
+
+  <Card title="미들웨어 추가" icon="filter" href="/ko/concepts/middleware">
+    MCP 요청과 응답을 변환하고 필터링합니다
+  </Card>
+
+  <Card title="통합 가이드" icon="plug" href="/ko/integrations/cursor">
+    설정된 서버를 MCP 클라이언트에 연결합니다
+  </Card>
+</CardGroup>
