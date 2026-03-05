@@ -82,11 +82,13 @@ export const mcpServersImplementations = {
 
   list: async (
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof ListMcpServersResponseSchema>> => {
     try {
-      // Find servers accessible to user (public + user's own)
-      const servers =
-        await mcpServersRepository.findAllAccessibleToUser(userId);
+      // Admin can see all servers, regular users see public + own
+      const servers = userRole === "admin"
+        ? await mcpServersRepository.findAll()
+        : await mcpServersRepository.findAllAccessibleToUser(userId);
 
       return {
         success: true as const,
@@ -204,12 +206,13 @@ export const mcpServersImplementations = {
       uuid: string;
     },
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof GetMcpServerResponseSchema>> => {
     try {
       const server = await mcpServersRepository.findByUuid(input.uuid);
 
-      // Check if user has access to this server (own server or public server)
-      if (server && server.user_id && server.user_id !== userId) {
+      // Check if user has access to this server (own server or public server, admin bypasses)
+      if (server && server.user_id && server.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message:
@@ -243,6 +246,7 @@ export const mcpServersImplementations = {
       uuid: string;
     },
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof DeleteMcpServerResponseSchema>> => {
     try {
       // Check if server exists and user has permission to delete it
@@ -255,8 +259,8 @@ export const mcpServersImplementations = {
         };
       }
 
-      // Only server owner can delete their own servers, only admin can delete public servers
-      if (server.user_id && server.user_id !== userId) {
+      // Only server owner can delete their own servers (admin bypasses)
+      if (server.user_id && server.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message: "Access denied: You can only delete servers you own",
@@ -338,6 +342,7 @@ export const mcpServersImplementations = {
   update: async (
     input: z.infer<typeof UpdateMcpServerRequestSchema>,
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof UpdateMcpServerResponseSchema>> => {
     try {
       // Check if server exists and user has permission to update it
@@ -350,8 +355,8 @@ export const mcpServersImplementations = {
         };
       }
 
-      // Only server owner can update their own servers, only admin can update public servers
-      if (server.user_id && server.user_id !== userId) {
+      // Only server owner can update their own servers (admin bypasses)
+      if (server.user_id && server.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message: "Access denied: You can only update servers you own",

@@ -159,11 +159,13 @@ export const endpointsImplementations = {
 
   list: async (
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof ListEndpointsResponseSchema>> => {
     try {
-      // Get endpoints accessible to user (public + user's own) with namespace data
-      const endpoints =
-        await endpointsRepository.findAllAccessibleToUserWithNamespaces(userId);
+      // Admin can see all endpoints, regular users see public + own
+      const endpoints = userRole === "admin"
+        ? await endpointsRepository.findAllWithNamespaces()
+        : await endpointsRepository.findAllAccessibleToUserWithNamespaces(userId);
 
       return {
         success: true as const,
@@ -185,6 +187,7 @@ export const endpointsImplementations = {
       uuid: string;
     },
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof GetEndpointResponseSchema>> => {
     try {
       const endpoint = await endpointsRepository.findByUuidWithNamespace(
@@ -198,8 +201,8 @@ export const endpointsImplementations = {
         };
       }
 
-      // Check if user has access to this endpoint (own endpoint or public endpoint)
-      if (endpoint.user_id && endpoint.user_id !== userId) {
+      // Check if user has access to this endpoint (admin bypasses)
+      if (endpoint.user_id && endpoint.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message:
@@ -226,6 +229,7 @@ export const endpointsImplementations = {
       uuid: string;
     },
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof DeleteEndpointResponseSchema>> => {
     try {
       // First, check if the endpoint exists and user has permission to delete it
@@ -239,8 +243,8 @@ export const endpointsImplementations = {
         };
       }
 
-      // Check if user owns this endpoint (only owners can delete, protect public endpoints)
-      if (existingEndpoint.user_id && existingEndpoint.user_id !== userId) {
+      // Check if user owns this endpoint (admin bypasses)
+      if (existingEndpoint.user_id && existingEndpoint.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message: "Access denied: You can only delete endpoints you own",
@@ -275,6 +279,7 @@ export const endpointsImplementations = {
   update: async (
     input: z.infer<typeof UpdateEndpointRequestSchema>,
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof UpdateEndpointResponseSchema>> => {
     try {
       // First, check if the endpoint exists and user has permission to update it
@@ -288,8 +293,8 @@ export const endpointsImplementations = {
         };
       }
 
-      // Check if user owns this endpoint (only owners can update)
-      if (existingEndpoint.user_id && existingEndpoint.user_id !== userId) {
+      // Check if user owns this endpoint (admin bypasses)
+      if (existingEndpoint.user_id && existingEndpoint.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message: "Access denied: You can only update endpoints you own",
