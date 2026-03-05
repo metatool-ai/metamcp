@@ -4,24 +4,18 @@ import {
   SSEClientTransport,
   SseError,
 } from "@modelcontextprotocol/sdk/client/sse.js";
-import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { McpServerErrorStatusEnum, McpServerTypeEnum } from "@repo/zod-types";
 import express from "express";
-import { parse as shellParseArgs } from "shell-quote";
-import { findActualExecutable } from "spawn-rx";
 
 import logger from "@/utils/logger";
 
 import { mcpServersRepository } from "../../db/repositories";
 import mcpProxy from "../../lib/mcp-proxy";
 import { transformDockerUrl } from "../../lib/metamcp/client";
-import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
-import { resolveEnvVariables } from "../../lib/metamcp/utils";
-import { ProcessManagedStdioTransport } from "../../lib/stdio-transport/process-managed-transport";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
 
 const SSE_HEADERS_PASSTHROUGH = ["authorization"];
@@ -30,100 +24,6 @@ const STREAMABLE_HTTP_HEADERS_PASSTHROUGH = [
   "mcp-session-id",
   "last-event-id",
 ];
-
-const defaultEnvironment = {
-  ...getDefaultEnvironment(),
-};
-
-// Cooldown mechanism for failed STDIO commands
-const STDIO_COOLDOWN_DURATION = 10000; // 10 seconds
-const stdioCommandCooldowns = new Map<string, number>();
-
-// Function to create a key for STDIO commands
-const createStdioKey = (
-  command: string,
-  args: string[],
-  env: Record<string, string>,
-) => {
-  return `${command}:${args.join(",")}:${JSON.stringify(env)}`;
-};
-
-// Function to check if a STDIO command is in cooldown
-const isStdioInCooldown = (
-  command: string,
-  args: string[],
-  env: Record<string, string>,
-): boolean => {
-  const key = createStdioKey(command, args, env);
-  const cooldownEnd = stdioCommandCooldowns.get(key);
-  if (cooldownEnd && Date.now() < cooldownEnd) {
-    return true;
-  }
-  if (cooldownEnd && Date.now() >= cooldownEnd) {
-    stdioCommandCooldowns.delete(key);
-  }
-  return false;
-};
-
-// Function to set a STDIO command in cooldown
-const setStdioCooldown = (
-  command: string,
-  args: string[],
-  env: Record<string, string>,
-) => {
-  const key = createStdioKey(command, args, env);
-  stdioCommandCooldowns.set(key, Date.now() + STDIO_COOLDOWN_DURATION);
-};
-
-// Function to extract server UUID from STDIO command
-const extractServerUuidFromStdioCommand = async (
-  command: string,
-  args: string[],
-): Promise<string | null> => {
-  try {
-    // For filesys server, the command is typically: npx @modelcontextprotocol/server-filesystem /workspaceFolder
-    // We need to find the server in the database that matches this command pattern
-
-    // First, try to find by command and args pattern
-    const fullCommand = `${command} ${args.join(" ")}`;
-    logger.info(`Looking for server with command: ${fullCommand}`);
-
-    // Look for servers that match this command pattern
-    const servers = await mcpServersRepository.findAll();
-    logger.info(`Found ${servers.length} servers in database`);
-
-    for (const server of servers) {
-      if (server.type === "STDIO" && server.command) {
-        const serverCommand = `${server.command} ${(server.args || []).join(" ")}`;
-        logger.info(
-          `Checking server ${server.name} (${server.uuid}): ${serverCommand}`,
-        );
-        if (serverCommand === fullCommand) {
-          logger.info(
-            `Found exact match for server ${server.name} (${server.uuid})`,
-          );
-          return server.uuid;
-        }
-      }
-    }
-
-    // If no exact match, try to find by command only (for cases where args might vary)
-    for (const server of servers) {
-      if (server.type === "STDIO" && server.command === command) {
-        logger.info(
-          `Found command-only match for server ${server.name} (${server.uuid})`,
-        );
-        return server.uuid;
-      }
-    }
-
-    logger.info(`No server found for command: ${fullCommand}`);
-    return null;
-  } catch (error) {
-    logger.error("Error extracting server UUID from STDIO command:", error);
-    return null;
-  }
-};
 
 // Function to check if server is in error state
 const checkServerErrorStatus = async (serverUuid: string): Promise<boolean> => {
@@ -237,61 +137,36 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
   const transportType = query.transportType as string;
 
   if (transportType === McpServerTypeEnum.Enum.STDIO) {
-    const command = query.command as string;
-    const origArgs = shellParseArgs(query.args as string) as string[];
-    const queryEnv = query.env ? JSON.parse(query.env as string) : {};
+    // STDIO servers are now backed by K8s Pods running supergateway
+    // Look up the K8s service URL from the database
+    const serverUuid = query.serverUuid as string | undefined;
+    if (!serverUuid) {
+      throw new Error("serverUuid query parameter is required for STDIO transport");
+    }
 
-    // Resolve environment variable placeholders
-    const resolvedQueryEnv = resolveEnvVariables(queryEnv);
-
-    const env = { ...process.env, ...defaultEnvironment, ...resolvedQueryEnv };
-
-    const { cmd, args } = findActualExecutable(command, origArgs);
-
-    // Check if this command is in cooldown
-    if (isStdioInCooldown(cmd, args, env)) {
-      logger.info(`STDIO command in cooldown: ${cmd} ${args.join(" ")}`);
-      const cooldownEnd = stdioCommandCooldowns.get(
-        createStdioKey(cmd, args, env),
-      );
-      if (cooldownEnd) {
-        throw new Error(
-          `Command "${cmd} ${args.join(" ")}" is in cooldown. Please wait ${Math.ceil((cooldownEnd - Date.now()) / 1000)} seconds before retrying.`,
-        );
-      }
+    const server = await mcpServersRepository.findByUuid(serverUuid);
+    if (!server) {
+      throw new Error(`Server ${serverUuid} not found`);
     }
 
     // Check if the server is in error state
-    const serverUuid = await extractServerUuidFromStdioCommand(cmd, args);
-    if (serverUuid) {
-      const isInError = await checkServerErrorStatus(serverUuid);
-      if (isInError) {
-        throw new Error(
-          `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
-        );
-      }
-    }
-
-    logger.info(`STDIO transport: command=${cmd}, args=${args}`);
-
-    const transport = new ProcessManagedStdioTransport({
-      command: cmd,
-      args,
-      env,
-      stderr: "pipe",
-    });
-
-    try {
-      await transport.start();
-      return transport;
-    } catch (error) {
-      // If the transport fails to start, put it in cooldown
-      setStdioCooldown(cmd, args, env);
-      logger.info(
-        `STDIO command failed, setting cooldown: ${cmd} ${args.join(" ")}`,
+    if (server.error_status === McpServerErrorStatusEnum.Enum.ERROR) {
+      throw new Error(
+        `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
       );
-      throw error;
     }
+
+    if (!server.k8s_service_url) {
+      throw new Error(
+        `STDIO server ${server.name} has no K8s service URL. Pod may not be ready.`,
+      );
+    }
+
+    logger.info(`STDIO transport via K8s: serverUuid=${serverUuid}, url=${server.k8s_service_url}`);
+
+    const transport = new StreamableHTTPClientTransport(new URL(server.k8s_service_url));
+    await transport.start();
+    return transport;
   } else if (transportType === McpServerTypeEnum.Enum.SSE) {
     const url = transformDockerUrl(query.url as string);
 
@@ -406,41 +281,6 @@ serverRouter.post("/mcp", async (req, res) => {
       }
 
       logger.info("Created StreamableHttp server transport");
-
-      // Set up crash detection for STDIO transports in StreamableHttp route
-      if (serverTransport instanceof ProcessManagedStdioTransport) {
-        serverTransport.onprocesscrash = async (exitCode, signal) => {
-          logger.warn(
-            `StreamableHttp STDIO process crashed with code: ${exitCode}, signal: ${signal}`,
-          );
-
-          // Try to extract server UUID from the command/args
-          const query = req.query;
-          const command = query.command as string;
-          const origArgs = shellParseArgs(query.args as string) as string[];
-
-          const serverUuid = await extractServerUuidFromStdioCommand(
-            command,
-            origArgs,
-          );
-
-          if (serverUuid) {
-            // Report crash to server pool
-            mcpServerPool
-              .handleServerCrashWithoutNamespace(serverUuid, exitCode, signal)
-              .catch((error) => {
-                logger.error(
-                  `Error reporting StreamableHttp STDIO crash to server pool for ${serverUuid}:`,
-                  error,
-                );
-              });
-          } else {
-            logger.warn(
-              `Could not determine server UUID for crashed StreamableHttp STDIO process: ${command} ${origArgs.join(" ")}`,
-            );
-          }
-        };
-      }
 
       // Generate session ID upfront for better tracking
       const newSessionId = randomUUID();
@@ -592,141 +432,6 @@ serverRouter.get("/stdio", async (req, res) => {
     });
 
     await webAppTransport.start();
-
-    const stdinTransport = serverTransport as ProcessManagedStdioTransport;
-
-    // Set up crash detection for the server pool
-    stdinTransport.onprocesscrash = async (exitCode, signal) => {
-      logger.warn(
-        `STDIO process crashed with code: ${exitCode}, signal: ${signal}`,
-      );
-
-      // Try to extract server UUID from the command/args
-      const query = req.query;
-      const command = query.command as string;
-      const origArgs = shellParseArgs(query.args as string) as string[];
-
-      logger.info(
-        `STDIO crash handler called for command: ${command} ${origArgs.join(" ")}`,
-      );
-
-      // For filesys server, the server UUID might be in the args or we need to derive it
-      // For now, we'll use a fallback approach to find the server UUID
-      const serverUuid = await extractServerUuidFromStdioCommand(
-        command,
-        origArgs,
-      );
-
-      if (serverUuid) {
-        logger.info(
-          `Reporting crash to server pool for server UUID: ${serverUuid}`,
-        );
-        // Report crash to server pool
-        mcpServerPool
-          .handleServerCrashWithoutNamespace(serverUuid, exitCode, signal)
-          .catch((error) => {
-            logger.error(
-              `Error reporting STDIO crash to server pool for ${serverUuid}:`,
-              error,
-            );
-          });
-      } else {
-        logger.warn(
-          `Could not determine server UUID for crashed STDIO process: ${command} ${origArgs.join(" ")}`,
-        );
-      }
-    };
-
-    // Monitor for quick failures and set cooldown
-    const commandStartTime = Date.now();
-    const QUICK_FAILURE_THRESHOLD = 5000; // 5 seconds
-
-    // Handle transport close events
-    stdinTransport.onclose = () => {
-      const runTime = Date.now() - commandStartTime;
-      if (runTime < QUICK_FAILURE_THRESHOLD) {
-        // Process failed quickly, likely a startup error
-        const query = req.query;
-        const command = query.command as string;
-        const origArgs = shellParseArgs(query.args as string) as string[];
-        const queryEnv = query.env ? JSON.parse(query.env as string) : {};
-        const resolvedQueryEnv = resolveEnvVariables(queryEnv);
-        const env = {
-          ...process.env,
-          ...defaultEnvironment,
-          ...resolvedQueryEnv,
-        };
-        const { cmd, args } = findActualExecutable(command, origArgs);
-
-        setStdioCooldown(cmd, args, env);
-        logger.info(
-          `STDIO process terminated quickly (${runTime}ms), setting cooldown: ${cmd} ${args.join(" ")}`,
-        );
-      }
-    };
-
-    if (stdinTransport.stderr) {
-      stdinTransport.stderr.on("data", (chunk: Buffer) => {
-        const errorContent = chunk.toString();
-        if (errorContent.includes("MODULE_NOT_FOUND")) {
-          webAppTransport
-            .send({
-              jsonrpc: "2.0",
-              method: "notifications/stderr",
-              params: {
-                content: "Command not found, transports removed",
-              },
-            })
-            .catch((error) => {
-              // Ignore "Not connected" errors during cleanup
-              if (error?.message && !error.message.includes("Not connected")) {
-                logger.error("Error sending stderr notification:", error);
-              }
-            });
-          webAppTransport.close();
-          cleanupSession(webAppTransport.sessionId);
-          logger.error("Command not found, transports removed");
-        } else {
-          // Check for common startup errors that should trigger cooldown
-          if (
-            errorContent.includes("ENOENT") ||
-            errorContent.includes("no such file or directory")
-          ) {
-            const query = req.query;
-            const command = query.command as string;
-            const origArgs = shellParseArgs(query.args as string) as string[];
-            const queryEnv = query.env ? JSON.parse(query.env as string) : {};
-            const resolvedQueryEnv = resolveEnvVariables(queryEnv);
-            const env = {
-              ...process.env,
-              ...defaultEnvironment,
-              ...resolvedQueryEnv,
-            };
-            const { cmd, args } = findActualExecutable(command, origArgs);
-
-            setStdioCooldown(cmd, args, env);
-            logger.info(
-              `STDIO process reported startup error, setting cooldown: ${cmd} ${args.join(" ")}`,
-            );
-          }
-
-          webAppTransport
-            .send({
-              jsonrpc: "2.0",
-              method: "notifications/stderr",
-              params: {
-                content: errorContent,
-              },
-            })
-            .catch((error) => {
-              // Ignore "Not connected" errors as they're expected when connections close
-              if (error?.message && !error.message.includes("Not connected")) {
-                logger.error("Error sending stderr notification:", error);
-              }
-            });
-        }
-      });
-    }
 
     mcpProxy({
       transportToClient: webAppTransport,

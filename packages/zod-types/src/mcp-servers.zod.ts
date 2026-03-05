@@ -403,6 +403,8 @@ export const McpServerCreateInputSchema = z.object({
   bearerToken: z.string().nullable().optional(),
   headers: z.record(z.string()).optional(),
   user_id: z.string().nullable().optional(),
+  k8s_command_hash: z.string().nullable().optional(),
+  k8s_service_url: z.string().nullable().optional(),
 });
 
 export const McpServerUpdateInputSchema = z.object({
@@ -427,6 +429,8 @@ export const McpServerUpdateInputSchema = z.object({
   bearerToken: z.string().nullable().optional(),
   headers: z.record(z.string()).optional(),
   user_id: z.string().nullable().optional(),
+  k8s_command_hash: z.string().nullable().optional(),
+  k8s_service_url: z.string().nullable().optional(),
 });
 
 export type McpServerCreateInput = z.infer<typeof McpServerCreateInputSchema>;
@@ -447,6 +451,8 @@ export const DatabaseMcpServerSchema = z.object({
   bearerToken: z.string().nullable(),
   headers: z.record(z.string()),
   user_id: z.string().nullable(),
+  k8s_command_hash: z.string().nullable().optional(),
+  k8s_service_url: z.string().nullable().optional(),
 });
 
 export type DatabaseMcpServer = z.infer<typeof DatabaseMcpServerSchema>;

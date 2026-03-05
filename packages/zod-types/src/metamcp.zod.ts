@@ -21,6 +21,8 @@ export const ServerParametersSchema = z.object({
   oauth_tokens: OAuthTokensSchema.nullable().optional(),
   bearerToken: z.string().nullable().optional(),
   headers: z.record(z.string()).nullable().optional(),
+  k8s_service_url: z.string().nullable().optional(),
+  k8s_command_hash: z.string().nullable().optional(),
 });
 
 export type ServerParameters = z.infer<typeof ServerParametersSchema>;

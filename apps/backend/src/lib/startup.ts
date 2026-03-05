@@ -2,6 +2,7 @@ import { ServerParameters } from "@repo/zod-types";
 
 import { mcpServersRepository, namespacesRepository } from "../db/repositories";
 import { initializeEnvironmentConfiguration } from "./bootstrap.service";
+import { initializeK8sClient, startReconciler } from "./k8s";
 import { metaMcpServerPool } from "./metamcp";
 import { convertDbServerToParams } from "./metamcp/utils";
 
@@ -36,6 +37,17 @@ export async function initializeOnStartup(): Promise<void> {
     }
   } else {
     console.log("Environment bootstrap disabled via BOOTSTRAP_ENABLE=false");
+  }
+
+  // Initialize K8s client (in-cluster authentication)
+  try {
+    initializeK8sClient();
+    console.log("✅ K8s client initialized successfully");
+  } catch (err) {
+    console.error("❌ Error initializing K8s client:", err);
+    if (failHard) {
+      throw err;
+    }
   }
 }
 
@@ -98,6 +110,14 @@ export async function initializeIdleServers() {
     console.log(
       "✅ Successfully initialized idle servers for all namespaces and all MCP servers",
     );
+
+    // Start K8s reconciler for periodic DB<->K8s state sync
+    try {
+      startReconciler();
+      console.log("✅ K8s reconciler started");
+    } catch (err) {
+      console.error("❌ Error starting K8s reconciler:", err);
+    }
   } catch (error) {
     console.log("❌ Error initializing idle servers:", error);
     // Don't exit the process, just log the error

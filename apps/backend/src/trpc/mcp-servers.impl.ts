@@ -19,6 +19,12 @@ import {
   namespaceMappingsRepository,
 } from "../db/repositories";
 import { McpServersSerializer } from "../db/serializers";
+import {
+  computeCommandHash,
+  ensurePodAndService,
+  waitForReady,
+  deletePodAndService,
+} from "../lib/k8s";
 import { mcpServerPool } from "../lib/metamcp/mcp-server-pool";
 import { clearOverrideCache } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
@@ -35,7 +41,7 @@ export const mcpServersImplementations = {
       const effectiveUserId =
         input.user_id !== undefined ? input.user_id : userId;
 
-      const createdServer = await mcpServersRepository.create({
+      let createdServer = await mcpServersRepository.create({
         ...input,
         user_id: effectiveUserId,
       });
@@ -45,6 +51,33 @@ export const mcpServersImplementations = {
           success: false as const,
           message: "Failed to create MCP server",
         };
+      }
+
+      // For STDIO servers, ensure K8s Pod+Service and update DB with hash/URL
+      if (createdServer.type === McpServerTypeEnum.Enum.STDIO && createdServer.command) {
+        try {
+          const hash = computeCommandHash(createdServer.command, createdServer.args || []);
+          const serviceUrl = await ensurePodAndService({
+            commandHash: hash,
+            command: createdServer.command,
+            args: createdServer.args || [],
+            env: createdServer.env || {},
+          });
+          await waitForReady(hash);
+          const updated = await mcpServersRepository.update({
+            uuid: createdServer.uuid,
+            k8s_command_hash: hash,
+            k8s_service_url: serviceUrl,
+          });
+          if (updated) {
+            createdServer = updated;
+          }
+        } catch (error) {
+          logger.error(
+            `Error ensuring K8s Pod for newly created server ${createdServer.name} (${createdServer.uuid}):`,
+            error,
+          );
+        }
       }
 
       // Ensure idle session for the newly created server (async)
@@ -152,10 +185,34 @@ export const mcpServersImplementations = {
           await mcpServersRepository.bulkCreate(serversToInsert);
         imported = serversToInsert.length;
 
-        // Ensure idle sessions for all imported servers (async)
+        // Ensure K8s Pods and idle sessions for all imported servers (async)
         if (createdServers && createdServers.length > 0) {
           createdServers.forEach(async (server) => {
             try {
+              // For STDIO servers, ensure K8s Pod+Service
+              if (server.type === McpServerTypeEnum.Enum.STDIO && server.command) {
+                try {
+                  const hash = computeCommandHash(server.command, server.args || []);
+                  const serviceUrl = await ensurePodAndService({
+                    commandHash: hash,
+                    command: server.command,
+                    args: server.args || [],
+                    env: server.env || {},
+                  });
+                  await waitForReady(hash);
+                  await mcpServersRepository.update({
+                    uuid: server.uuid,
+                    k8s_command_hash: hash,
+                    k8s_service_url: serviceUrl,
+                  });
+                } catch (k8sError) {
+                  logger.error(
+                    `Error ensuring K8s Pod for bulk imported server ${server.name} (${server.uuid}):`,
+                    k8sError,
+                  );
+                }
+              }
+
               const params = await convertDbServerToParams(server);
               if (params) {
                 mcpServerPool
@@ -174,7 +231,7 @@ export const mcpServersImplementations = {
               }
             } catch (error) {
               logger.error(
-                `Error processing idle session for bulk imported server ${server.name} (${server.uuid}):`,
+                `Error processing bulk imported server ${server.name} (${server.uuid}):`,
                 error,
               );
             }
@@ -285,6 +342,31 @@ export const mcpServersImplementations = {
         };
       }
 
+      // If STDIO server, check if we should delete K8s Pod+Service
+      if (deletedServer.k8s_command_hash) {
+        try {
+          const refCount = await mcpServersRepository.countByCommandHash(
+            deletedServer.k8s_command_hash,
+          );
+          if (refCount === 0) {
+            // No other servers reference this hash, delete K8s resources
+            await deletePodAndService(deletedServer.k8s_command_hash);
+            logger.info(
+              `Deleted K8s Pod+Service for hash ${deletedServer.k8s_command_hash} (last reference removed)`,
+            );
+          } else {
+            logger.info(
+              `K8s Pod+Service for hash ${deletedServer.k8s_command_hash} retained (${refCount} other references)`,
+            );
+          }
+        } catch (error) {
+          logger.error(
+            `Error cleaning up K8s resources for deleted server ${deletedServer.uuid}:`,
+            error,
+          );
+        }
+      }
+
       // Invalidate idle MetaMCP servers for all affected namespaces (async)
       if (affectedNamespaceUuids.length > 0) {
         metaMcpServerPool
@@ -367,7 +449,7 @@ export const mcpServersImplementations = {
       const effectiveUserId =
         input.user_id !== undefined ? input.user_id : server.user_id;
 
-      const updatedServer = await mcpServersRepository.update({
+      let updatedServer = await mcpServersRepository.update({
         ...input,
         user_id: effectiveUserId,
       });
@@ -391,6 +473,49 @@ export const mcpServersImplementations = {
             `Error resetting error status for updated stdio server ${updatedServer.name} (${updatedServer.uuid}):`,
             error,
           );
+        }
+
+        // Handle K8s Pod+Service for STDIO servers
+        if (updatedServer.command) {
+          try {
+            const newHash = computeCommandHash(updatedServer.command, updatedServer.args || []);
+            const oldHash = server.k8s_command_hash;
+
+            // If command/args changed, handle old Pod cleanup
+            if (oldHash && oldHash !== newHash) {
+              const oldRefCount = await mcpServersRepository.countByCommandHash(oldHash);
+              if (oldRefCount === 0) {
+                await deletePodAndService(oldHash);
+                logger.info(`Deleted old K8s Pod+Service for hash ${oldHash}`);
+              }
+            }
+
+            // Ensure new Pod+Service
+            const serviceUrl = await ensurePodAndService({
+              commandHash: newHash,
+              command: updatedServer.command,
+              args: updatedServer.args || [],
+              env: updatedServer.env || {},
+            });
+            await waitForReady(newHash);
+
+            // Update DB with new hash/URL
+            if (newHash !== updatedServer.k8s_command_hash || serviceUrl !== updatedServer.k8s_service_url) {
+              const updated = await mcpServersRepository.update({
+                uuid: updatedServer.uuid,
+                k8s_command_hash: newHash,
+                k8s_service_url: serviceUrl,
+              });
+              if (updated) {
+                updatedServer = updated;
+              }
+            }
+          } catch (error) {
+            logger.error(
+              `Error updating K8s Pod for server ${updatedServer.name} (${updatedServer.uuid}):`,
+              error,
+            );
+          }
         }
       }
 

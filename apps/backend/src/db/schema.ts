@@ -65,11 +65,14 @@ export const mcpServersTable = pgTable(
     user_id: text("user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),
+    k8s_command_hash: text("k8s_command_hash"),
+    k8s_service_url: text("k8s_service_url"),
   },
   (table) => [
     index("mcp_servers_type_idx").on(table.type),
     index("mcp_servers_user_id_idx").on(table.user_id),
     index("mcp_servers_error_status_idx").on(table.error_status),
+    index("mcp_servers_k8s_command_hash_idx").on(table.k8s_command_hash),
     // Allow same name for different users, but unique within user scope (including public)
     unique("mcp_servers_name_user_unique_idx").on(table.name, table.user_id),
     sql`CONSTRAINT mcp_servers_name_regex_check CHECK (

@@ -1,16 +1,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StdioServerParameters } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ServerParameters } from "@repo/zod-types";
 
 import logger from "@/utils/logger";
 
-import { ProcessManagedStdioTransport } from "../stdio-transport/process-managed-transport";
 import { metamcpLogStore } from "./log-store";
 import { serverErrorTracker } from "./server-error-tracker";
-import { resolveEnvVariables } from "./utils";
 
 const sleep = (time: number) =>
   new Promise<void>((resolve) => setTimeout(() => resolve(), time));
@@ -18,7 +15,6 @@ const sleep = (time: number) =>
 export interface ConnectedClient {
   client: Client;
   cleanup: () => Promise<void>;
-  onProcessCrash?: (exitCode: number | null, signal: string | null) => void;
 }
 
 /**
@@ -43,40 +39,17 @@ export const createMetaMcpClient = (
   // Create the appropriate transport based on server type
   // Default to "STDIO" if type is undefined
   if (!serverParams.type || serverParams.type === "STDIO") {
-    // Resolve environment variable placeholders
-    const resolvedEnv = serverParams.env
-      ? resolveEnvVariables(serverParams.env)
-      : undefined;
-
-    const stdioParams: StdioServerParameters = {
-      command: serverParams.command || "",
-      args: serverParams.args || undefined,
-      env: resolvedEnv,
-      stderr: "pipe",
-    };
-    transport = new ProcessManagedStdioTransport(stdioParams);
-
-    // Handle stderr stream when set to "pipe"
-    if ((transport as ProcessManagedStdioTransport).stderr) {
-      const stderrStream = (transport as ProcessManagedStdioTransport).stderr;
-
-      stderrStream?.on("data", (chunk: Buffer) => {
-        metamcpLogStore.addLog(
-          serverParams.name,
-          "error",
-          chunk.toString().trim(),
-        );
-      });
-
-      stderrStream?.on("error", (error: Error) => {
-        metamcpLogStore.addLog(
-          serverParams.name,
-          "error",
-          "stderr error",
-          error,
-        );
-      });
+    // STDIO servers are now backed by K8s Pods running supergateway
+    // Connect via SSE to the K8s Service URL
+    if (!serverParams.k8s_service_url) {
+      metamcpLogStore.addLog(
+        serverParams.name,
+        "error",
+        `STDIO server ${serverParams.name} has no K8s service URL. Pod may not be ready.`,
+      );
+      return { client: undefined, transport: undefined };
     }
+    transport = new StreamableHTTPClientTransport(new URL(serverParams.k8s_service_url));
   } else if (serverParams.type === "SSE" && serverParams.url) {
     // Transform the URL if TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL is set to "true"
     const transformedUrl = transformDockerUrl(serverParams.url);
@@ -161,7 +134,6 @@ export const createMetaMcpClient = (
 
 export const connectMetaMcpClient = async (
   serverParams: ServerParameters,
-  onProcessCrash?: (exitCode: number | null, signal: string | null) => void,
 ): Promise<ConnectedClient | undefined> => {
   const waitFor = 5000;
 
@@ -201,30 +173,6 @@ export const connectMetaMcpClient = async (
         return undefined;
       }
 
-      // Set up process crash detection for STDIO transports BEFORE connecting
-      if (transport instanceof ProcessManagedStdioTransport) {
-        logger.info(
-          `Setting up crash handler for server ${serverParams.name} (${serverParams.uuid})`,
-        );
-        transport.onprocesscrash = (exitCode, signal) => {
-          logger.info(
-            `Process crashed for server ${serverParams.name} (${serverParams.uuid}): code=${exitCode}, signal=${signal}`,
-          );
-
-          // Notify the pool about the crash
-          if (onProcessCrash) {
-            logger.info(
-              `Calling onProcessCrash callback for server ${serverParams.name} (${serverParams.uuid})`,
-            );
-            onProcessCrash(exitCode, signal);
-          } else {
-            logger.info(
-              `No onProcessCrash callback provided for server ${serverParams.name} (${serverParams.uuid})`,
-            );
-          }
-        };
-      }
-
       await client.connect(transport);
 
       return {
@@ -232,16 +180,6 @@ export const connectMetaMcpClient = async (
         cleanup: async () => {
           await transport!.close();
           await client!.close();
-        },
-        onProcessCrash: (exitCode, signal) => {
-          logger.warn(
-            `Process crash detected for server ${serverParams.name} (${serverParams.uuid}): code=${exitCode}, signal=${signal}`,
-          );
-
-          // Notify the pool about the crash
-          if (onProcessCrash) {
-            onProcessCrash(exitCode, signal);
-          }
         },
       };
     } catch (error) {

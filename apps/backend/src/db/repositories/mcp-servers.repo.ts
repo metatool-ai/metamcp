@@ -248,6 +248,14 @@ export class McpServersRepository {
 
     return updatedServer;
   }
+
+  async countByCommandHash(hash: string): Promise<number> {
+    const results = await db
+      .select()
+      .from(mcpServersTable)
+      .where(eq(mcpServersTable.k8s_command_hash, hash));
+    return results.length;
+  }
 }
 
 export const mcpServersRepository = new McpServersRepository();

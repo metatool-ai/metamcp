@@ -132,7 +132,7 @@ export class McpServerPool {
    */
   private async createNewConnection(
     params: ServerParameters,
-    namespaceUuid?: string,
+    _namespaceUuid?: string,
   ): Promise<ConnectedClient | undefined> {
     // Check connection limit before attempting to create
     if (!this.canCreateConnection()) {
@@ -143,45 +143,10 @@ export class McpServerPool {
     }
 
     logger.info(
-      `Creating new connection for server ${params.name} (${params.uuid}) with namespace: ${namespaceUuid || "none"}`,
+      `Creating new connection for server ${params.name} (${params.uuid})`,
     );
 
-    const connectedClient = await connectMetaMcpClient(
-      params,
-      (exitCode, signal) => {
-        logger.info(
-          `Crash handler callback called for server ${params.name} (${params.uuid}) with namespace: ${namespaceUuid || "none"}`,
-        );
-
-        // Handle process crash - always set up crash handler
-        if (namespaceUuid) {
-          // If we have a namespace context, use it
-          this.handleServerCrash(
-            params.uuid,
-            namespaceUuid,
-            exitCode,
-            signal,
-          ).catch((error) => {
-            logger.error(
-              `Error handling server crash for ${params.uuid} in ${namespaceUuid}:`,
-              error,
-            );
-          });
-        } else {
-          // If no namespace context, still track the crash globally
-          this.handleServerCrashWithoutNamespace(
-            params.uuid,
-            exitCode,
-            signal,
-          ).catch((error) => {
-            logger.error(
-              `Error handling server crash for ${params.uuid} (no namespace):`,
-              error,
-            );
-          });
-        }
-      },
-    );
+    const connectedClient = await connectMetaMcpClient(params);
     if (!connectedClient) {
       return undefined;
     }
@@ -542,41 +507,18 @@ export class McpServerPool {
   }
 
   /**
-   * Handle server process crash
+   * Handle server connection error (e.g., K8s Pod failure detected by reconciler)
    */
-  async handleServerCrash(
+  async handleServerConnectionError(
     serverUuid: string,
-    namespaceUuid: string,
-    exitCode: number | null,
-    signal: string | null,
+    reason: string,
   ): Promise<void> {
     logger.warn(
-      `Handling server crash for ${serverUuid} in namespace ${namespaceUuid}`,
+      `Handling server connection error for ${serverUuid}: ${reason}`,
     );
 
-    // Record the crash in the error tracker
-    await serverErrorTracker.recordServerCrash(serverUuid, exitCode, signal);
-
-    // Clean up any existing sessions for this server
-    await this.cleanupServerSessions(serverUuid);
-  }
-
-  /**
-   * Handle server process crash without namespace context
-   * This is used when servers are created without a specific namespace
-   */
-  async handleServerCrashWithoutNamespace(
-    serverUuid: string,
-    exitCode: number | null,
-    signal: string | null,
-  ): Promise<void> {
-    logger.warn(
-      `Handling server crash for ${serverUuid} (no namespace context)`,
-    );
-
-    // Record the crash in the error tracker
-    logger.info(`Recording crash for server ${serverUuid}`);
-    await serverErrorTracker.recordServerCrash(serverUuid, exitCode, signal);
+    // Record the error in the error tracker
+    await serverErrorTracker.recordServerCrash(serverUuid, null, reason);
 
     // Clean up any existing sessions for this server
     await this.cleanupServerSessions(serverUuid);

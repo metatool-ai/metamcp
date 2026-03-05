@@ -413,6 +413,7 @@ export function useConnection({
                 `/mcp-proxy/server/stdio`,
                 getAppUrl(),
               );
+              mcpProxyServerUrl.searchParams.append("serverUuid", mcpServerUuid);
               mcpProxyServerUrl.searchParams.append("command", command);
               mcpProxyServerUrl.searchParams.append("args", args);
               mcpProxyServerUrl.searchParams.append("env", JSON.stringify(env));

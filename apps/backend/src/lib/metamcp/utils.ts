@@ -117,6 +117,8 @@ export async function convertDbServerToParams(
       oauth_tokens: oauthTokens,
       bearerToken: server.bearerToken,
       headers: server.headers || {},
+      k8s_service_url: server.k8s_service_url ?? null,
+      k8s_command_hash: server.k8s_command_hash ?? null,
     };
 
     // Process based on server type
