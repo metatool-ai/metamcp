@@ -22,22 +22,26 @@ export const createEndpointsRouter = (
     ) => Promise<z.infer<typeof CreateEndpointResponseSchema>>;
     list: (
       userId: string,
+      userRole: string,
     ) => Promise<z.infer<typeof ListEndpointsResponseSchema>>;
     get: (
       input: {
         uuid: string;
       },
       userId: string,
+      userRole: string,
     ) => Promise<z.infer<typeof GetEndpointResponseSchema>>;
     delete: (
       input: {
         uuid: string;
       },
       userId: string,
+      userRole: string,
     ) => Promise<z.infer<typeof DeleteEndpointResponseSchema>>;
     update: (
       input: z.infer<typeof UpdateEndpointRequestSchema>,
       userId: string,
+      userRole: string,
     ) => Promise<z.infer<typeof UpdateEndpointResponseSchema>>;
   },
 ) => {
@@ -46,7 +50,7 @@ export const createEndpointsRouter = (
     list: protectedProcedure
       .output(ListEndpointsResponseSchema)
       .query(async ({ ctx }) => {
-        return await implementations.list(ctx.user.id);
+        return await implementations.list(ctx.user.id, ctx.user.role ?? "user");
       }),
 
     // Protected: Get single endpoint by UUID
@@ -54,7 +58,7 @@ export const createEndpointsRouter = (
       .input(z.object({ uuid: z.string() }))
       .output(GetEndpointResponseSchema)
       .query(async ({ input, ctx }) => {
-        return await implementations.get(input, ctx.user.id);
+        return await implementations.get(input, ctx.user.id, ctx.user.role ?? "user");
       }),
 
     // Protected: Create endpoint
@@ -70,7 +74,7 @@ export const createEndpointsRouter = (
       .input(z.object({ uuid: z.string() }))
       .output(DeleteEndpointResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return await implementations.delete(input, ctx.user.id);
+        return await implementations.delete(input, ctx.user.id, ctx.user.role ?? "user");
       }),
 
     // Protected: Update endpoint
@@ -78,7 +82,7 @@ export const createEndpointsRouter = (
       .input(UpdateEndpointRequestSchema)
       .output(UpdateEndpointResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return await implementations.update(input, ctx.user.id);
+        return await implementations.update(input, ctx.user.id, ctx.user.role ?? "user");
       }),
   });
 };

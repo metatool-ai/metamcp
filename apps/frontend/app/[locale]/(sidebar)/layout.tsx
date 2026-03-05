@@ -125,9 +125,16 @@ function UserInfoFooter() {
         {user && (
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium">
-                {user.name || user.email}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">
+                  {user.name || user.email}
+                </span>
+                {user.role === "admin" && (
+                  <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-inset ring-primary/20">
+                    Admin
+                  </span>
+                )}
+              </div>
               <span className="text-xs text-muted-foreground">
                 {user.email}
               </span>
