@@ -435,13 +435,14 @@ async function ensureUser(
     return { email, recreated };
   }
 
-  // Keep metadata consistent
+  // Keep metadata consistent and set bootstrap users as admin
   try {
     await db
       .update(usersTable)
       .set({
         name,
         emailVerified: true,
+        role: "admin",
         updatedAt: new Date(),
       })
       .where(eq(usersTable.id, user.id));
@@ -985,7 +986,50 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
 
   validateConfig(config);
 
-  // Registration controls (applied every run)
+  // One-time bootstrap guard
+  const skipBootstrap = await shouldSkipBootstrap(config);
+  if (skipBootstrap) {
+    console.log("✅ Environment-based configuration initialized (guarded)");
+    return;
+  }
+
+  // Temporarily allow signup so bootstrap user creation is not blocked
+  // by a DISABLE_SIGNUP=true value persisted from a previous run.
+  if (config.disableUiRegistration || config.disableSsoRegistration) {
+    try {
+      await upsertConfig(
+        ConfigKeyEnum.Enum.DISABLE_SIGNUP,
+        "false",
+        "Whether new user signup is disabled",
+      );
+      await upsertConfig(
+        ConfigKeyEnum.Enum.DISABLE_SSO_SIGNUP,
+        "false",
+        "Whether new user signup via SSO/OAuth is disabled",
+      );
+    } catch (err) {
+      console.warn("⚠️ Failed to temporarily allow signup for bootstrap:", err);
+    }
+  }
+
+  // Bootstrap all users (before registration controls to avoid sign-up being blocked)
+  let userMap: Map<string, string>;
+  try {
+    userMap = await bootstrapUsers(config);
+  } catch (err) {
+    console.warn("⚠️ Users bootstrap failed:", err);
+    userMap = new Map();
+  }
+
+  // Delete other users after bootstrapping configured users
+  try {
+    const bootstrappedEmails = Array.from(userMap.keys());
+    await maybeDeleteOtherUsers(config, bootstrappedEmails);
+  } catch (err) {
+    console.warn("⚠️ User cleanup step failed:", err);
+  }
+
+  // Registration controls (applied after user creation so DISABLE_SIGNUP doesn't block bootstrap sign-up)
   console.log("🔧 Setting registration controls...");
   try {
     await upsertConfig(
@@ -1010,30 +1054,6 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
   console.log(
     `✓ Registration controls set: UI=${!config.disableUiRegistration}, SSO=${!config.disableSsoRegistration}`,
   );
-
-  // One-time bootstrap guard
-  const skipBootstrap = await shouldSkipBootstrap(config);
-  if (skipBootstrap) {
-    console.log("✅ Environment-based configuration initialized (guarded)");
-    return;
-  }
-
-  // Bootstrap all users
-  let userMap: Map<string, string>;
-  try {
-    userMap = await bootstrapUsers(config);
-  } catch (err) {
-    console.warn("⚠️ Users bootstrap failed:", err);
-    userMap = new Map();
-  }
-
-  // Delete other users after bootstrapping configured users
-  try {
-    const bootstrappedEmails = Array.from(userMap.keys());
-    await maybeDeleteOtherUsers(config, bootstrappedEmails);
-  } catch (err) {
-    console.warn("⚠️ User cleanup step failed:", err);
-  }
 
   // Bootstrap API keys
   try {

@@ -125,11 +125,13 @@ export const namespacesImplementations = {
 
   list: async (
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof ListNamespacesResponseSchema>> => {
     try {
-      // Find namespaces accessible to user (public + user's own)
-      const namespaces =
-        await namespacesRepository.findAllAccessibleToUser(userId);
+      // Admin can see all namespaces, regular users see public + own
+      const namespaces = userRole === "admin"
+        ? await namespacesRepository.findAll()
+        : await namespacesRepository.findAllAccessibleToUser(userId);
 
       return {
         success: true as const,
@@ -151,6 +153,7 @@ export const namespacesImplementations = {
       uuid: string;
     },
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof GetNamespaceResponseSchema>> => {
     try {
       const namespaceWithServers =
@@ -163,10 +166,11 @@ export const namespacesImplementations = {
         };
       }
 
-      // Check if user has access to this namespace (own namespace or public namespace)
+      // Check if user has access to this namespace (admin bypasses)
       if (
         namespaceWithServers.user_id &&
-        namespaceWithServers.user_id !== userId
+        namespaceWithServers.user_id !== userId &&
+        userRole !== "admin"
       ) {
         return {
           success: false as const,
@@ -194,6 +198,7 @@ export const namespacesImplementations = {
   getTools: async (
     input: z.infer<typeof GetNamespaceToolsRequestSchema>,
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof GetNamespaceToolsResponseSchema>> => {
     try {
       // First, check if user has access to this namespace
@@ -209,8 +214,8 @@ export const namespacesImplementations = {
         };
       }
 
-      // Check if user has access to this namespace (own namespace or public namespace)
-      if (namespace.user_id && namespace.user_id !== userId) {
+      // Check if user has access to this namespace (admin bypasses)
+      if (namespace.user_id && namespace.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           data: [],
@@ -243,6 +248,7 @@ export const namespacesImplementations = {
       uuid: string;
     },
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof DeleteNamespaceResponseSchema>> => {
     try {
       // First, check if the namespace exists and user has permission to delete it
@@ -257,8 +263,8 @@ export const namespacesImplementations = {
         };
       }
 
-      // Check if user owns this namespace (only owners can delete, protect public namespaces)
-      if (existingNamespace.user_id && existingNamespace.user_id !== userId) {
+      // Check if user owns this namespace (admin bypasses)
+      if (existingNamespace.user_id && existingNamespace.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message: "Access denied: You can only delete namespaces you own",
@@ -313,6 +319,7 @@ export const namespacesImplementations = {
   update: async (
     input: z.infer<typeof UpdateNamespaceRequestSchema>,
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof UpdateNamespaceResponseSchema>> => {
     try {
       // First, check if the namespace exists and user has permission to update it
@@ -327,8 +334,8 @@ export const namespacesImplementations = {
         };
       }
 
-      // Check if user owns this namespace (only owners can update)
-      if (existingNamespace.user_id && existingNamespace.user_id !== userId) {
+      // Check if user owns this namespace (admin bypasses)
+      if (existingNamespace.user_id && existingNamespace.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message: "Access denied: You can only update namespaces you own",
@@ -444,6 +451,7 @@ export const namespacesImplementations = {
   updateServerStatus: async (
     input: z.infer<typeof UpdateNamespaceServerStatusRequestSchema>,
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof UpdateNamespaceServerStatusResponseSchema>> => {
     try {
       // First, check if user has permission to update this namespace
@@ -458,8 +466,8 @@ export const namespacesImplementations = {
         };
       }
 
-      // Check if user owns this namespace (only owners can update server status)
-      if (namespace.user_id && namespace.user_id !== userId) {
+      // Check if user owns this namespace (admin bypasses)
+      if (namespace.user_id && namespace.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message:
@@ -531,6 +539,7 @@ export const namespacesImplementations = {
   updateToolStatus: async (
     input: z.infer<typeof UpdateNamespaceToolStatusRequestSchema>,
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof UpdateNamespaceToolStatusResponseSchema>> => {
     try {
       // First, check if user has permission to update this namespace
@@ -545,8 +554,8 @@ export const namespacesImplementations = {
         };
       }
 
-      // Check if user owns this namespace (only owners can update tool status)
-      if (namespace.user_id && namespace.user_id !== userId) {
+      // Check if user owns this namespace (admin bypasses)
+      if (namespace.user_id && namespace.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message:
@@ -587,6 +596,7 @@ export const namespacesImplementations = {
   updateToolOverrides: async (
     input: z.infer<typeof UpdateNamespaceToolOverridesRequestSchema>,
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof UpdateNamespaceToolOverridesResponseSchema>> => {
     try {
       // First, check if user has permission to update this namespace
@@ -601,8 +611,8 @@ export const namespacesImplementations = {
         };
       }
 
-      // Check if user owns this namespace (only owners can update tool overrides)
-      if (namespace.user_id && namespace.user_id !== userId) {
+      // Check if user owns this namespace (admin bypasses)
+      if (namespace.user_id && namespace.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message:
@@ -651,6 +661,7 @@ export const namespacesImplementations = {
   refreshTools: async (
     input: z.infer<typeof RefreshNamespaceToolsRequestSchema>,
     userId: string,
+    userRole: string = "user",
   ): Promise<z.infer<typeof RefreshNamespaceToolsResponseSchema>> => {
     try {
       // First, check if user has permission to refresh tools for this namespace
@@ -665,8 +676,8 @@ export const namespacesImplementations = {
         };
       }
 
-      // Check if user owns this namespace (only owners can refresh tools)
-      if (namespace.user_id && namespace.user_id !== userId) {
+      // Check if user owns this namespace (admin bypasses)
+      if (namespace.user_id && namespace.user_id !== userId && userRole !== "admin") {
         return {
           success: false as const,
           message:
