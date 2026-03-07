@@ -11,6 +11,8 @@ export interface McpServerPoolStatus {
   active: number;
   activeSessionIds: string[];
   idleServerUuids: string[];
+  perServerCounts?: Record<string, number>;
+  maxConnectionsPerServer?: number;
 }
 
 export class McpServerPool {
@@ -50,12 +52,17 @@ export class McpServerPool {
   // Maximum total connections (idle + active) to prevent runaway process spawning
   private readonly maxTotalConnections: number;
 
+  // Maximum connections per individual server UUID (prevents per-server process explosion)
+  private readonly maxConnectionsPerServer: number;
+
   private constructor(
     defaultIdleCount: number = 1,
     maxTotalConnections: number = 100,
+    maxConnectionsPerServer: number = 5,
   ) {
     this.defaultIdleCount = defaultIdleCount;
     this.maxTotalConnections = maxTotalConnections;
+    this.maxConnectionsPerServer = maxConnectionsPerServer;
     this.startCleanupTimer();
     this.startHealthCheckTimer();
   }
@@ -63,11 +70,85 @@ export class McpServerPool {
   /**
    * Get the singleton instance
    */
-  static getInstance(defaultIdleCount: number = 1): McpServerPool {
+  static getInstance(
+    defaultIdleCount: number = 1,
+    maxConnectionsPerServer: number = 5,
+  ): McpServerPool {
     if (!McpServerPool.instance) {
-      McpServerPool.instance = new McpServerPool(defaultIdleCount);
+      McpServerPool.instance = new McpServerPool(
+        defaultIdleCount,
+        100,
+        maxConnectionsPerServer,
+      );
     }
     return McpServerPool.instance;
+  }
+
+  /**
+   * Count all connections (idle + active + pending) for a specific server UUID
+   */
+  private countConnectionsForServer(serverUuid: string): number {
+    let count = 0;
+
+    // Count idle session
+    if (this.idleSessions[serverUuid]) {
+      count += 1;
+    }
+
+    // Count active sessions across all sessionIds
+    for (const sessionServers of Object.values(this.activeSessions)) {
+      if (sessionServers[serverUuid]) {
+        count += 1;
+      }
+    }
+
+    // Count pending idle creation
+    if (this.creatingIdleSessions.has(serverUuid)) {
+      count += 1;
+    }
+
+    return count;
+  }
+
+  /**
+   * Check if we can create another connection for a specific server
+   */
+  private canCreateConnectionForServer(serverUuid: string): boolean {
+    const count = this.countConnectionsForServer(serverUuid);
+    if (count >= this.maxConnectionsPerServer) {
+      logger.warn(
+        `Per-server connection limit reached for ${serverUuid}: ${count}/${this.maxConnectionsPerServer}`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Find the oldest active connection for a server UUID (for reuse when at cap)
+   */
+  private findOldestActiveConnectionForServer(
+    serverUuid: string,
+  ): ConnectedClient | undefined {
+    let oldestSessionId: string | undefined;
+    let oldestTimestamp = Infinity;
+
+    for (const [sessionId, sessionServers] of Object.entries(
+      this.activeSessions,
+    )) {
+      if (sessionServers[serverUuid]) {
+        const timestamp = this.sessionTimestamps[sessionId] || Infinity;
+        if (timestamp < oldestTimestamp) {
+          oldestTimestamp = timestamp;
+          oldestSessionId = sessionId;
+        }
+      }
+    }
+
+    if (oldestSessionId) {
+      return this.activeSessions[oldestSessionId]?.[serverUuid];
+    }
+    return undefined;
   }
 
   /**
@@ -114,7 +195,20 @@ export class McpServerPool {
       return idleClient;
     }
 
-    // No idle session available, create a new connection
+    // No idle session available — check per-server cap before spawning
+    if (!this.canCreateConnectionForServer(serverUuid)) {
+      // At cap: reuse the oldest active connection instead of spawning
+      const reusable = this.findOldestActiveConnectionForServer(serverUuid);
+      if (reusable) {
+        logger.info(
+          `Reusing existing connection for server ${serverUuid} (at per-server cap ${this.maxConnectionsPerServer})`,
+        );
+        this.activeSessions[sessionId][serverUuid] = reusable;
+        this.sessionToServers[sessionId].add(serverUuid);
+        return reusable;
+      }
+    }
+
     const newClient = await this.createNewConnection(params, namespaceUuid);
     if (!newClient) {
       return undefined;
@@ -208,6 +302,11 @@ export class McpServerPool {
       return;
     }
 
+    // Don't create if at per-server cap
+    if (!this.canCreateConnectionForServer(serverUuid)) {
+      return;
+    }
+
     const newClient = await this.createNewConnection(params, namespaceUuid);
     if (newClient) {
       this.idleSessions[serverUuid] = newClient;
@@ -228,6 +327,11 @@ export class McpServerPool {
       this.idleSessions[serverUuid] ||
       this.creatingIdleSessions.has(serverUuid)
     ) {
+      return;
+    }
+
+    // Check per-server cap before spawning a background idle
+    if (!this.canCreateConnectionForServer(serverUuid)) {
       return;
     }
 
@@ -389,11 +493,20 @@ export class McpServerPool {
       0,
     );
 
+    // Calculate per-server breakdown
+    const perServerCounts: Record<string, number> = {};
+    for (const serverUuid of Object.keys(this.serverParamsCache)) {
+      perServerCounts[serverUuid] =
+        this.countConnectionsForServer(serverUuid);
+    }
+
     return {
       idle,
       active,
       activeSessionIds: Object.keys(this.activeSessions),
       idleServerUuids: Object.keys(this.idleSessions),
+      perServerCounts,
+      maxConnectionsPerServer: this.maxConnectionsPerServer,
     };
   }
 
