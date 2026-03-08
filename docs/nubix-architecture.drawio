@@ -1,247 +1,280 @@
-<mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+<mxGraphModel dx="1920" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1200" math="0" shadow="0">
   <root>
     <mxCell id="0" />
     <mxCell id="1" parent="0" />
 
-    <!-- ======================== TITLE ======================== -->
-    <mxCell id="title1" value="&lt;b&gt;NUBIX Platform — MCP Architectuur v2.0&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;fontSize=18;fontColor=#333333;" vertex="1" parent="1">
-      <mxGeometry x="20" y="10" width="500" height="30" as="geometry" />
+    <!-- ======================== TITEL ======================== -->
+    <mxCell id="title1" value="&lt;b style=&quot;font-size:20px;&quot;&gt;NUBIX Platform — MCP Architectuur v2.0&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;fontSize=20;fontColor=#1a1a2e;fontFamily=Helvetica;" vertex="1" parent="1">
+      <mxGeometry x="30" y="15" width="550" height="35" as="geometry" />
     </mxCell>
 
-    <!-- ======================== SWIMLANE 1 — Eindgebruiker & Agent Interface ======================== -->
-    <mxCell id="lane1" value="Laag 1 — Eindgebruiker &amp; Agent Interface" style="shape=swimlane;horizontal=1;startSize=30;fillColor=#f0f0f0;strokeColor=#999999;fontStyle=1;fontSize=12;collapsible=0;swimlaneLine=1;" vertex="1" parent="1">
-      <mxGeometry x="20" y="50" width="1560" height="160" as="geometry" />
+    <!-- ================================================================ -->
+    <!-- SWIMLANE 1 — Eindgebruiker & Agent Interface                     -->
+    <!-- ================================================================ -->
+    <mxCell id="lane1" value="&lt;b&gt;Laag 1&lt;/b&gt; — Eindgebruiker &amp; Agent Interface" style="shape=swimlane;horizontal=1;startSize=30;fillColor=#f5f5f5;strokeColor=#b0b0b0;fontStyle=0;fontSize=13;collapsible=0;swimlaneLine=1;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="30" y="60" width="1860" height="180" as="geometry" />
     </mxCell>
 
     <!-- Clients -->
-    <mxCell id="client_web" value="Web Browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="lane1">
-      <mxGeometry x="80" y="50" width="120" height="40" as="geometry" />
+    <mxCell id="client_web" value="&lt;b&gt;Web Browser&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="lane1">
+      <mxGeometry x="100" y="55" width="140" height="50" as="geometry" />
     </mxCell>
-    <mxCell id="client_mobile" value="Mobiele App" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="lane1">
-      <mxGeometry x="220" y="50" width="120" height="40" as="geometry" />
+    <mxCell id="client_mobile" value="&lt;b&gt;Mobiele App&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="lane1">
+      <mxGeometry x="280" y="55" width="140" height="50" as="geometry" />
     </mxCell>
-    <mxCell id="client_teams" value="MS Teams" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="lane1">
-      <mxGeometry x="360" y="50" width="120" height="40" as="geometry" />
+    <mxCell id="client_teams" value="&lt;b&gt;MS Teams&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="lane1">
+      <mxGeometry x="460" y="55" width="140" height="50" as="geometry" />
     </mxCell>
 
     <!-- Agent Interface -->
-    <mxCell id="agent_if" value="&lt;b&gt;Agent Interface&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;arcSize=30;" vertex="1" parent="lane1">
-      <mxGeometry x="620" y="45" width="200" height="50" as="geometry" />
+    <mxCell id="agent_if" value="&lt;b&gt;Agent Interface&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;arcSize=40;shadow=1;strokeWidth=2;" vertex="1" parent="lane1">
+      <mxGeometry x="810" y="50" width="240" height="60" as="geometry" />
     </mxCell>
 
     <!-- Client → Agent arrows -->
-    <mxCell id="e_web_agent" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#666666;endArrow=block;endFill=1;" edge="1" source="client_web" target="agent_if" parent="lane1">
+    <mxCell id="e_web_agent" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#666666;endArrow=block;endFill=1;strokeWidth=1;" edge="1" source="client_web" target="agent_if" parent="lane1">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
-    <mxCell id="e_mob_agent" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#666666;endArrow=block;endFill=1;" edge="1" source="client_mobile" target="agent_if" parent="lane1">
+    <mxCell id="e_mob_agent" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#666666;endArrow=block;endFill=1;strokeWidth=1;" edge="1" source="client_mobile" target="agent_if" parent="lane1">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
-    <mxCell id="e_teams_agent" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#666666;endArrow=block;endFill=1;" edge="1" source="client_teams" target="agent_if" parent="lane1">
+    <mxCell id="e_teams_agent" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#666666;endArrow=block;endFill=1;strokeWidth=1;" edge="1" source="client_teams" target="agent_if" parent="lane1">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
 
-    <!-- Return: Agent → Clients -->
-    <mxCell id="e_agent_clients_ret" value="Aangevulde Reply" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;strokeColor=#999999;endArrow=block;endFill=1;fontSize=9;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="agent_if" target="client_mobile" parent="lane1">
-      <mxGeometry x="0.2" y="10" relative="1" as="geometry">
-        <mxPoint as="offset" />
+    <!-- Return: Agent → Clients (dashed) -->
+    <mxCell id="e_agent_clients_ret" value="Aangevulde Reply" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;dashPattern=8 4;strokeColor=#9999cc;endArrow=block;endFill=1;fontSize=10;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=1;entryY=0.7;entryDx=0;entryDy=0;" edge="1" source="agent_if" target="client_teams" parent="lane1">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="750" y="92" />
+          <mxPoint x="750" y="130" />
+          <mxPoint x="600" y="130" />
+        </Array>
       </mxGeometry>
     </mxCell>
 
-    <!-- ======================== SWIMLANE 2 — Centrale Store ======================== -->
-    <mxCell id="lane2" value="Laag 2 — Centrale Store (Skills &amp; Plugins)" style="shape=swimlane;horizontal=1;startSize=30;fillColor=#f9f9f0;strokeColor=#999999;fontStyle=1;fontSize=12;collapsible=0;swimlaneLine=1;" vertex="1" parent="1">
-      <mxGeometry x="20" y="220" width="1560" height="120" as="geometry" />
+    <!-- ================================================================ -->
+    <!-- SWIMLANE 2 — Centrale Store (Skills & Plugins)                   -->
+    <!-- ================================================================ -->
+    <mxCell id="lane2" value="&lt;b&gt;Laag 2&lt;/b&gt; — Centrale Store (Skills &amp; Plugins)" style="shape=swimlane;horizontal=1;startSize=30;fillColor=#fffef5;strokeColor=#b0b0b0;fontStyle=0;fontSize=13;collapsible=0;swimlaneLine=1;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="30" y="260" width="1860" height="140" as="geometry" />
     </mxCell>
 
     <!-- Centrale Store -->
-    <mxCell id="store" value="&lt;b&gt;Centrale Store&lt;/b&gt;&lt;br&gt;Skills &amp; Plugins" style="shape=datastore;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;dashed=1;dashPattern=8 4;fontSize=11;" vertex="1" parent="lane2">
-      <mxGeometry x="620" y="35" width="200" height="70" as="geometry" />
+    <mxCell id="store" value="&lt;b&gt;Centrale Store&lt;/b&gt;&lt;br&gt;Skills &amp; Plugins" style="shape=datastore;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;dashed=1;dashPattern=8 4;fontSize=12;shadow=1;" vertex="1" parent="lane2">
+      <mxGeometry x="830" y="35" width="200" height="80" as="geometry" />
     </mxCell>
 
-    <!-- Store ↔ Agent bidirectional dashed arrows (global coords) -->
-    <mxCell id="e_store_agent" value="Voegt skills toe aan reply" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;strokeColor=#d6b656;endArrow=block;endFill=1;fontSize=9;exitX=0.35;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="store" target="agent_if">
-      <mxGeometry x="-0.1" y="-10" relative="1" as="geometry">
+    <!-- Store ↔ Agent bidirectional dashed arrows (use global parent=1) -->
+    <mxCell id="e_store_agent" value="Voegt skills toe aan reply" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;dashPattern=6 3;strokeColor=#d6b656;strokeWidth=1;endArrow=block;endFill=1;fontSize=10;exitX=0.3;exitY=0;exitDx=0;exitDy=0;entryX=0.35;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="store" target="agent_if">
+      <mxGeometry x="-0.2" y="-12" relative="1" as="geometry">
         <mxPoint as="offset" />
       </mxGeometry>
     </mxCell>
-    <mxCell id="e_agent_store" value="Haalt vaardigheidsdefinities op" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;strokeColor=#d6b656;endArrow=block;endFill=1;fontSize=9;entryX=0.65;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="agent_if" target="store">
-      <mxGeometry x="0.1" y="10" relative="1" as="geometry">
+    <mxCell id="e_agent_store" value="Haalt vaardigheidsdefinities op" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;dashPattern=6 3;strokeColor=#d6b656;strokeWidth=1;endArrow=block;endFill=1;fontSize=10;exitX=0.65;exitY=1;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="agent_if" target="store">
+      <mxGeometry x="0.2" y="12" relative="1" as="geometry">
         <mxPoint as="offset" />
       </mxGeometry>
     </mxCell>
 
-    <!-- ======================== SWIMLANE 3 — NUBIX Core Framework ======================== -->
-    <mxCell id="lane3" value="Laag 3 — NUBIX Core Framework (MetaMCP Dispatcher)" style="shape=swimlane;horizontal=1;startSize=30;fillColor=#f0f4f8;strokeColor=#999999;fontStyle=1;fontSize=12;collapsible=0;swimlaneLine=1;" vertex="1" parent="1">
-      <mxGeometry x="20" y="350" width="1560" height="160" as="geometry" />
+    <!-- ================================================================ -->
+    <!-- SWIMLANE 3 — NUBIX Core Framework (MetaMCP Dispatcher)           -->
+    <!-- ================================================================ -->
+    <mxCell id="lane3" value="&lt;b&gt;Laag 3&lt;/b&gt; — NUBIX Core Framework (MetaMCP Dispatcher)" style="shape=swimlane;horizontal=1;startSize=30;fillColor=#eef2f7;strokeColor=#b0b0b0;fontStyle=0;fontSize=13;collapsible=0;swimlaneLine=1;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="30" y="420" width="1860" height="200" as="geometry" />
     </mxCell>
 
     <!-- IAM & Authenticatie (diamond) -->
-    <mxCell id="iam" value="&lt;b&gt;IAM &amp;&lt;br&gt;Authenticatie&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="lane3">
-      <mxGeometry x="200" y="40" width="140" height="100" as="geometry" />
+    <mxCell id="iam" value="&lt;b&gt;IAM &amp;&lt;br&gt;Authenticatie&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;shadow=1;" vertex="1" parent="lane3">
+      <mxGeometry x="240" y="45" width="160" height="120" as="geometry" />
     </mxCell>
 
     <!-- MCP Gateway / Router (MetaMCP) -->
-    <mxCell id="router" value="&lt;b&gt;MCP Gateway / Router&lt;/b&gt;&lt;br&gt;&lt;i&gt;powered by MetaMCP&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=0;fontSize=12;strokeWidth=2;" vertex="1" parent="lane3">
-      <mxGeometry x="560" y="50" width="240" height="60" as="geometry" />
+    <mxCell id="router" value="&lt;b style=&quot;font-size:14px;&quot;&gt;MCP Gateway / Router&lt;/b&gt;&lt;br&gt;&lt;i&gt;powered by MetaMCP&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;strokeWidth=3;shadow=1;" vertex="1" parent="lane3">
+      <mxGeometry x="640" y="55" width="280" height="70" as="geometry" />
     </mxCell>
 
     <!-- Logging & Auditing (cylinder) -->
-    <mxCell id="logging" value="&lt;b&gt;Logging &amp;&lt;br&gt;Auditing&lt;/b&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;size=10;" vertex="1" parent="lane3">
-      <mxGeometry x="1020" y="40" width="140" height="80" as="geometry" />
+    <mxCell id="logging" value="&lt;b&gt;Logging &amp;&lt;br&gt;Auditing&lt;/b&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=12;size=12;shadow=1;" vertex="1" parent="lane3">
+      <mxGeometry x="1180" y="45" width="160" height="90" as="geometry" />
     </mxCell>
 
     <!-- IAM → Router -->
-    <mxCell id="e_iam_router" value="Gevalideerd" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" source="iam" target="router" parent="lane3">
+    <mxCell id="e_iam_router" value="Gevalideerd" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;" edge="1" source="iam" target="router" parent="lane3">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
 
     <!-- Router → Logging -->
-    <mxCell id="e_router_log" value="Registreer actie" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=1;endArrow=block;endFill=1;fontSize=10;" edge="1" source="router" target="logging" parent="lane3">
+    <mxCell id="e_router_log" value="Registreer actie" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=1;endArrow=block;endFill=1;fontSize=11;" edge="1" source="router" target="logging" parent="lane3">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
 
-    <!-- Agent Interface → IAM (global coords, thick arrow) -->
-    <mxCell id="e_agent_iam" value="Toolcall (JSON/REST)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=3;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="agent_if" target="iam">
+    <!-- Agent Interface → IAM (thick arrow, global coords) -->
+    <mxCell id="e_agent_iam" value="Toolcall (JSON/REST)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#1a1a2e;strokeWidth=3;endArrow=block;endFill=1;fontSize=11;fontStyle=1;" edge="1" parent="1" source="agent_if" target="iam">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
 
-    <!-- Return: Router → Agent Interface (dashed, global) -->
-    <mxCell id="e_router_agent_ret" value="Verwerkt Resultaat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;strokeColor=#999999;endArrow=block;endFill=1;fontSize=9;" edge="1" parent="1" source="router" target="agent_if">
+    <!-- Return: Router → Agent Interface (dashed, right side loop, global) -->
+    <mxCell id="e_router_agent_ret" value="Verwerkt Resultaat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;dashPattern=8 4;strokeColor=#9999cc;endArrow=block;endFill=1;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="router" target="agent_if">
       <mxGeometry relative="1" as="geometry">
         <Array as="points">
-          <mxPoint x="1400" y="730" />
-          <mxPoint x="1400" y="120" />
+          <mxPoint x="1700" y="510" />
+          <mxPoint x="1700" y="140" />
         </Array>
       </mxGeometry>
     </mxCell>
 
-    <!-- ======================== SWIMLANE 4 — Geïsoleerde MCP Eilanden ======================== -->
-    <mxCell id="lane4" value="Laag 4 — Geïsoleerde MCP Eilanden" style="shape=swimlane;horizontal=1;startSize=30;fillColor=#f0f8f0;strokeColor=#999999;fontStyle=1;fontSize=12;collapsible=0;swimlaneLine=1;" vertex="1" parent="1">
-      <mxGeometry x="20" y="520" width="1560" height="240" as="geometry" />
+    <!-- ================================================================ -->
+    <!-- SWIMLANE 4 — Geïsoleerde MCP Eilanden                            -->
+    <!-- ================================================================ -->
+    <mxCell id="lane4" value="&lt;b&gt;Laag 4&lt;/b&gt; — Geïsoleerde MCP Eilanden" style="shape=swimlane;horizontal=1;startSize=30;fillColor=#f0f8f0;strokeColor=#b0b0b0;fontStyle=0;fontSize=13;collapsible=0;swimlaneLine=1;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="30" y="640" width="1860" height="310" as="geometry" />
     </mxCell>
 
     <!-- ---- Eiland A — Beheer & Infra Server ---- -->
-    <mxCell id="island_a" value="&lt;b&gt;Eiland A — Beheer &amp; Infra Server&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=11;arcSize=8;spacingTop=2;" vertex="1" parent="lane4">
-      <mxGeometry x="60" y="40" width="340" height="170" as="geometry" />
+    <mxCell id="island_a" value="&lt;b&gt;Eiland A — Beheer &amp; Infra Server&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=12;arcSize=6;spacingTop=4;shadow=1;strokeWidth=2;" vertex="1" parent="lane4">
+      <mxGeometry x="60" y="45" width="440" height="230" as="geometry" />
     </mxCell>
-    <mxCell id="tool_ssh" value="SSH Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane4">
-      <mxGeometry x="80" y="80" width="90" height="35" as="geometry" />
+    <mxCell id="tool_ssh" value="SSH Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;shadow=0;" vertex="1" parent="lane4">
+      <mxGeometry x="90" y="90" width="110" height="40" as="geometry" />
     </mxCell>
-    <mxCell id="tool_azuread" value="AzureAD Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane4">
-      <mxGeometry x="185" y="80" width="90" height="35" as="geometry" />
+    <mxCell id="tool_azuread" value="AzureAD Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;shadow=0;" vertex="1" parent="lane4">
+      <mxGeometry x="225" y="90" width="120" height="40" as="geometry" />
     </mxCell>
-    <mxCell id="tool_mssql" value="MSSQL Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane4">
-      <mxGeometry x="290" y="80" width="90" height="35" as="geometry" />
+    <mxCell id="tool_mssql" value="MSSQL Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;shadow=0;" vertex="1" parent="lane4">
+      <mxGeometry x="370" y="90" width="110" height="40" as="geometry" />
     </mxCell>
 
     <!-- ---- Eiland B — Workspace Server ---- -->
-    <mxCell id="island_b" value="&lt;b&gt;Eiland B — Workspace Server&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=11;arcSize=8;spacingTop=2;" vertex="1" parent="lane4">
-      <mxGeometry x="460" y="40" width="340" height="170" as="geometry" />
+    <mxCell id="island_b" value="&lt;b&gt;Eiland B — Workspace Server&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=12;arcSize=6;spacingTop=4;shadow=1;strokeWidth=2;" vertex="1" parent="lane4">
+      <mxGeometry x="560" y="45" width="440" height="230" as="geometry" />
     </mxCell>
-    <mxCell id="tool_outlook" value="Outlook Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane4">
-      <mxGeometry x="480" y="80" width="90" height="35" as="geometry" />
+    <mxCell id="tool_outlook" value="Outlook Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;shadow=0;" vertex="1" parent="lane4">
+      <mxGeometry x="585" y="90" width="110" height="40" as="geometry" />
     </mxCell>
-    <mxCell id="tool_vergadering" value="Vergadering Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane4">
-      <mxGeometry x="585" y="80" width="100" height="35" as="geometry" />
+    <mxCell id="tool_vergadering" value="Vergadering Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;shadow=0;" vertex="1" parent="lane4">
+      <mxGeometry x="720" y="90" width="130" height="40" as="geometry" />
     </mxCell>
-    <mxCell id="tool_conference" value="Conference Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane4">
-      <mxGeometry x="700" y="80" width="90" height="35" as="geometry" />
+    <mxCell id="tool_conference" value="Conference Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;shadow=0;" vertex="1" parent="lane4">
+      <mxGeometry x="875" y="90" width="110" height="40" as="geometry" />
     </mxCell>
 
     <!-- ---- Eiland C — Data & Automation Server ---- -->
-    <mxCell id="island_c" value="&lt;b&gt;Eiland C — Data &amp; Automation Server&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=11;arcSize=8;spacingTop=2;" vertex="1" parent="lane4">
-      <mxGeometry x="860" y="40" width="340" height="170" as="geometry" />
+    <mxCell id="island_c" value="&lt;b&gt;Eiland C — Data &amp; Automation Server&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=12;arcSize=6;spacingTop=4;shadow=1;strokeWidth=2;" vertex="1" parent="lane4">
+      <mxGeometry x="1060" y="45" width="440" height="230" as="geometry" />
     </mxCell>
-    <mxCell id="tool_n8n" value="n8n Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane4">
-      <mxGeometry x="880" y="80" width="90" height="35" as="geometry" />
+    <mxCell id="tool_n8n" value="n8n Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;shadow=0;" vertex="1" parent="lane4">
+      <mxGeometry x="1085" y="90" width="110" height="40" as="geometry" />
     </mxCell>
-    <mxCell id="tool_dashboard" value="Dashboard Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane4">
-      <mxGeometry x="985" y="80" width="100" height="35" as="geometry" />
+    <mxCell id="tool_dashboard" value="Dashboard Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;shadow=0;" vertex="1" parent="lane4">
+      <mxGeometry x="1220" y="90" width="130" height="40" as="geometry" />
     </mxCell>
-    <mxCell id="tool_asset" value="Asset Info Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;" vertex="1" parent="lane4">
-      <mxGeometry x="1100" y="80" width="90" height="35" as="geometry" />
-    </mxCell>
-
-    <!-- Router → Islands (forward, global coords) -->
-    <mxCell id="e_router_a" value="HTTP / SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;endFill=1;fontSize=9;" edge="1" parent="1" source="router" target="island_a">
-      <mxGeometry relative="1" as="geometry" />
-    </mxCell>
-    <mxCell id="e_router_b" value="HTTP / SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;endFill=1;fontSize=9;" edge="1" parent="1" source="router" target="island_b">
-      <mxGeometry relative="1" as="geometry" />
-    </mxCell>
-    <mxCell id="e_router_c" value="HTTP / SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;endFill=1;fontSize=9;" edge="1" parent="1" source="router" target="island_c">
-      <mxGeometry relative="1" as="geometry" />
+    <mxCell id="tool_asset" value="Asset Info Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;shadow=0;" vertex="1" parent="lane4">
+      <mxGeometry x="1375" y="90" width="110" height="40" as="geometry" />
     </mxCell>
 
-    <!-- Islands → Router (return, dashed, global coords) -->
-    <mxCell id="e_a_router_ret" value="Resultaat Data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;strokeColor=#999999;endArrow=block;endFill=1;fontSize=9;" edge="1" parent="1" source="island_a" target="router">
+    <!-- ================================================================ -->
+    <!-- FORWARD: Router → Islands (solid, dark, global coords)           -->
+    <!-- ================================================================ -->
+    <mxCell id="e_router_a" value="HTTP / SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="router" target="island_a">
       <mxGeometry relative="1" as="geometry">
         <Array as="points">
-          <mxPoint x="250" y="515" />
-          <mxPoint x="700" y="515" />
+          <mxPoint x="726" y="630" />
+          <mxPoint x="310" y="630" />
         </Array>
       </mxGeometry>
     </mxCell>
-    <mxCell id="e_b_router_ret" value="Resultaat Data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;strokeColor=#999999;endArrow=block;endFill=1;fontSize=9;" edge="1" parent="1" source="island_b" target="router">
-      <mxGeometry relative="1" as="geometry">
-        <Array as="points">
-          <mxPoint x="650" y="515" />
-          <mxPoint x="690" y="515" />
-        </Array>
-      </mxGeometry>
+    <mxCell id="e_router_b" value="HTTP / SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="router" target="island_b">
+      <mxGeometry relative="1" as="geometry" />
     </mxCell>
-    <mxCell id="e_c_router_ret" value="Resultaat Data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;strokeColor=#999999;endArrow=block;endFill=1;fontSize=9;" edge="1" parent="1" source="island_c" target="router">
+    <mxCell id="e_router_c" value="HTTP / SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="router" target="island_c">
       <mxGeometry relative="1" as="geometry">
         <Array as="points">
-          <mxPoint x="1050" y="515" />
-          <mxPoint x="680" y="515" />
+          <mxPoint x="894" y="630" />
+          <mxPoint x="1310" y="630" />
         </Array>
       </mxGeometry>
     </mxCell>
 
-    <!-- ======================== NOTITIEBLOK bij MetaMCP ======================== -->
-    <mxCell id="note_metamcp" value="MetaMCP: MCP Aggregator,&#xa;Orchestrator &amp; Gateway&#xa;github.com/metatool-ai/metamcp" style="shape=note;whiteSpace=wrap;html=1;fillColor=#ffffcc;strokeColor=#cccc00;fontSize=10;align=left;spacingLeft=6;size=14;" vertex="1" parent="1">
-      <mxGeometry x="830" y="370" width="220" height="70" as="geometry" />
+    <!-- ================================================================ -->
+    <!-- RETURN: Islands → Router (dashed, lighter, global coords)        -->
+    <!-- ================================================================ -->
+    <mxCell id="e_a_router_ret" value="Resultaat Data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;dashPattern=8 4;strokeColor=#9999cc;endArrow=block;endFill=1;fontSize=10;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="island_a" target="router">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="310" y="635" />
+          <mxPoint x="740" y="635" />
+        </Array>
+      </mxGeometry>
     </mxCell>
-    <mxCell id="e_note_router" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;strokeColor=#cccc00;endArrow=none;endFill=0;" edge="1" source="note_metamcp" target="router" parent="1">
+    <mxCell id="e_b_router_ret" value="Resultaat Data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;dashPattern=8 4;strokeColor=#9999cc;endArrow=block;endFill=1;fontSize=10;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="island_b" target="router">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="810" y="635" />
+          <mxPoint x="810" y="635" />
+        </Array>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_c_router_ret" value="Resultaat Data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;dashPattern=8 4;strokeColor=#9999cc;endArrow=block;endFill=1;fontSize=10;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="island_c" target="router">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="1310" y="635" />
+          <mxPoint x="880" y="635" />
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- ================================================================ -->
+    <!-- NOTITIEBLOK bij MetaMCP Router                                    -->
+    <!-- ================================================================ -->
+    <mxCell id="note_metamcp" value="&lt;b&gt;MetaMCP&lt;/b&gt;: MCP Aggregator,&lt;br&gt;Orchestrator &amp; Gateway&lt;br&gt;&lt;i&gt;github.com/metatool-ai/metamcp&lt;/i&gt;" style="shape=note;whiteSpace=wrap;html=1;fillColor=#ffffcc;strokeColor=#cccc00;fontSize=11;align=left;spacingLeft=8;size=16;shadow=1;" vertex="1" parent="1">
+      <mxGeometry x="1000" y="440" width="250" height="80" as="geometry" />
+    </mxCell>
+    <mxCell id="e_note_router" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jetSize=auto;html=1;dashed=1;dashPattern=4 4;strokeColor=#cccc00;endArrow=none;endFill=0;" edge="1" source="note_metamcp" target="router" parent="1">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
 
-    <!-- ======================== LEGENDA ======================== -->
-    <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#cccccc;fontSize=10;" vertex="1" parent="1">
-      <mxGeometry x="1300" y="770" width="260" height="110" as="geometry" />
+    <!-- ================================================================ -->
+    <!-- LEGENDA (rechtsonder)                                             -->
+    <!-- ================================================================ -->
+    <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#cccccc;fontSize=10;shadow=1;" vertex="1" parent="1">
+      <mxGeometry x="1560" y="960" width="300" height="140" as="geometry" />
     </mxCell>
-    <mxCell id="legend_title" value="&lt;b&gt;Legenda&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="1310" y="775" width="80" height="20" as="geometry" />
+    <mxCell id="legend_title" value="&lt;b&gt;Legenda&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1575" y="965" width="100" height="25" as="geometry" />
     </mxCell>
+
     <!-- Heenweg -->
     <mxCell id="leg_fwd_line" value="" style="endArrow=block;endFill=1;strokeColor=#333333;strokeWidth=2;" edge="1" parent="1">
       <mxGeometry relative="1" as="geometry">
-        <mxPoint x="1315" y="810" as="sourcePoint" />
-        <mxPoint x="1375" y="810" as="targetPoint" />
+        <mxPoint x="1580" y="1008" as="sourcePoint" />
+        <mxPoint x="1660" y="1008" as="targetPoint" />
       </mxGeometry>
     </mxCell>
-    <mxCell id="leg_fwd_label" value="Heenweg (forward)" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
-      <mxGeometry x="1385" y="800" width="150" height="20" as="geometry" />
+    <mxCell id="leg_fwd_label" value="Heenweg (forward)" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="1670" y="998" width="170" height="20" as="geometry" />
     </mxCell>
+
     <!-- Retourweg -->
-    <mxCell id="leg_ret_line" value="" style="endArrow=block;endFill=1;dashed=1;strokeColor=#999999;" edge="1" parent="1">
+    <mxCell id="leg_ret_line" value="" style="endArrow=block;endFill=1;dashed=1;dashPattern=8 4;strokeColor=#9999cc;" edge="1" parent="1">
       <mxGeometry relative="1" as="geometry">
-        <mxPoint x="1315" y="835" as="sourcePoint" />
-        <mxPoint x="1375" y="835" as="targetPoint" />
+        <mxPoint x="1580" y="1040" as="sourcePoint" />
+        <mxPoint x="1660" y="1040" as="targetPoint" />
       </mxGeometry>
     </mxCell>
-    <mxCell id="leg_ret_label" value="Retourweg (return)" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
-      <mxGeometry x="1385" y="825" width="150" height="20" as="geometry" />
+    <mxCell id="leg_ret_label" value="Retourweg (return)" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="1670" y="1030" width="170" height="20" as="geometry" />
     </mxCell>
+
     <!-- Store-koppeling -->
-    <mxCell id="leg_store_line" value="" style="endArrow=block;endFill=1;dashed=1;strokeColor=#d6b656;" edge="1" parent="1">
+    <mxCell id="leg_store_line" value="" style="endArrow=block;endFill=1;dashed=1;dashPattern=6 3;strokeColor=#d6b656;" edge="1" parent="1">
       <mxGeometry relative="1" as="geometry">
-        <mxPoint x="1315" y="860" as="sourcePoint" />
-        <mxPoint x="1375" y="860" as="targetPoint" />
+        <mxPoint x="1580" y="1072" as="sourcePoint" />
+        <mxPoint x="1660" y="1072" as="targetPoint" />
       </mxGeometry>
     </mxCell>
-    <mxCell id="leg_store_label" value="Store-koppeling" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
-      <mxGeometry x="1385" y="850" width="150" height="20" as="geometry" />
+    <mxCell id="leg_store_label" value="Store-koppeling" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="1670" y="1062" width="170" height="20" as="geometry" />
     </mxCell>
 
   </root>
