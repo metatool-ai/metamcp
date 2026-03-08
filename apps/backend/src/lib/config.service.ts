@@ -95,7 +95,7 @@ export const configService = {
     const config = await configRepo.getConfig(
       ConfigKeyEnum.Enum.MCP_MAX_ATTEMPTS,
     );
-    return config?.value ? parseInt(config.value, 10) : 1;
+    return config?.value ? parseInt(config.value, 10) : 3;
   },
 
   async setMcpMaxAttempts(maxAttempts: number): Promise<void> {

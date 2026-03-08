@@ -167,6 +167,28 @@ export const createServer = async (
       `[DEBUG-TOOLS] 📋 Processing ${allServerEntries.length} servers`,
     );
 
+    // Cold-start warmup: if pool has 0 idle + 0 active sessions but servers
+    // exist in DB, trigger a blocking warmup before tools/list responds.
+    // This prevents 0-tool responses after idle timeout expires all connections.
+    const poolStatus = mcpServerPool.getPoolStatus();
+    if (
+      poolStatus.idle === 0 &&
+      poolStatus.active === 0 &&
+      allServerEntries.length > 0
+    ) {
+      console.log(
+        `[DEBUG-TOOLS] ⚠️ Cold start: 0 idle, 0 active sessions but ${allServerEntries.length} servers registered. Warming up...`,
+      );
+      for (const [uuid] of allServerEntries) {
+        await mcpServerPool.resetServerErrorState(uuid);
+      }
+      await mcpServerPool.ensureIdleSessions(serverParams, namespaceUuid);
+      const afterStatus = mcpServerPool.getPoolStatus();
+      console.log(
+        `[DEBUG-TOOLS] ✅ Pool warmup complete: ${afterStatus.idle} idle, ${afterStatus.active} active`,
+      );
+    }
+
     await Promise.allSettled(
       allServerEntries.map(async ([mcpServerUuid, params]) => {
         console.log(`[DEBUG-TOOLS] 🔧 Server: ${params.name || mcpServerUuid}`);

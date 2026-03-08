@@ -114,6 +114,29 @@ start().catch((err) => {
   // Do not throw - keep consistent with other startup behavior
 });
 
+// Graceful shutdown: clean up MCP server pools on SIGTERM/SIGINT
+// Prevents orphaned STDIO child processes when backend restarts
+const gracefulShutdown = async (signal: string) => {
+  console.log(`${signal} received, cleaning up MCP server pools...`);
+  try {
+    const { mcpServerPool } = await import("./lib/metamcp");
+    const { metaMcpServerPool } = await import(
+      "./lib/metamcp/metamcp-server-pool"
+    );
+    await Promise.allSettled([
+      mcpServerPool.cleanupAll(),
+      metaMcpServerPool.cleanupAll(),
+    ]);
+    console.log("MCP server pools cleaned up successfully");
+  } catch (error) {
+    console.error("Error during graceful shutdown:", error);
+  }
+  process.exit(0);
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",

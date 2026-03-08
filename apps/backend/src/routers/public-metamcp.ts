@@ -5,6 +5,7 @@ import logger from "@/utils/logger";
 
 import { endpointsRepository } from "../db/repositories/endpoints.repo";
 import { openApiRouter } from "./public-metamcp/openapi";
+import adminRouter from "./public-metamcp/admin";
 import sseRouter from "./public-metamcp/sse";
 import streamableHttpRouter from "./public-metamcp/streamable-http";
 
@@ -42,6 +43,9 @@ publicEndpointsRouter.use(sseRouter);
 
 // Use OpenAPI router for /api and /openapi.json routes
 publicEndpointsRouter.use(openApiRouter);
+
+// Use Admin router for /admin endpoints (error reset, diagnostics)
+publicEndpointsRouter.use(adminRouter);
 
 // Health check endpoint
 publicEndpointsRouter.get("/health", (req, res) => {

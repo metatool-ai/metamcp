@@ -248,6 +248,22 @@ export class McpServersRepository {
 
     return updatedServer;
   }
+
+  /**
+   * Reset error_status to NONE for all servers that are currently in ERROR state.
+   * Used on startup to give servers a fresh chance.
+   */
+  async resetAllErrorStatuses(): Promise<number> {
+    const updated = await db
+      .update(mcpServersTable)
+      .set({
+        error_status: McpServerErrorStatusEnum.Enum.NONE,
+      })
+      .where(eq(mcpServersTable.error_status, McpServerErrorStatusEnum.Enum.ERROR))
+      .returning();
+
+    return updated.length;
+  }
 }
 
 export const mcpServersRepository = new McpServersRepository();
