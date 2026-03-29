@@ -499,3 +499,8 @@ Some code inspired by:
 Not directly used the code by took ideas from
 - https://github.com/open-webui/openapi-servers
 - https://github.com/open-webui/mcpo
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/metatool-ai-metatool-app).
+
