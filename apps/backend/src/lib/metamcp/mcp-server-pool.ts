@@ -49,7 +49,10 @@ export class McpServerPool {
 
   private constructor(
     defaultIdleCount: number = 1,
-    maxTotalConnections: number = 100,
+    maxTotalConnections: number = parseInt(
+      process.env.MAX_TOTAL_CONNECTIONS || "100",
+      10,
+    ),
   ) {
     this.defaultIdleCount = defaultIdleCount;
     this.maxTotalConnections = maxTotalConnections;
