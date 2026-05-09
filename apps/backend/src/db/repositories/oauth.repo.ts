@@ -5,6 +5,8 @@ import {
   OAuthAuthorizationCodeCreateInput,
   OAuthClient,
   OAuthClientCreateInput,
+  OAuthRefreshToken,
+  OAuthRefreshTokenCreateInput,
 } from "@repo/zod-types";
 import { eq, lt } from "drizzle-orm";
 
@@ -13,6 +15,7 @@ import {
   oauthAccessTokensTable,
   oauthAuthorizationCodesTable,
   oauthClientsTable,
+  oauthRefreshTokensTable,
 } from "../schema";
 
 export class OAuthRepository {
@@ -103,6 +106,58 @@ export class OAuthRepository {
       .where(eq(oauthAccessTokensTable.access_token, token));
   }
 
+  // ===== Refresh Tokens =====
+
+  async getRefreshToken(token: string): Promise<OAuthRefreshToken | null> {
+    const result = await db
+      .select()
+      .from(oauthRefreshTokensTable)
+      .where(eq(oauthRefreshTokensTable.refresh_token, token))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async setRefreshToken(
+    token: string,
+    data: OAuthRefreshTokenCreateInput,
+  ): Promise<void> {
+    await db.insert(oauthRefreshTokensTable).values({
+      refresh_token: token,
+      client_id: data.client_id,
+      user_id: data.user_id,
+      scope: data.scope,
+      access_token: data.access_token,
+      expires_at: new Date(data.expires_at),
+    });
+  }
+
+  async deleteRefreshToken(token: string): Promise<void> {
+    await db
+      .delete(oauthRefreshTokensTable)
+      .where(eq(oauthRefreshTokensTable.refresh_token, token));
+  }
+
+  async rotateRefreshToken(
+    oldToken: string,
+    newToken: string,
+    data: OAuthRefreshTokenCreateInput,
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.insert(oauthRefreshTokensTable).values({
+        refresh_token: newToken,
+        client_id: data.client_id,
+        user_id: data.user_id,
+        scope: data.scope,
+        access_token: data.access_token,
+        expires_at: new Date(data.expires_at),
+      });
+
+      await tx
+        .delete(oauthRefreshTokensTable)
+        .where(eq(oauthRefreshTokensTable.refresh_token, oldToken));
+    });
+  }
+
   // ===== Cleanup =====
 
   async cleanupExpired(): Promise<void> {
@@ -114,6 +169,9 @@ export class OAuthRepository {
       db
         .delete(oauthAccessTokensTable)
         .where(lt(oauthAccessTokensTable.expires_at, now)),
+      db
+        .delete(oauthRefreshTokensTable)
+        .where(lt(oauthRefreshTokensTable.expires_at, now)),
     ]);
   }
 }

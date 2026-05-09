@@ -1,11 +1,80 @@
 import express from "express";
+import { OAuthClient } from "@repo/zod-types";
 
 import logger from "@/utils/logger";
 
 import { oauthRepository } from "../../db/repositories";
-import { generateSecureAccessToken, rateLimitToken } from "./utils";
+import {
+  generateSecureAccessToken,
+  generateSecureRefreshToken,
+  rateLimitToken,
+} from "./utils";
 
 const tokenRouter = express.Router();
+
+type ClientAuthResult =
+  | { ok: true }
+  | {
+      ok: false;
+      status: number;
+      body: {
+        error: string;
+        error_description: string;
+      };
+    };
+
+function authenticateClient(
+  req: express.Request,
+  clientData: OAuthClient,
+): ClientAuthResult {
+  if (clientData.token_endpoint_auth_method === "client_secret_basic") {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Basic ")) {
+      return {
+        ok: false,
+        status: 401,
+        body: {
+          error: "invalid_client",
+          error_description: "Client authentication required via Basic auth",
+        },
+      };
+    }
+
+    const credentials = Buffer.from(
+      authHeader.substring(6),
+      "base64",
+    ).toString();
+    const [authClientId, authClientSecret] = credentials.split(":");
+
+    if (
+      authClientId !== clientData.client_id ||
+      authClientSecret !== clientData.client_secret
+    ) {
+      return {
+        ok: false,
+        status: 401,
+        body: {
+          error: "invalid_client",
+          error_description: "Invalid client credentials",
+        },
+      };
+    }
+  } else if (clientData.token_endpoint_auth_method === "client_secret_post") {
+    const { client_secret } = req.body;
+    if (!client_secret || client_secret !== clientData.client_secret) {
+      return {
+        ok: false,
+        status: 401,
+        body: {
+          error: "invalid_client",
+          error_description: "Invalid client secret",
+        },
+      };
+    }
+  }
+
+  return { ok: true };
+}
 
 /**
  * OAuth 2.0 Token Endpoint
@@ -29,165 +98,227 @@ tokenRouter.post("/oauth/token", rateLimitToken, async (req, res) => {
       });
     }
 
+    const ACCESS_TTL = parseInt(process.env.OAUTH_ACCESS_TOKEN_TTL_SECONDS ?? "3600", 10);
+    const REFRESH_TTL = parseInt(process.env.OAUTH_REFRESH_TOKEN_TTL_SECONDS ?? "2592000", 10);
     const { grant_type, code, redirect_uri, client_id, code_verifier } =
       req.body;
 
-    // Validate grant type
-    if (grant_type !== "authorization_code") {
-      return res.status(400).json({
-        error: "unsupported_grant_type",
-        error_description: "Only 'authorization_code' grant type is supported",
-      });
-    }
+    switch (grant_type) {
+      case "authorization_code": {
+        if (!code) {
+          return res.status(400).json({
+            error: "invalid_request",
+            error_description: "Missing authorization code",
+          });
+        }
 
-    // Validate authorization code
-    if (!code) {
-      return res.status(400).json({
-        error: "invalid_request",
-        error_description: "Missing authorization code",
-      });
-    }
+        const codeData = await oauthRepository.getAuthCode(code);
+        if (!codeData) {
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description: "Invalid or expired authorization code",
+          });
+        }
 
-    // Look up the authorization code
-    const codeData = await oauthRepository.getAuthCode(code);
-    if (!codeData) {
-      return res.status(400).json({
-        error: "invalid_grant",
-        error_description: "Invalid or expired authorization code",
-      });
-    }
+        if (Date.now() > codeData.expires_at.getTime()) {
+          await oauthRepository.deleteAuthCode(code);
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description: "Authorization code has expired",
+          });
+        }
 
-    // Check if code has expired (10 minutes)
-    if (Date.now() > codeData.expires_at.getTime()) {
-      await oauthRepository.deleteAuthCode(code);
-      return res.status(400).json({
-        error: "invalid_grant",
-        error_description: "Authorization code has expired",
-      });
-    }
+        if (codeData.client_id !== client_id) {
+          return res.status(400).json({
+            error: "invalid_client",
+            error_description: "Client ID does not match",
+          });
+        }
 
-    // Validate client_id and redirect_uri match the original request
-    if (codeData.client_id !== client_id) {
-      return res.status(400).json({
-        error: "invalid_client",
-        error_description: "Client ID does not match",
-      });
-    }
+        if (codeData.redirect_uri !== redirect_uri) {
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description: "Redirect URI does not match",
+          });
+        }
 
-    if (codeData.redirect_uri !== redirect_uri) {
-      return res.status(400).json({
-        error: "invalid_grant",
-        error_description: "Redirect URI does not match",
-      });
-    }
+        const clientData = await oauthRepository.getClient(client_id);
+        if (!clientData) {
+          return res.status(400).json({
+            error: "invalid_client",
+            error_description: "Client not found or not registered",
+          });
+        }
 
-    // Validate client_id against registered clients
-    // Note: Client should have been registered either explicitly via /oauth/register
-    // or auto-registered during the /oauth/authorize flow
-    const clientData = await oauthRepository.getClient(client_id);
-    if (!clientData) {
-      return res.status(400).json({
-        error: "invalid_client",
-        error_description: "Client not found or not registered",
-      });
-    }
+        const auth = authenticateClient(req, clientData);
+        if (!auth.ok) {
+          return res.status(auth.status).json(auth.body);
+        }
 
-    // Validate client authentication based on registered auth method
-    if (clientData.token_endpoint_auth_method === "client_secret_basic") {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        return res.status(401).json({
-          error: "invalid_client",
-          error_description: "Client authentication required via Basic auth",
+        // OAuth 2.1 Security: PKCE is mandatory for all clients
+        if (!codeData.code_challenge) {
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description:
+              "Authorization code was not issued with PKCE challenge",
+          });
+        }
+
+        if (!code_verifier) {
+          return res.status(400).json({
+            error: "invalid_request",
+            error_description: "PKCE code verifier is required",
+          });
+        }
+
+        // Verify code challenge
+        const crypto = await import("crypto");
+        let challengeFromVerifier: string;
+
+        if (codeData.code_challenge_method === "S256") {
+          const hash = crypto
+            .createHash("sha256")
+            .update(code_verifier)
+            .digest();
+          challengeFromVerifier = hash.toString("base64url");
+        } else if (codeData.code_challenge_method === "plain") {
+          challengeFromVerifier = code_verifier;
+        } else {
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description: "Unsupported code challenge method",
+          });
+        }
+
+        if (challengeFromVerifier !== codeData.code_challenge) {
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description: "PKCE verification failed",
+          });
+        }
+
+        // Code is valid, delete it (authorization codes are single-use)
+        await oauthRepository.deleteAuthCode(code);
+
+        // Generate access token
+        const accessToken = generateSecureAccessToken();
+        await oauthRepository.setAccessToken(accessToken, {
+          client_id: codeData.client_id,
+          user_id: codeData.user_id,
+          scope: codeData.scope,
+          expires_at: Date.now() + ACCESS_TTL * 1000,
+        });
+
+        const refreshToken = generateSecureRefreshToken();
+        await oauthRepository.setRefreshToken(refreshToken, {
+          client_id: codeData.client_id,
+          user_id: codeData.user_id,
+          scope: codeData.scope,
+          access_token: accessToken,
+          expires_at: Date.now() + REFRESH_TTL * 1000,
+        });
+
+        return res.json({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          token_type: "Bearer",
+          expires_in: ACCESS_TTL,
+          scope: codeData.scope,
         });
       }
+      case "refresh_token": {
+        const { refresh_token } = req.body;
 
-      const credentials = Buffer.from(
-        authHeader.substring(6),
-        "base64",
-      ).toString();
-      const [authClientId, authClientSecret] = credentials.split(":");
+        if (!refresh_token) {
+          return res.status(400).json({
+            error: "invalid_request",
+            error_description: "Missing refresh token",
+          });
+        }
 
-      if (
-        authClientId !== client_id ||
-        authClientSecret !== clientData.client_secret
-      ) {
-        return res.status(401).json({
-          error: "invalid_client",
-          error_description: "Invalid client credentials",
+        if (!client_id) {
+          return res.status(400).json({
+            error: "invalid_request",
+            error_description: "Missing client_id",
+          });
+        }
+
+        const rtData = await oauthRepository.getRefreshToken(refresh_token);
+        if (!rtData) {
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description: "Invalid or expired refresh token",
+          });
+        }
+
+        if (Date.now() > rtData.expires_at.getTime()) {
+          await oauthRepository.deleteRefreshToken(refresh_token);
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description: "Refresh token expired",
+          });
+        }
+
+        if (rtData.revoked_at) {
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description: "Refresh token revoked",
+          });
+        }
+
+        if (rtData.client_id !== client_id) {
+          return res.status(400).json({
+            error: "invalid_grant",
+            error_description: "Client mismatch",
+          });
+        }
+
+        const clientData = await oauthRepository.getClient(client_id);
+        if (!clientData) {
+          return res.status(400).json({
+            error: "invalid_client",
+            error_description: "Client not found or not registered",
+          });
+        }
+
+        const auth = authenticateClient(req, clientData);
+        if (!auth.ok) {
+          return res.status(auth.status).json(auth.body);
+        }
+
+        // TODO(v1.1): enforce reuse detection per OAuth 2.1 BCP §4.13
+
+        const newAccess = generateSecureAccessToken();
+        const newRefresh = generateSecureRefreshToken();
+
+        await oauthRepository.setAccessToken(newAccess, {
+          client_id: rtData.client_id,
+          user_id: rtData.user_id,
+          scope: rtData.scope,
+          expires_at: Date.now() + ACCESS_TTL * 1000,
+        });
+        await oauthRepository.rotateRefreshToken(refresh_token, newRefresh, {
+          client_id: rtData.client_id,
+          user_id: rtData.user_id,
+          scope: rtData.scope,
+          access_token: newAccess,
+          expires_at: Date.now() + REFRESH_TTL * 1000,
+        });
+
+        return res.json({
+          access_token: newAccess,
+          refresh_token: newRefresh,
+          token_type: "Bearer",
+          expires_in: ACCESS_TTL,
+          scope: rtData.scope,
         });
       }
-    } else if (clientData.token_endpoint_auth_method === "client_secret_post") {
-      const { client_secret } = req.body;
-      if (!client_secret || client_secret !== clientData.client_secret) {
-        return res.status(401).json({
-          error: "invalid_client",
-          error_description: "Invalid client secret",
+      default:
+        return res.status(400).json({
+          error: "unsupported_grant_type",
+          error_description: "Supported grant types: authorization_code, refresh_token",
         });
-      }
     }
-    // For "none" auth method, no additional validation needed
-
-    // OAuth 2.1 Security: PKCE is mandatory for all clients
-    if (!codeData.code_challenge) {
-      return res.status(400).json({
-        error: "invalid_grant",
-        error_description:
-          "Authorization code was not issued with PKCE challenge",
-      });
-    }
-
-    if (!code_verifier) {
-      return res.status(400).json({
-        error: "invalid_request",
-        error_description: "PKCE code verifier is required",
-      });
-    }
-
-    // Verify code challenge
-    const crypto = await import("crypto");
-    let challengeFromVerifier: string;
-
-    if (codeData.code_challenge_method === "S256") {
-      const hash = crypto.createHash("sha256").update(code_verifier).digest();
-      challengeFromVerifier = hash.toString("base64url");
-    } else if (codeData.code_challenge_method === "plain") {
-      challengeFromVerifier = code_verifier;
-    } else {
-      return res.status(400).json({
-        error: "invalid_grant",
-        error_description: "Unsupported code challenge method",
-      });
-    }
-
-    if (challengeFromVerifier !== codeData.code_challenge) {
-      return res.status(400).json({
-        error: "invalid_grant",
-        error_description: "PKCE verification failed",
-      });
-    }
-
-    // Code is valid, delete it (authorization codes are single-use)
-    await oauthRepository.deleteAuthCode(code);
-
-    // Generate access token
-    const accessToken = generateSecureAccessToken();
-    const expiresIn = 3600; // 1 hour
-
-    // Store access token data
-    await oauthRepository.setAccessToken(accessToken, {
-      client_id: codeData.client_id,
-      user_id: codeData.user_id,
-      scope: codeData.scope,
-      expires_at: Date.now() + expiresIn * 1000,
-    });
-
-    res.json({
-      access_token: accessToken,
-      token_type: "Bearer",
-      expires_in: expiresIn,
-      scope: codeData.scope,
-    });
   } catch (error) {
     logger.error("Error in OAuth token endpoint:", error);
     res.status(500).json({

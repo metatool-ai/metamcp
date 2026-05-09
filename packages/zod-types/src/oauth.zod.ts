@@ -61,6 +61,19 @@ export const OAuthAccessTokenSchema = z.object({
   created_at: z.date(),
 });
 
+// OAuth Refresh Token schema
+export const OAuthRefreshTokenSchema = z.object({
+  refresh_token: z.string(),
+  client_id: z.string(),
+  user_id: z.string(),
+  scope: z.string(),
+  access_token: z.string().nullable(),
+  replaced_by: z.string().nullable(),
+  revoked_at: z.date().nullable(),
+  expires_at: z.date(),
+  created_at: z.date(),
+});
+
 // Input schemas for repositories
 export const OAuthClientCreateInputSchema = z.object({
   client_id: z.string(),
@@ -96,6 +109,14 @@ export const OAuthAccessTokenCreateInputSchema = z.object({
   client_id: z.string(),
   user_id: z.string(),
   scope: z.string(),
+  expires_at: z.number(), // timestamp
+});
+
+export const OAuthRefreshTokenCreateInputSchema = z.object({
+  client_id: z.string(),
+  user_id: z.string(),
+  scope: z.string(),
+  access_token: z.string().nullable(),
   expires_at: z.number(), // timestamp
 });
 
@@ -199,4 +220,8 @@ export type OAuthAuthorizationCodeCreateInput = z.infer<
 export type OAuthAccessToken = z.infer<typeof OAuthAccessTokenSchema>;
 export type OAuthAccessTokenCreateInput = z.infer<
   typeof OAuthAccessTokenCreateInputSchema
+>;
+export type OAuthRefreshToken = z.infer<typeof OAuthRefreshTokenSchema>;
+export type OAuthRefreshTokenCreateInput = z.infer<
+  typeof OAuthRefreshTokenCreateInputSchema
 >;
