@@ -90,12 +90,14 @@ export const oauthSessionsTable = pgTable(
     mcp_server_uuid: uuid("mcp_server_uuid")
       .notNull()
       .references(() => mcpServersTable.uuid, { onDelete: "cascade" }),
-    client_information: jsonb("client_information")
-      .$type<OAuthClientInformation>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
+    client_information:
+      jsonb("client_information").$type<OAuthClientInformation>(),
     tokens: jsonb("tokens").$type<OAuthTokens>(),
     code_verifier: text("code_verifier"),
+    tokens_obtained_at: timestamp("tokens_obtained_at", {
+      withTimezone: true,
+    }),
+    token_expires_at: timestamp("token_expires_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -7,6 +7,7 @@ import { ServerParameters } from "@repo/zod-types";
 
 import logger from "@/utils/logger";
 
+import { clearOAuthTokensOnAuthFailure } from "../oauth/remote-oauth.service";
 import { ProcessManagedStdioTransport } from "../stdio-transport/process-managed-transport";
 import { metamcpLogStore } from "./log-store";
 import { serverErrorTracker } from "./server-error-tracker";
@@ -226,12 +227,14 @@ export const connectMetaMcpClient = async (
       }
 
       await client.connect(transport);
+      const connectedClient = client;
+      const connectedTransport = transport;
 
       return {
-        client,
+        client: connectedClient,
         cleanup: async () => {
-          await transport!.close();
-          await client!.close();
+          await connectedTransport.close();
+          await connectedClient.close();
         },
         onProcessCrash: (exitCode, signal) => {
           logger.warn(
@@ -245,6 +248,10 @@ export const connectMetaMcpClient = async (
         },
       };
     } catch (error) {
+      const clearedInvalidOAuthTokens = serverParams.oauth_tokens?.access_token
+        ? await clearOAuthTokensOnAuthFailure(serverParams.uuid, error)
+        : false;
+
       metamcpLogStore.addLog(
         "client",
         "error",
@@ -270,9 +277,18 @@ export const connectMetaMcpClient = async (
       if (client) {
         try {
           await client.close();
-        } catch (cleanupError) {
+        } catch (_cleanupError) {
           // Client may not be fully initialized, ignore
         }
+      }
+
+      if (clearedInvalidOAuthTokens) {
+        metamcpLogStore.addLog(
+          "client",
+          "error",
+          `OAuth credentials for ${serverParams.name} were rejected and cleared; reconnect after completing OAuth authorization again`,
+        );
+        return undefined;
       }
 
       count++;

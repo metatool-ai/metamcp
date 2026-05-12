@@ -23,13 +23,36 @@ const OAuthCallback = () => {
 
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
+      const state = params.get("state");
       const serverUrl = sessionStorage.getItem(SESSION_KEYS.SERVER_URL);
       const mcpServerUuid = sessionStorage.getItem(
         SESSION_KEYS.MCP_SERVER_UUID,
       );
 
-      if (!code || !serverUrl || !mcpServerUuid) {
+      const clearPendingOAuth = async () => {
+        if (serverUrl) {
+          sessionStorage.removeItem(
+            getServerSpecificKey(SESSION_KEYS.CODE_VERIFIER, serverUrl),
+          );
+          sessionStorage.removeItem(
+            getServerSpecificKey(SESSION_KEYS.OAUTH_STATE, serverUrl),
+          );
+        }
+        if (mcpServerUuid) {
+          try {
+            await vanillaTrpcClient.frontend.oauth.clear.mutate({
+              mcp_server_uuid: mcpServerUuid,
+              scope: "verifier",
+            });
+          } catch (clearError) {
+            console.error("Failed to clear OAuth verifier:", clearError);
+          }
+        }
+      };
+
+      if (!code || !state || !serverUrl || !mcpServerUuid) {
         console.error("Missing required OAuth parameters");
+        await clearPendingOAuth();
         window.location.href = "/mcp-servers";
         return;
       }
@@ -37,6 +60,10 @@ const OAuthCallback = () => {
       try {
         // Create auth provider with existing server UUID and URL
         const authProvider = createAuthProvider(mcpServerUuid, serverUrl);
+
+        if (!authProvider.validateState(state)) {
+          throw new Error("OAuth state mismatch");
+        }
 
         // Complete the OAuth flow
         const result = await auth(authProvider, {
@@ -63,7 +90,8 @@ const OAuthCallback = () => {
 
         const clientInformation = sessionStorage.getItem(clientInformationKey);
         const tokens = sessionStorage.getItem(tokensKey);
-        const codeVerifier = sessionStorage.getItem(codeVerifierKey);
+        const parsedTokens = tokens ? JSON.parse(tokens) : undefined;
+        const tokensObtainedAt = parsedTokens ? new Date() : null;
 
         // Save OAuth session in database using tRPC
         await vanillaTrpcClient.frontend.oauth.upsert.mutate({
@@ -71,14 +99,24 @@ const OAuthCallback = () => {
           client_information: clientInformation
             ? JSON.parse(clientInformation)
             : undefined,
-          tokens: tokens ? JSON.parse(tokens) : undefined,
-          code_verifier: codeVerifier || undefined,
+          tokens: parsedTokens,
+          code_verifier: null,
+          tokens_obtained_at: tokensObtainedAt?.toISOString() ?? null,
+          token_expires_at:
+            parsedTokens?.expires_in && tokensObtainedAt
+              ? new Date(
+                  tokensObtainedAt.getTime() + parsedTokens.expires_in * 1000,
+                ).toISOString()
+              : null,
         });
 
         // Clean up session storage
         sessionStorage.removeItem(clientInformationKey);
         sessionStorage.removeItem(tokensKey);
         sessionStorage.removeItem(codeVerifierKey);
+        sessionStorage.removeItem(
+          getServerSpecificKey(SESSION_KEYS.OAUTH_STATE, serverUrl),
+        );
         sessionStorage.removeItem(SESSION_KEYS.SERVER_URL);
         sessionStorage.removeItem(SESSION_KEYS.MCP_SERVER_UUID);
 
@@ -86,6 +124,7 @@ const OAuthCallback = () => {
         window.location.href = `/mcp-servers/${mcpServerUuid}`;
       } catch (error) {
         console.error("OAuth callback error:", error);
+        await clearPendingOAuth();
         window.location.href = "/mcp-servers";
       }
     };

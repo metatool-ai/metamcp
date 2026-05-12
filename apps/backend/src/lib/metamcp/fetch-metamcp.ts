@@ -8,8 +8,8 @@ import { and, eq } from "drizzle-orm";
 import logger from "@/utils/logger";
 
 import { db } from "../../db/index";
-import { oauthSessionsRepository } from "../../db/repositories/index";
 import { mcpServersTable, namespaceServerMappingsTable } from "../../db/schema";
+import { getUsableOAuthTokens } from "../oauth/remote-oauth.service";
 import { getDefaultEnvironment } from "./utils";
 
 // Define IOType for stderr handling
@@ -66,21 +66,7 @@ export async function getMcpServers(
 
     const serverDict: Record<string, ServerParameters> = {};
     for (const server of servers) {
-      // Fetch OAuth tokens from OAuth sessions table
-      const oauthSession = await oauthSessionsRepository.findByMcpServerUuid(
-        server.uuid,
-      );
-      let oauthTokens = null;
-
-      if (oauthSession && oauthSession.tokens) {
-        oauthTokens = {
-          access_token: oauthSession.tokens.access_token,
-          token_type: oauthSession.tokens.token_type,
-          expires_in: oauthSession.tokens.expires_in,
-          scope: oauthSession.tokens.scope,
-          refresh_token: oauthSession.tokens.refresh_token,
-        };
-      }
+      const oauthTokens = await getUsableOAuthTokens(server.uuid, server.url);
 
       const params: ServerParameters = {
         uuid: server.uuid,

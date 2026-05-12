@@ -1,4 +1,6 @@
 import {
+  ClearOAuthSessionRequestSchema,
+  ClearOAuthSessionResponseSchema,
   GetOAuthSessionRequestSchema,
   GetOAuthSessionResponseSchema,
   UpsertOAuthSessionRequestSchema,
@@ -15,10 +17,16 @@ export const createOAuthRouter = (
   implementations: {
     get: (
       input: z.infer<typeof GetOAuthSessionRequestSchema>,
+      userId: string,
     ) => Promise<z.infer<typeof GetOAuthSessionResponseSchema>>;
     upsert: (
       input: z.infer<typeof UpsertOAuthSessionRequestSchema>,
+      userId: string,
     ) => Promise<z.infer<typeof UpsertOAuthSessionResponseSchema>>;
+    clear: (
+      input: z.infer<typeof ClearOAuthSessionRequestSchema>,
+      userId: string,
+    ) => Promise<z.infer<typeof ClearOAuthSessionResponseSchema>>;
   },
 ) => {
   return router({
@@ -26,16 +34,24 @@ export const createOAuthRouter = (
     get: protectedProcedure
       .input(GetOAuthSessionRequestSchema)
       .output(GetOAuthSessionResponseSchema)
-      .query(async ({ input }) => {
-        return await implementations.get(input);
+      .query(async ({ input, ctx }) => {
+        return await implementations.get(input, ctx.user.id);
       }),
 
     // Protected: Upsert OAuth session
     upsert: protectedProcedure
       .input(UpsertOAuthSessionRequestSchema)
       .output(UpsertOAuthSessionResponseSchema)
-      .mutation(async ({ input }) => {
-        return await implementations.upsert(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.upsert(input, ctx.user.id);
+      }),
+
+    // Protected: Clear OAuth credentials
+    clear: protectedProcedure
+      .input(ClearOAuthSessionRequestSchema)
+      .output(ClearOAuthSessionResponseSchema)
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.clear(input, ctx.user.id);
       }),
   });
 };

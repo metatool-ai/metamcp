@@ -1,7 +1,7 @@
 import { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import {
-  OAuthClientInformation,
-  OAuthClientInformationSchema,
+  OAuthClientInformationFull,
+  OAuthClientInformationFullSchema,
   OAuthClientMetadata,
   OAuthMetadata,
   OAuthTokens,
@@ -11,6 +11,16 @@ import {
 import { getServerSpecificKey, SESSION_KEYS } from "./constants";
 import { getAppUrl } from "./env";
 import { vanillaTrpcClient } from "./trpc";
+
+const getTokenTimestamps = (tokens: OAuthTokens) => {
+  const obtainedAt = new Date();
+  return {
+    tokens_obtained_at: obtainedAt.toISOString(),
+    token_expires_at: tokens.expires_in
+      ? new Date(obtainedAt.getTime() + tokens.expires_in * 1000).toISOString()
+      : null,
+  };
+};
 
 // OAuth client provider that works with a specific MCP server
 class DbOAuthClientProvider implements OAuthClientProvider {
@@ -31,12 +41,32 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   get clientMetadata(): OAuthClientMetadata {
     return {
       redirect_uris: [this.redirectUrl],
-      token_endpoint_auth_method: "none",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       client_name: "MetaMCP",
       client_uri: "https://github.com/metatool-ai/metamcp",
     };
+  }
+
+  state() {
+    const randomBytes = new Uint8Array(32);
+    crypto.getRandomValues(randomBytes);
+    const state = btoa(String.fromCharCode(...randomBytes))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "");
+
+    const key = getServerSpecificKey(SESSION_KEYS.OAUTH_STATE, this.serverUrl);
+    sessionStorage.setItem(key, state);
+    return state;
+  }
+
+  validateState(returnedState: string | null) {
+    const key = getServerSpecificKey(SESSION_KEYS.OAUTH_STATE, this.serverUrl);
+    const expectedState = sessionStorage.getItem(key);
+    return (
+      !!returnedState && !!expectedState && returnedState === expectedState
+    );
   }
 
   // Check if the server exists in the database
@@ -65,7 +95,7 @@ class DbOAuthClientProvider implements OAuthClientProvider {
           mcp_server_uuid: this.mcpServerUuid,
         });
         if (result.success && result.data?.client_information) {
-          return await OAuthClientInformationSchema.parseAsync(
+          return await OAuthClientInformationFullSchema.parseAsync(
             result.data.client_information,
           );
         }
@@ -77,7 +107,7 @@ class DbOAuthClientProvider implements OAuthClientProvider {
         );
         const storedInfo = sessionStorage.getItem(key);
         if (storedInfo) {
-          return await OAuthClientInformationSchema.parseAsync(
+          return await OAuthClientInformationFullSchema.parseAsync(
             JSON.parse(storedInfo),
           );
         }
@@ -90,7 +120,7 @@ class DbOAuthClientProvider implements OAuthClientProvider {
     }
   }
 
-  async saveClientInformation(clientInformation: OAuthClientInformation) {
+  async saveClientInformation(clientInformation: OAuthClientInformationFull) {
     // Save to session storage during OAuth flow
     const key = getServerSpecificKey(
       SESSION_KEYS.CLIENT_INFORMATION,
@@ -151,6 +181,7 @@ class DbOAuthClientProvider implements OAuthClientProvider {
         await vanillaTrpcClient.frontend.oauth.upsert.mutate({
           mcp_server_uuid: this.mcpServerUuid,
           tokens,
+          ...getTokenTimestamps(tokens),
         });
       } catch (error) {
         console.error("Error saving tokens to database:", error);
@@ -224,6 +255,46 @@ class DbOAuthClientProvider implements OAuthClientProvider {
     sessionStorage.removeItem(
       getServerSpecificKey(SESSION_KEYS.CODE_VERIFIER, this.serverUrl),
     );
+    sessionStorage.removeItem(
+      getServerSpecificKey(SESSION_KEYS.OAUTH_STATE, this.serverUrl),
+    );
+  }
+
+  async invalidateCredentials(scope: "all" | "client" | "tokens" | "verifier") {
+    if (scope === "all" || scope === "client") {
+      sessionStorage.removeItem(
+        getServerSpecificKey(SESSION_KEYS.CLIENT_INFORMATION, this.serverUrl),
+      );
+    }
+    if (scope === "all" || scope === "client" || scope === "tokens") {
+      sessionStorage.removeItem(
+        getServerSpecificKey(SESSION_KEYS.TOKENS, this.serverUrl),
+      );
+      sessionStorage.removeItem(
+        getServerSpecificKey(SESSION_KEYS.OAUTH_STATE, this.serverUrl),
+      );
+    }
+    if (
+      scope === "all" ||
+      scope === "client" ||
+      scope === "tokens" ||
+      scope === "verifier"
+    ) {
+      sessionStorage.removeItem(
+        getServerSpecificKey(SESSION_KEYS.CODE_VERIFIER, this.serverUrl),
+      );
+    }
+
+    if (await this.serverExists()) {
+      try {
+        await vanillaTrpcClient.frontend.oauth.clear.mutate({
+          mcp_server_uuid: this.mcpServerUuid,
+          scope,
+        });
+      } catch (error) {
+        console.error("Error invalidating OAuth credentials:", error);
+      }
+    }
   }
 }
 
