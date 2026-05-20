@@ -23,6 +23,7 @@ import { z } from "zod";
 
 import logger from "@/utils/logger";
 
+import { namespacesRepository } from "../../db/repositories/namespaces.repo";
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { configService } from "../config.service";
 import { ConnectedClient } from "./client";
@@ -121,6 +122,8 @@ export const createServer = async (
     return false;
   };
 
+  const namespace = await namespacesRepository.findByUuid(namespaceUuid);
+
   const server = new Server(
     {
       name: `metamcp-unified-${namespaceUuid}`,
@@ -132,6 +135,7 @@ export const createServer = async (
         resources: {},
         tools: {},
       },
+      instructions: namespace?.description ?? undefined,
     },
   );
 
