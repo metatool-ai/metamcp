@@ -149,6 +149,34 @@ export const UpsertOAuthSessionResponseSchema = z.union([
   }),
 ]);
 
+// ---------------------------------------------------------------------------
+// Server-side OAuth fetch proxy
+// Routes an MCP server's OAuth HTTP (discovery / dynamic client registration /
+// token exchange / refresh) through the MetaMCP backend instead of the browser,
+// so it works with upstream OAuth servers that do not send CORS headers.
+// ---------------------------------------------------------------------------
+export const OAuthProxyFetchRequestSchema = z.object({
+  mcp_server_uuid: z.string().uuid(),
+  url: z.string().url(),
+  method: z.string().default("GET"),
+  headers: z.record(z.string()).optional(),
+  body: z.string().optional(),
+});
+
+export const OAuthProxyFetchResponseSchema = z.union([
+  z.object({
+    success: z.literal(true),
+    status: z.number(),
+    statusText: z.string(),
+    headers: z.record(z.string()),
+    body: z.string(),
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+  }),
+]);
+
 // Repository-specific schemas
 export const OAuthSessionCreateInputSchema = z.object({
   mcp_server_uuid: z.string(),

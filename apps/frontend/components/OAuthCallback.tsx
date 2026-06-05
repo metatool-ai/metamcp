@@ -7,6 +7,7 @@ import { useTranslations } from "@/hooks/useTranslations";
 
 import { getServerSpecificKey, SESSION_KEYS } from "../lib/constants";
 import { createAuthProvider } from "../lib/oauth-provider";
+import { createProxiedFetch } from "../lib/proxied-fetch";
 import { vanillaTrpcClient } from "../lib/trpc";
 
 const OAuthCallback = () => {
@@ -42,6 +43,7 @@ const OAuthCallback = () => {
         const result = await auth(authProvider, {
           serverUrl,
           authorizationCode: code,
+          fetchFn: createProxiedFetch(mcpServerUuid),
         });
 
         if (result !== "AUTHORIZED") {

@@ -1,6 +1,8 @@
 import {
   GetOAuthSessionRequestSchema,
   GetOAuthSessionResponseSchema,
+  OAuthProxyFetchRequestSchema,
+  OAuthProxyFetchResponseSchema,
   UpsertOAuthSessionRequestSchema,
   UpsertOAuthSessionResponseSchema,
 } from "@repo/zod-types";
@@ -19,6 +21,9 @@ export const createOAuthRouter = (
     upsert: (
       input: z.infer<typeof UpsertOAuthSessionRequestSchema>,
     ) => Promise<z.infer<typeof UpsertOAuthSessionResponseSchema>>;
+    proxyFetch: (
+      input: z.infer<typeof OAuthProxyFetchRequestSchema>,
+    ) => Promise<z.infer<typeof OAuthProxyFetchResponseSchema>>;
   },
 ) => {
   return router({
@@ -36,6 +41,14 @@ export const createOAuthRouter = (
       .output(UpsertOAuthSessionResponseSchema)
       .mutation(async ({ input }) => {
         return await implementations.upsert(input);
+      }),
+
+    // Protected: Server-side OAuth fetch proxy (for CORS-less upstream servers)
+    proxyFetch: protectedProcedure
+      .input(OAuthProxyFetchRequestSchema)
+      .output(OAuthProxyFetchResponseSchema)
+      .mutation(async ({ input }) => {
+        return await implementations.proxyFetch(input);
       }),
   });
 };
