@@ -20,8 +20,13 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   constructor(mcpServerUuid: string, serverUrl: string) {
     this.mcpServerUuid = mcpServerUuid;
     this.serverUrl = serverUrl;
-    // Save the server URL to session storage for consistency
-    sessionStorage.setItem(SESSION_KEYS.SERVER_URL, serverUrl);
+    // Save the server URL to session storage for consistency. Guard for SSR:
+    // this provider is constructed during render (useConnection) of pages that
+    // are server-rendered, where sessionStorage is undefined — accessing it
+    // there throws and 500s the page (e.g. the post-OAuth redirect target).
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(SESSION_KEYS.SERVER_URL, serverUrl);
+    }
   }
 
   get redirectUrl() {

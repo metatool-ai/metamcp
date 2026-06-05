@@ -1,4 +1,9 @@
-import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
+import {
+  auth,
+  discoverOAuthMetadata,
+  discoverOAuthProtectedResourceMetadata,
+  registerClient,
+} from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
   SSEClientTransport,
@@ -47,6 +52,7 @@ import {
   StdErrNotificationSchema,
 } from "../lib/notificationTypes";
 import { createAuthProvider } from "../lib/oauth-provider";
+import { createProxiedFetch } from "../lib/proxied-fetch";
 import { trpc } from "../lib/trpc";
 
 interface UseConnectionOptions {
@@ -300,8 +306,45 @@ export function useConnection({
       sessionStorage.setItem(SESSION_KEYS.SERVER_URL, url || "");
       sessionStorage.setItem(SESSION_KEYS.MCP_SERVER_UUID, mcpServerUuid);
 
+      // Route OAuth discovery/registration/token through the MetaMCP backend so
+      // it works with upstream OAuth servers that don't send CORS headers.
+      const fetchFn = createProxiedFetch(mcpServerUuid);
+
+      // Work around a bug in @modelcontextprotocol/sdk 1.16: auth() forwards
+      // fetchFn to discovery and token exchange but NOT to registerClient, so
+      // dynamic client registration falls back to the browser's fetch and is
+      // CORS-blocked. Pre-register the client here (these helpers DO honor
+      // fetchFn) so auth() finds existing client info and skips registration.
+      // (Fixed upstream in SDK >= 1.29; this block can be removed after a bump.)
+      if (
+        authProvider.saveClientInformation &&
+        !(await authProvider.clientInformation())
+      ) {
+        const resourceMetadata = await discoverOAuthProtectedResourceMetadata(
+          url || "",
+          {},
+          fetchFn,
+        ).catch(() => undefined);
+        const authorizationServerUrl =
+          resourceMetadata?.authorization_servers?.[0] ?? url ?? "";
+        const metadata = await discoverOAuthMetadata(
+          url || "",
+          { authorizationServerUrl },
+          fetchFn,
+        );
+        if (metadata) {
+          const fullInformation = await registerClient(authorizationServerUrl, {
+            metadata,
+            clientMetadata: authProvider.clientMetadata,
+            fetchFn,
+          });
+          await authProvider.saveClientInformation(fullInformation);
+        }
+      }
+
       const result = await auth(authProvider, {
         serverUrl: url || "",
+        fetchFn,
       });
       return result === "AUTHORIZED";
     }
