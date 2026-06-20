@@ -48,9 +48,15 @@ COPY . .
 # Build all packages and apps
 RUN pnpm build
 
-RUN sed -i -e "s/30000/600000/" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/server/lib/router-utils/proxy-request.js" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js"
+RUN set -eu; \
+    files="$(find node_modules/.pnpm -path '*/node_modules/next/dist/*/server/lib/router-utils/proxy-request.js' -type f)"; \
+    if [ -z "$files" ]; then \
+      echo "Expected Next.js proxy-request.js files were not found"; \
+      exit 1; \
+    fi; \
+    for file in $files; do \
+      sed -i -e "s/30000/600000/" "$file"; \
+    done
 
 # Production runner stage
 FROM base AS runner
@@ -86,11 +92,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
 
-# Install production dependencies only
-RUN pnpm install --prod
-
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+# Install production dependencies only in non-interactive build environments
+RUN CI=true pnpm install --prod
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
