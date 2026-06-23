@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { EditMcpServer } from "@/components/edit-mcp-server";
@@ -142,7 +142,7 @@ export default function McpServerDetailPage({
   // MCP Connection setup - only enable when server data is loaded and not in error state
   const connection = useConnection({
     mcpServerUuid: uuid,
-    transportType: server?.type || McpServerTypeEnum.Enum.STDIO,
+    transportType: server?.type || McpServerTypeEnum.enum.STDIO,
     command: server?.command || "",
     args: server?.args?.join(" ") || "",
     url: server?.url || "",
@@ -156,20 +156,27 @@ export default function McpServerDetailPage({
     },
     enabled: Boolean(
       server &&
-        !isLoading &&
-        server.error_status !== McpServerErrorStatusEnum.Enum.ERROR,
+      !isLoading &&
+      server.error_status !== McpServerErrorStatusEnum.enum.ERROR,
     ),
   });
 
-  // Auto-connect when hook is enabled and not already connected
+  // Auto-connect when hook is enabled and not already connected.
+  // Guarded against React Strict Mode's intentional double-invocation of
+  // effects in dev: without the ref, both fires would race two concurrent
+  // OAuth dynamic registrations and the browser/DB would disagree on
+  // client_id, breaking token exchange.
+  const didAutoConnect = useRef(false);
   useEffect(() => {
+    if (didAutoConnect.current) return;
     if (
       connection &&
       server &&
       !isLoading &&
-      server.error_status !== McpServerErrorStatusEnum.Enum.ERROR &&
+      server.error_status !== McpServerErrorStatusEnum.enum.ERROR &&
       connection.connectionStatus === "disconnected"
     ) {
+      didAutoConnect.current = true;
       connection.connect();
     }
   }, [server, connection, isLoading]);
@@ -188,7 +195,7 @@ export default function McpServerDetailPage({
 
   // Handle manual connect/disconnect
   const handleConnectionToggle = () => {
-    if (server?.error_status === McpServerErrorStatusEnum.Enum.ERROR) {
+    if (server?.error_status === McpServerErrorStatusEnum.enum.ERROR) {
       // Don't allow connection if server is in error state
       return;
     }
@@ -202,7 +209,7 @@ export default function McpServerDetailPage({
   // Get connection status display info
   const getConnectionStatusInfo = () => {
     // If server is in error state, show error status
-    if (server?.error_status === McpServerErrorStatusEnum.Enum.ERROR) {
+    if (server?.error_status === McpServerErrorStatusEnum.enum.ERROR) {
       return {
         text: t("mcp-servers:detail.serverError"),
         color: "text-destructive",
@@ -501,13 +508,13 @@ export default function McpServerDetailPage({
                     <Badge
                       variant={
                         server.error_status ===
-                        McpServerErrorStatusEnum.Enum.ERROR
+                        McpServerErrorStatusEnum.enum.ERROR
                           ? "destructive"
                           : "success"
                       }
                     >
                       {server.error_status ===
-                      McpServerErrorStatusEnum.Enum.ERROR
+                      McpServerErrorStatusEnum.enum.ERROR
                         ? t("mcp-servers:detail.error")
                         : t("mcp-servers:detail.noError")}
                     </Badge>
@@ -633,6 +640,42 @@ export default function McpServerDetailPage({
                     </div>
                   </div>
                 )}
+                {(server.type === "SSE" ||
+                  server.type === "STREAMABLE_HTTP") && (
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {t("mcp-servers:forwardHeaders")}:
+                    </span>
+                    {server.forward_headers &&
+                    Object.keys(server.forward_headers).length > 0 ? (
+                      <>
+                        <div className="space-y-1">
+                          {Object.entries(server.forward_headers).map(
+                            ([clientHeader, serverHeader]) => (
+                              <div
+                                key={clientHeader}
+                                className="bg-muted p-2 rounded"
+                              >
+                                <span className="text-sm font-mono">
+                                  {clientHeader === serverHeader
+                                    ? clientHeader
+                                    : `${clientHeader} \u2192 ${serverHeader}`}
+                                </span>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          {t("mcp-servers:forwardHeadersWarning")}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">
+                        {t("mcp-servers:forwardHeadersNone")}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -693,7 +736,7 @@ export default function McpServerDetailPage({
             <h3 className="text-lg font-semibold mb-4">
               {t("mcp-servers:detail.toolsManagement")}
             </h3>
-            {server.error_status === McpServerErrorStatusEnum.Enum.ERROR ? (
+            {server.error_status === McpServerErrorStatusEnum.enum.ERROR ? (
               <div className="space-y-4">
                 <div className="rounded-lg border border-dashed p-8 text-center">
                   <div className="flex flex-col items-center justify-center mx-auto max-w-md">

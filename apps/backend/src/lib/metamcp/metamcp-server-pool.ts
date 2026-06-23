@@ -2,13 +2,26 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
 import logger from "@/utils/logger";
 
+import {
+  clearAdminToolsContext,
+  setAdminToolsContext,
+} from "../admin-mcp/admin-session-context";
 import { configService } from "../config.service";
+import { getMcpServers } from "./fetch-metamcp";
+import { anyServerRequiresForwardedHeaders } from "./header-forwarding";
 import { mcpServerPool } from "./mcp-server-pool";
+import { MetaMCPHandlerContext } from "./metamcp-middleware/functional-middleware";
 import { createServer } from "./metamcp-proxy";
+
+export interface AdminToolsOptions {
+  enabled: boolean;
+  userId: string;
+}
 
 export interface MetaMcpServerInstance {
   server: Server;
   cleanup: () => Promise<void>;
+  internalSessionId: string;
 }
 
 export interface MetaMcpServerPoolStatus {
@@ -36,6 +49,13 @@ export class MetaMcpServerPool {
 
   // Track ongoing idle server creation to prevent duplicates
   private creatingIdleServers: Set<string> = new Set();
+
+  // TTL cache: namespaceUuid -> { needsFresh: boolean, expiresAt: number }
+  // Avoids a redundant getMcpServers() DB query on every getServer() call.
+  private needsFreshServerCache: Record<
+    string,
+    { needsFresh: boolean; expiresAt: number }
+  > = {};
 
   // Session cleanup timer
   private cleanupTimer: NodeJS.Timeout | null = null;
@@ -65,36 +85,75 @@ export class MetaMcpServerPool {
     sessionId: string,
     namespaceUuid: string,
     includeInactiveServers: boolean = false,
+    clientRequestHeaders?: Record<string, string>,
+    adminTools?: AdminToolsOptions,
+    requestContext?: Pick<MetaMCPHandlerContext, "endpointName" | "auth">,
   ): Promise<MetaMcpServerInstance | undefined> {
     // Check if we already have an active server for this sessionId
     if (this.activeServers[sessionId]) {
       return this.activeServers[sessionId];
     }
 
-    // Check if we have an idle server for this namespace that we can convert
-    const idleServer = this.idleServers[namespaceUuid];
-    if (idleServer) {
-      // Convert idle server to active server
-      delete this.idleServers[namespaceUuid];
-      this.activeServers[sessionId] = idleServer;
-      this.sessionToNamespace[sessionId] = namespaceUuid;
-      this.sessionTimestamps[sessionId] = Date.now();
-
-      logger.info(
-        `Converted idle MetaMCP server to active for namespace ${namespaceUuid}, session ${sessionId}`,
-      );
-
-      // Create a new idle server to replace the one we just used (ASYNC - NON-BLOCKING)
-      this.createIdleServerAsync(namespaceUuid, includeInactiveServers);
-
-      return idleServer;
+    // Only reuse idle servers when the namespace has no servers requiring
+    // per-client header forwarding. Idle servers are created without
+    // clientRequestHeaders, so they can't forward per-user credentials.
+    // We check the actual server configs rather than just the presence of
+    // clientRequestHeaders (which is always truthy from the routers).
+    // The result is cached with a 60-second TTL to avoid a DB roundtrip
+    // on every new session.
+    let needsFreshServer = false;
+    if (clientRequestHeaders) {
+      const cached = this.needsFreshServerCache[namespaceUuid];
+      if (cached && Date.now() < cached.expiresAt) {
+        needsFreshServer = cached.needsFresh;
+      } else {
+        const serverParams = await getMcpServers(
+          namespaceUuid,
+          includeInactiveServers,
+        );
+        needsFreshServer = anyServerRequiresForwardedHeaders(serverParams);
+        this.needsFreshServerCache[namespaceUuid] = {
+          needsFresh: needsFreshServer,
+          expiresAt: Date.now() + 60_000, // 60s TTL
+        };
+      }
     }
 
-    // No idle server available, create a new one
+    // Audited requests need a fresh server too: idle servers are built without
+    // request auth context, so the handler context would be scoped to the wrong
+    // (or no) endpoint session. Force a fresh build when requestContext is set.
+    if (requestContext) {
+      needsFreshServer = true;
+    }
+
+    if (!needsFreshServer) {
+      const idleServer = this.idleServers[namespaceUuid];
+      if (idleServer) {
+        // Convert idle server to active server
+        delete this.idleServers[namespaceUuid];
+        this.activeServers[sessionId] = idleServer;
+        this.sessionToNamespace[sessionId] = namespaceUuid;
+        this.sessionTimestamps[sessionId] = Date.now();
+        this.applyAdminToolsContext(idleServer, adminTools);
+
+        logger.info(
+          `Converted idle MetaMCP server to active for namespace ${namespaceUuid}, session ${sessionId}`,
+        );
+
+        // Create a new idle server to replace the one we just used (ASYNC - NON-BLOCKING)
+        this.createIdleServerAsync(namespaceUuid, includeInactiveServers);
+
+        return idleServer;
+      }
+    }
+
+    // No idle server available (or client headers require a fresh server), create a new one
     const newServer = await this.createNewServer(
       sessionId,
       namespaceUuid,
       includeInactiveServers,
+      clientRequestHeaders,
+      requestContext,
     );
     if (!newServer) {
       return undefined;
@@ -103,15 +162,31 @@ export class MetaMcpServerPool {
     this.activeServers[sessionId] = newServer;
     this.sessionToNamespace[sessionId] = namespaceUuid;
     this.sessionTimestamps[sessionId] = Date.now();
+    this.applyAdminToolsContext(newServer, adminTools);
 
     logger.info(
       `Created new active MetaMCP server for namespace ${namespaceUuid}, session ${sessionId}`,
     );
 
-    // Also create an idle server for future use (ASYNC - NON-BLOCKING)
-    this.createIdleServerAsync(namespaceUuid, includeInactiveServers);
+    // Only pre-warm idle pool when headers aren't required — idle servers
+    // are created without clientRequestHeaders so they can't be reused when
+    // per-client header forwarding is needed.
+    if (!needsFreshServer) {
+      this.createIdleServerAsync(namespaceUuid, includeInactiveServers);
+    }
 
     return newServer;
+  }
+
+  private applyAdminToolsContext(
+    serverInstance: MetaMcpServerInstance,
+    adminTools?: AdminToolsOptions,
+  ): void {
+    if (adminTools?.enabled && adminTools.userId) {
+      setAdminToolsContext(serverInstance.internalSessionId, adminTools);
+    } else {
+      clearAdminToolsContext(serverInstance.internalSessionId);
+    }
   }
 
   /**
@@ -121,6 +196,8 @@ export class MetaMcpServerPool {
     sessionId: string,
     namespaceUuid: string,
     includeInactiveServers: boolean = false,
+    clientRequestHeaders?: Record<string, string>,
+    requestContext?: Pick<MetaMCPHandlerContext, "endpointName" | "auth">,
   ): Promise<MetaMcpServerInstance | undefined> {
     try {
       // Create the MetaMCP server - MCP server pool is pre-warmed during startup
@@ -128,9 +205,15 @@ export class MetaMcpServerPool {
         namespaceUuid,
         sessionId,
         includeInactiveServers,
+        clientRequestHeaders,
+        requestContext,
       );
 
-      return serverInstance;
+      return {
+        server: serverInstance.server,
+        cleanup: serverInstance.cleanup,
+        internalSessionId: serverInstance.internalSessionId,
+      };
     } catch (error) {
       logger.error(
         `Error creating MetaMCP server for namespace ${namespaceUuid}:`,
@@ -165,6 +248,7 @@ export class MetaMcpServerPool {
       const wrappedServer: MetaMcpServerInstance = {
         server: newServer.server,
         cleanup: newServer.cleanup,
+        internalSessionId: newServer.internalSessionId,
       };
 
       this.idleServers[namespaceUuid] = wrappedServer;
@@ -199,6 +283,7 @@ export class MetaMcpServerPool {
           const wrappedServer: MetaMcpServerInstance = {
             server: newServer.server,
             cleanup: newServer.cleanup,
+            internalSessionId: newServer.internalSessionId,
           };
           this.idleServers[namespaceUuid] = wrappedServer;
           logger.info(
@@ -251,11 +336,13 @@ export class MetaMcpServerPool {
       return;
     }
 
+    clearAdminToolsContext(activeServer.internalSessionId);
+
     // Cleanup the MetaMCP server
     await activeServer.cleanup();
 
     // Also cleanup the corresponding MCP server pool session
-    await mcpServerPool.cleanupSession(sessionId);
+    await mcpServerPool.cleanupSession(activeServer.internalSessionId);
 
     // Remove from active servers
     delete this.activeServers[sessionId];
@@ -263,11 +350,15 @@ export class MetaMcpServerPool {
     // Clean up session timestamp
     delete this.sessionTimestamps[sessionId];
 
-    // Get the namespace UUID and create a new idle server if needed
+    // Get the namespace UUID and create a new idle server if needed.
+    // Skip idle replenishment for namespaces that require forwarded headers
+    // since idle servers can't carry per-client headers.
     const namespaceUuid = this.sessionToNamespace[sessionId];
     if (namespaceUuid) {
-      // Create a new idle server to replace capacity (ASYNC - NON-BLOCKING)
-      this.createIdleServerAsync(namespaceUuid);
+      const cached = this.needsFreshServerCache[namespaceUuid];
+      if (!cached || !cached.needsFresh) {
+        this.createIdleServerAsync(namespaceUuid);
+      }
       delete this.sessionToNamespace[sessionId];
     }
 
@@ -300,6 +391,7 @@ export class MetaMcpServerPool {
     this.sessionToNamespace = {};
     this.sessionTimestamps = {};
     this.creatingIdleServers.clear();
+    this.needsFreshServerCache = {};
 
     // Clear cleanup timer
     if (this.cleanupTimer) {
@@ -375,6 +467,9 @@ export class MetaMcpServerPool {
 
     // Remove from creating set if it's in progress
     this.creatingIdleServers.delete(namespaceUuid);
+
+    // Clear needsFreshServer cache since config may have changed
+    delete this.needsFreshServerCache[namespaceUuid];
 
     // Create a new idle server with updated configuration
     await this.createIdleServer(namespaceUuid, includeInactiveServers);
@@ -609,6 +704,7 @@ export class MetaMcpServerPool {
     if (age === undefined) return false;
 
     const sessionLifetime = await configService.getSessionLifetime();
+    if (sessionLifetime === null) return false; // null = no expiry configured
     return age > sessionLifetime;
   }
 }

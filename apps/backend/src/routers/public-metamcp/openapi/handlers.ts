@@ -12,6 +12,7 @@ import { configService } from "../../../lib/config.service";
 import { ConnectedClient } from "../../../lib/metamcp";
 import { getMcpServers } from "../../../lib/metamcp/fetch-metamcp";
 import { mcpServerPool } from "../../../lib/metamcp/mcp-server-pool";
+import { createAuditCallToolMiddleware } from "../../../lib/metamcp/metamcp-middleware/audit-requests.functional";
 import {
   createFilterCallToolMiddleware,
   createFilterListToolsMiddleware,
@@ -22,6 +23,7 @@ import {
   ListToolsHandler,
   MetaMCPHandlerContext,
 } from "../../../lib/metamcp/metamcp-middleware/functional-middleware";
+import { resolveToolIdentity } from "../../../lib/metamcp/metamcp-middleware/tool-identity";
 import {
   createToolOverridesCallToolMiddleware,
   createToolOverridesListToolsMiddleware,
@@ -194,11 +196,14 @@ export const createOriginalCallToolHandler = (): CallToolHandler => {
 export const createMiddlewareEnabledHandlers = (
   sessionId: string,
   namespaceUuid: string,
+  requestContext?: Pick<MetaMCPHandlerContext, "endpointName" | "auth">,
 ) => {
   // Create the handler context
   const handlerContext: MetaMCPHandlerContext = {
     namespaceUuid,
     sessionId,
+    endpointName: requestContext?.endpointName || "unknown",
+    auth: requestContext?.auth,
   };
 
   // Create original handlers
@@ -215,6 +220,7 @@ export const createMiddlewareEnabledHandlers = (
   )(originalListToolsHandler);
 
   const callToolWithMiddleware = compose(
+    createAuditCallToolMiddleware({ resolveToolIdentity }),
     createFilterCallToolMiddleware({
       cacheEnabled: true,
       customErrorMessage: (toolName, reason) =>
@@ -222,7 +228,6 @@ export const createMiddlewareEnabledHandlers = (
     }),
     createToolOverridesCallToolMiddleware({ cacheEnabled: true }),
     // Add more middleware here as needed
-    // createAuditingMiddleware(),
     // createAuthorizationMiddleware(),
   )(originalCallToolHandler);
 

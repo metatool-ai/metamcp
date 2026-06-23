@@ -9,6 +9,15 @@ import {
 export interface MetaMCPHandlerContext {
   namespaceUuid: string;
   sessionId: string;
+  /** Raw headers from the client request, used for per-server header forwarding */
+  clientRequestHeaders?: Record<string, string>;
+  endpointName: string;
+  auth?: {
+    method: "api_key" | "oauth" | "none";
+    apiKeyUuid?: string;
+    apiKeyUserId?: string;
+    oauthUserId?: string;
+  };
 }
 
 // Handler function types

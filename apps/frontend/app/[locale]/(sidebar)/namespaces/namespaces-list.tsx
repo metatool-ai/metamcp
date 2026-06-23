@@ -283,6 +283,14 @@ export function NamespacesList() {
               placeholder={t("namespaces.searchPlaceholder")}
               className="pl-8"
               disabled
+              // Controlled (value + readOnly) so React's reconciler doesn't
+              // see this loading/error-skeleton input flip to the
+              // controlled main-branch input after the data resolves — the
+              // three branches share an identical wrapper-div + Search-icon
+              // sibling structure, so position-based reconciliation treats
+              // them as the same <input>.
+              value=""
+              readOnly
             />
           </div>
         </div>
@@ -306,6 +314,14 @@ export function NamespacesList() {
               placeholder={t("namespaces.searchPlaceholder")}
               className="pl-8"
               disabled
+              // Controlled (value + readOnly) so React's reconciler doesn't
+              // see this loading/error-skeleton input flip to the
+              // controlled main-branch input after the data resolves — the
+              // three branches share an identical wrapper-div + Search-icon
+              // sibling structure, so position-based reconciliation treats
+              // them as the same <input>.
+              value=""
+              readOnly
             />
           </div>
         </div>

@@ -1,8 +1,6 @@
 "use client";
 
-import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import {
-  ClientRequest,
   CompatibilityCallToolResult,
   CompatibilityCallToolResultSchema,
   ListToolsResultSchema,
@@ -20,20 +18,16 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { MakeRequestFn } from "@/hooks/useConnection";
 import { useTranslations } from "@/hooks/useTranslations";
 
 interface InspectorToolsProps {
-  makeRequest: <T extends z.ZodType>(
-    request: ClientRequest,
-    schema: T,
-    options?: RequestOptions & { suppressToast?: boolean },
-  ) => Promise<z.output<T>>;
+  makeRequest: MakeRequestFn;
   enabled?: boolean;
 }
 

@@ -105,7 +105,7 @@ export function ExportImportButtons() {
         config.description = server.description;
       }
 
-      if (server.type === McpServerTypeEnum.Enum.STDIO) {
+      if (server.type === McpServerTypeEnum.enum.STDIO) {
         if (server.command) {
           config.command = server.command;
         }
@@ -116,8 +116,8 @@ export function ExportImportButtons() {
           config.env = server.env;
         }
       } else if (
-        server.type === McpServerTypeEnum.Enum.SSE ||
-        server.type === McpServerTypeEnum.Enum.STREAMABLE_HTTP
+        server.type === McpServerTypeEnum.enum.SSE ||
+        server.type === McpServerTypeEnum.enum.STREAMABLE_HTTP
       ) {
         if (server.url) {
           config.url = server.url;

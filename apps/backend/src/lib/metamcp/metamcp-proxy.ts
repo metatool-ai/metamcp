@@ -7,27 +7,39 @@ import {
   GetPromptRequestSchema,
   GetPromptResultSchema,
   ListPromptsRequestSchema,
+  ListPromptsResult,
   ListPromptsResultSchema,
   ListResourcesRequestSchema,
+  ListResourcesResult,
   ListResourcesResultSchema,
   ListResourceTemplatesRequestSchema,
   ListResourceTemplatesResultSchema,
   ListToolsRequestSchema,
+  ListToolsResult,
   ListToolsResultSchema,
   ReadResourceRequestSchema,
   ReadResourceResultSchema,
   ResourceTemplate,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
 
 import logger from "@/utils/logger";
 
+import { namespacesRepository } from "../../db/repositories/namespaces.repo";
 import { toolsImplementations } from "../../trpc/tools.impl";
+import { getAdminToolsContext } from "../admin-mcp/admin-session-context";
+import {
+  executeAdminTool,
+  getAdminToolsForMcp,
+  isExposedAdminToolName,
+} from "../admin-mcp/tools-registry";
 import { configService } from "../config.service";
 import { ConnectedClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
+import { extractForwardedHeaders, mergeHeaders } from "./header-forwarding";
+import { requestWithSessionRecovery } from "./list-handler-recovery";
 import { mcpServerPool } from "./mcp-server-pool";
+import { createAuditCallToolMiddleware } from "./metamcp-middleware/audit-requests.functional";
 import {
   createFilterCallToolMiddleware,
   createFilterListToolsMiddleware,
@@ -38,11 +50,13 @@ import {
   ListToolsHandler,
   MetaMCPHandlerContext,
 } from "./metamcp-middleware/functional-middleware";
+import { resolveToolIdentity } from "./metamcp-middleware/tool-identity";
 import {
   createToolOverridesCallToolMiddleware,
   createToolOverridesListToolsMiddleware,
   mapOverrideNameToOriginal,
 } from "./metamcp-middleware/tool-overrides.functional";
+import { isBackendSessionLostError } from "./session-error";
 import { parseToolName } from "./tool-name-parser";
 import { toolsSyncCache } from "./tools-sync-cache";
 import { sanitizeName } from "./utils";
@@ -101,6 +115,8 @@ export const createServer = async (
   namespaceUuid: string,
   sessionId: string,
   includeInactiveServers: boolean = false,
+  clientRequestHeaders?: Record<string, string>,
+  requestContext?: Pick<MetaMCPHandlerContext, "endpointName" | "auth">,
 ) => {
   const toolToClient: Record<string, ConnectedClient> = {};
   const toolToServerUuid: Record<string, string> = {};
@@ -121,6 +137,8 @@ export const createServer = async (
     return false;
   };
 
+  const namespace = await namespacesRepository.findByUuid(namespaceUuid);
+
   const server = new Server(
     {
       name: `metamcp-unified-${namespaceUuid}`,
@@ -132,13 +150,23 @@ export const createServer = async (
         resources: {},
         tools: {},
       },
+      instructions: namespace?.description ?? undefined,
     },
   );
 
-  // Create the handler context
+  // Create the handler context.
+  // NOTE: clientRequestHeaders are captured once at session initialisation
+  // (StreamableHTTP) or connection time (SSE). They are NOT refreshed on
+  // subsequent requests within the same session. This is acceptable because
+  // headers like Authorization are stable for a session's lifetime, but
+  // callers should be aware of this if session-scoped header staleness
+  // could be a concern.
   const handlerContext: MetaMCPHandlerContext = {
     namespaceUuid,
     sessionId,
+    clientRequestHeaders,
+    endpointName: requestContext?.endpointName || "unknown",
+    auth: requestContext?.auth,
   };
 
   // Original List Tools Handler
@@ -155,7 +183,19 @@ export const createServer = async (
       context.namespaceUuid,
       includeInactiveServers,
     );
+
+    // Extract forwarded headers from client request for servers that need them
+    const forwardedHeadersByServer = context.clientRequestHeaders
+      ? extractForwardedHeaders(context.clientRequestHeaders, serverParams)
+      : {};
+
     const allTools: Tool[] = [];
+
+    // Servers that should have contributed tools but failed even after the
+    // recovery retry (or had no session at all). Drives the degraded-response
+    // tripwire after the fan-out — a swallowed failure returns a "successful"
+    // 0-tool namespace and nobody notices until a manual restart.
+    const failedServers: string[] = [];
 
     // Track visited servers to detect circular references - reset on each call
     const visitedServers = new Set<string>();
@@ -166,6 +206,28 @@ export const createServer = async (
     console.log(
       `[DEBUG-TOOLS] 📋 Processing ${allServerEntries.length} servers`,
     );
+
+    // Cold-start warmup: if pool has 0 idle + 0 active sessions but servers
+    // exist in DB, trigger a blocking warmup before tools/list responds.
+    // This prevents 0-tool responses after idle timeout expires all connections.
+    const poolStatus = mcpServerPool.getPoolStatus();
+    if (
+      poolStatus.idle === 0 &&
+      poolStatus.active === 0 &&
+      allServerEntries.length > 0
+    ) {
+      console.log(
+        `[DEBUG-TOOLS] ⚠️ Cold start: 0 idle, 0 active sessions but ${allServerEntries.length} servers registered. Warming up...`,
+      );
+      for (const [uuid] of allServerEntries) {
+        await mcpServerPool.resetServerErrorState(uuid);
+      }
+      await mcpServerPool.ensureIdleSessions(serverParams, namespaceUuid);
+      const afterStatus = mcpServerPool.getPoolStatus();
+      console.log(
+        `[DEBUG-TOOLS] ✅ Pool warmup complete: ${afterStatus.idle} idle, ${afterStatus.active} active`,
+      );
+    }
 
     await Promise.allSettled(
       allServerEntries.map(async ([mcpServerUuid, params]) => {
@@ -178,14 +240,34 @@ export const createServer = async (
           );
           return;
         }
+
+        // Merge forwarded headers into server params for this session
+        const effectiveParams = forwardedHeadersByServer[mcpServerUuid]
+          ? {
+              ...params,
+              headers: mergeHeaders(
+                params.headers,
+                forwardedHeadersByServer[mcpServerUuid],
+              ),
+            }
+          : params;
+
         const session = await mcpServerPool.getSession(
           context.sessionId,
           mcpServerUuid,
-          params,
+          effectiveParams,
           namespaceUuid,
         );
         if (!session) {
           console.log(`[DEBUG-TOOLS] ❌ No session for: ${params.name}`);
+          // No pooled session and the pool couldn't create one — server is
+          // ERROR-gated, connection-capped, or unreachable. Error level: this
+          // server is silently missing from the namespace's tool surface
+          // until the pool recovers.
+          logger.error(
+            `tools/list: no session available for server ${params.name || mcpServerUuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
+          );
+          failedServers.push(params.name || mcpServerUuid);
           return;
         }
 
@@ -217,15 +299,18 @@ export const createServer = async (
           params.name || session.client.getServerVersion()?.name || "";
 
         try {
-          // Paginated tool discovery - load all pages automatically
-          const allServerTools: Tool[] = [];
-          let cursor: string | undefined = undefined;
-          let hasMore = true;
           const toolFetchStart = performance.now();
 
-          while (hasMore) {
-            const result: z.infer<typeof ListToolsResultSchema> =
-              await session.client.request(
+          // Paginated tool discovery - load all pages automatically
+          const fetchAllToolPages = async (
+            active: ConnectedClient,
+          ): Promise<Tool[]> => {
+            const pages: Tool[] = [];
+            let cursor: string | undefined = undefined;
+            let hasMore = true;
+
+            while (hasMore) {
+              const result: ListToolsResult = await active.client.request(
                 {
                   method: "tools/list",
                   params: {
@@ -236,13 +321,35 @@ export const createServer = async (
                 ListToolsResultSchema,
               );
 
-            if (result.tools && result.tools.length > 0) {
-              allServerTools.push(...result.tools);
+              if (result.tools && result.tools.length > 0) {
+                pages.push(...result.tools);
+              }
+
+              cursor = result.nextCursor;
+              hasMore = !!result.nextCursor;
             }
 
-            cursor = result.nextCursor;
-            hasMore = !!result.nextCursor;
-          }
+            return pages;
+          };
+
+          // Invalidate-and-retry-once on session-lost / transport-lost.
+          // Without it a dead pooled session is never evicted from here and
+          // the namespace serves 0 tools as "success" until a manual restart.
+          let activeSession = session;
+          const allServerTools = await requestWithSessionRecovery({
+            pool: mcpServerPool,
+            sessionId: context.sessionId,
+            serverUuid: mcpServerUuid,
+            params,
+            namespaceUuid,
+            operation: "tools/list",
+            serverName,
+            session,
+            attempt: fetchAllToolPages,
+            onFreshSession: (fresh) => {
+              activeSession = fresh;
+            },
+          });
 
           console.log(
             `[DEBUG-TOOLS] ⏱️  Fetched ${allServerTools.length} tools from ${serverName} in ${(performance.now() - toolFetchStart).toFixed(2)}ms`,
@@ -291,7 +398,7 @@ export const createServer = async (
           // Use original tools for client response (middleware will be applied later)
           const toolsWithSource = allServerTools.map((tool) => {
             const toolName = `${sanitizeName(serverName)}__${tool.name}`;
-            toolToClient[toolName] = session;
+            toolToClient[toolName] = activeSession;
             toolToServerUuid[toolName] = mcpServerUuid;
 
             return {
@@ -304,6 +411,7 @@ export const createServer = async (
           allTools.push(...toolsWithSource);
         } catch (error) {
           logger.error(`Error fetching tools from: ${serverName}`, error);
+          failedServers.push(serverName || mcpServerUuid);
         }
       }),
     );
@@ -313,14 +421,21 @@ export const createServer = async (
       `[DEBUG-TOOLS] ✅ tools/list completed in ${totalTime.toFixed(2)}ms, returning ${allTools.length} tools`,
     );
 
+    // Degraded-response tripwire: a server that should have contributed tools
+    // failed even after the recovery retry (or had no session). The response
+    // is still returned (partial truth beats a hard error for the surviving
+    // servers) but the failure must be loud enough for log-based monitoring.
+    if (failedServers.length > 0) {
+      logger.error(
+        `tools/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length}/${allServerEntries.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allTools.length} tools`,
+      );
+    }
+
     return { tools: allTools };
   };
 
   // Original Call Tool Handler
-  const originalCallToolHandler: CallToolHandler = async (
-    request,
-    _context,
-  ) => {
+  const originalCallToolHandler: CallToolHandler = async (request, context) => {
     const { name, arguments: args } = request.params;
 
     // Parse the tool name using shared utility
@@ -344,12 +459,28 @@ export const createServer = async (
           includeInactiveServers,
         );
 
+        // Extract forwarded headers for dynamic tool routing
+        const forwardedHeadersByServer = context.clientRequestHeaders
+          ? extractForwardedHeaders(context.clientRequestHeaders, serverParams)
+          : {};
+
         // Find the server with the matching name prefix
         for (const [mcpServerUuid, params] of Object.entries(serverParams)) {
+          // Merge forwarded headers for this server
+          const effectiveParams = forwardedHeadersByServer[mcpServerUuid]
+            ? {
+                ...params,
+                headers: mergeHeaders(
+                  params.headers,
+                  forwardedHeadersByServer[mcpServerUuid],
+                ),
+              }
+            : params;
+
           const session = await mcpServerPool.getSession(
             sessionId,
             mcpServerUuid,
-            params,
+            effectiveParams,
             namespaceUuid,
           );
 
@@ -369,14 +500,13 @@ export const createServer = async (
                 let hasMore = true;
 
                 while (hasMore && !foundTool) {
-                  const result: z.infer<typeof ListToolsResultSchema> =
-                    await session.client.request(
-                      {
-                        method: "tools/list",
-                        params: { cursor: cursor },
-                      },
-                      ListToolsResultSchema,
-                    );
+                  const result: ListToolsResult = await session.client.request(
+                    {
+                      method: "tools/list",
+                      params: { cursor: cursor },
+                    },
+                    ListToolsResultSchema,
+                  );
 
                   if (
                     result.tools?.some(
@@ -422,23 +552,23 @@ export const createServer = async (
       throw new Error(`Server UUID not found for tool: ${name}`);
     }
 
-    try {
-      const abortController = new AbortController();
+    const abortController = new AbortController();
 
-      // Get configurable timeout values
-      const resetTimeoutOnProgress =
-        await configService.getMcpResetTimeoutOnProgress();
-      const timeout = await configService.getMcpTimeout();
-      const maxTotalTimeout = await configService.getMcpMaxTotalTimeout();
+    // Get configurable timeout values
+    const resetTimeoutOnProgress =
+      await configService.getMcpResetTimeoutOnProgress();
+    const timeout = await configService.getMcpTimeout();
+    const maxTotalTimeout = await configService.getMcpMaxTotalTimeout();
 
-      const mcpRequestOptions: RequestOptions = {
-        signal: abortController.signal,
-        resetTimeoutOnProgress,
-        timeout,
-        maxTotalTimeout,
-      };
-      // Use the correct schema for tool calls
-      const result = await clientForTool.client.request(
+    const mcpRequestOptions: RequestOptions = {
+      signal: abortController.signal,
+      resetTimeoutOnProgress,
+      timeout,
+      maxTotalTimeout,
+    };
+
+    const callOnce = (session: ConnectedClient) =>
+      session.client.request(
         {
           method: "tools/call",
           params: {
@@ -451,16 +581,62 @@ export const createServer = async (
         mcpRequestOptions,
       );
 
-      // Cast the result to CallToolResult type
-      return result as CallToolResult;
+    try {
+      return (await callOnce(clientForTool)) as CallToolResult;
     } catch (error) {
-      logger.error(
-        `Error calling tool "${name}" through ${
-          clientForTool.client.getServerVersion()?.name || "unknown"
-        }:`,
-        error,
+      if (!isBackendSessionLostError(error)) {
+        logger.error(
+          `Error calling tool "${name}" through ${
+            clientForTool.client.getServerVersion()?.name || "unknown"
+          }:`,
+          error,
+        );
+        throw error;
+      }
+
+      logger.warn(
+        `Backend reported session lost for server ${serverUuid} on tool "${name}"; invalidating pool and retrying once.`,
       );
-      throw error;
+
+      await mcpServerPool.invalidateServerConnection(sessionId, serverUuid);
+      delete toolToClient[name];
+
+      const serverParamsMap = await getMcpServers(
+        namespaceUuid,
+        includeInactiveServers,
+      );
+      const params = serverParamsMap[serverUuid];
+      if (!params) {
+        throw new Error(
+          `Cannot re-initialize session: server ${serverUuid} no longer present in namespace ${namespaceUuid}`,
+        );
+      }
+
+      const freshSession = await mcpServerPool.getSession(
+        sessionId,
+        serverUuid,
+        params,
+        namespaceUuid,
+      );
+      if (!freshSession) {
+        throw new Error(
+          `Failed to re-initialize session for server ${serverUuid} after backend session loss`,
+        );
+      }
+
+      toolToClient[name] = freshSession;
+
+      try {
+        return (await callOnce(freshSession)) as CallToolResult;
+      } catch (retryError) {
+        logger.error(
+          `Error calling tool "${name}" through ${
+            freshSession.client.getServerVersion()?.name || "unknown"
+          } after session re-initialize:`,
+          retryError,
+        );
+        throw retryError;
+      }
     }
   };
 
@@ -477,6 +653,7 @@ export const createServer = async (
   )(originalListToolsHandler);
 
   const callToolWithMiddleware = compose(
+    createAuditCallToolMiddleware({ resolveToolIdentity }),
     createFilterCallToolMiddleware({
       cacheEnabled: true,
       customErrorMessage: (toolName, reason) =>
@@ -484,16 +661,37 @@ export const createServer = async (
     }),
     createToolOverridesCallToolMiddleware({ cacheEnabled: true }),
     // Add more middleware here as needed
-    // createAuditingMiddleware(),
     // createAuthorizationMiddleware(),
   )(originalCallToolHandler);
 
   // Set up the handlers with middleware
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-    return await listToolsWithMiddleware(request, handlerContext);
+    const result = await listToolsWithMiddleware(request, handlerContext);
+    const adminContext = getAdminToolsContext(handlerContext.sessionId);
+
+    if (adminContext?.enabled && adminContext.userId) {
+      result.tools.push(...getAdminToolsForMcp());
+    }
+
+    return result;
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    if (isExposedAdminToolName(request.params.name)) {
+      const adminContext = getAdminToolsContext(handlerContext.sessionId);
+      if (!adminContext?.enabled || !adminContext.userId) {
+        throw new Error(
+          `Access denied to MetaMCP admin tool: ${request.params.name}`,
+        );
+      }
+
+      return executeAdminTool(
+        request.params.name,
+        adminContext.userId,
+        request.params.arguments,
+      );
+    }
+
     return await callToolWithMiddleware(request, handlerContext);
   });
 
@@ -544,7 +742,16 @@ export const createServer = async (
       namespaceUuid,
       includeInactiveServers,
     );
-    const allPrompts: z.infer<typeof ListPromptsResultSchema>["prompts"] = [];
+    const allPrompts: ListPromptsResult["prompts"] = [];
+    const failedServers: string[] = [];
+
+    // Extract forwarded headers from client request for servers that need them
+    const forwardedHeadersByServer = handlerContext.clientRequestHeaders
+      ? extractForwardedHeaders(
+          handlerContext.clientRequestHeaders,
+          serverParams,
+        )
+      : {};
 
     // Track visited servers to detect circular references - reset on each call
     const visitedServers = new Set<string>();
@@ -576,13 +783,30 @@ export const createServer = async (
 
     await Promise.allSettled(
       validPromptServers.map(async ([uuid, params]) => {
+        // Merge forwarded headers into server params for this session
+        const effectiveParams = forwardedHeadersByServer[uuid]
+          ? {
+              ...params,
+              headers: mergeHeaders(
+                params.headers,
+                forwardedHeadersByServer[uuid],
+              ),
+            }
+          : params;
+
         const session = await mcpServerPool.getSession(
           sessionId,
           uuid,
-          params,
+          effectiveParams,
           namespaceUuid,
         );
-        if (!session) return;
+        if (!session) {
+          logger.error(
+            `prompts/list: no session available for server ${params.name || uuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
+          );
+          failedServers.push(params.name || uuid);
+          return;
+        }
 
         // Now check for self-referencing using the actual MCP server name
         const serverVersion = session.client.getServerVersion();
@@ -603,21 +827,36 @@ export const createServer = async (
         const serverName =
           params.name || session.client.getServerVersion()?.name || "";
         try {
-          const result = await session.client.request(
-            {
-              method: "prompts/list",
-              params: {
-                cursor: request.params?.cursor,
-                _meta: request.params?._meta,
-              },
+          let activeSession = session;
+          const result = await requestWithSessionRecovery({
+            pool: mcpServerPool,
+            sessionId,
+            serverUuid: uuid,
+            params,
+            namespaceUuid,
+            operation: "prompts/list",
+            serverName,
+            session,
+            attempt: (active) =>
+              active.client.request(
+                {
+                  method: "prompts/list",
+                  params: {
+                    cursor: request.params?.cursor,
+                    _meta: request.params?._meta,
+                  },
+                },
+                ListPromptsResultSchema,
+              ),
+            onFreshSession: (fresh) => {
+              activeSession = fresh;
             },
-            ListPromptsResultSchema,
-          );
+          });
 
           if (result.prompts) {
             const promptsWithSource = result.prompts.map((prompt) => {
               const promptName = `${sanitizeName(serverName)}__${prompt.name}`;
-              promptToClient[promptName] = session;
+              promptToClient[promptName] = activeSession;
               return {
                 ...prompt,
                 name: promptName,
@@ -628,9 +867,16 @@ export const createServer = async (
           }
         } catch (error) {
           logger.error(`Error fetching prompts from: ${serverName}`, error);
+          failedServers.push(serverName || uuid);
         }
       }),
     );
+
+    if (failedServers.length > 0) {
+      logger.error(
+        `prompts/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allPrompts.length} prompts`,
+      );
+    }
 
     return {
       prompts: allPrompts,
@@ -644,8 +890,16 @@ export const createServer = async (
       namespaceUuid,
       includeInactiveServers,
     );
-    const allResources: z.infer<typeof ListResourcesResultSchema>["resources"] =
-      [];
+    const allResources: ListResourcesResult["resources"] = [];
+    const failedServers: string[] = [];
+
+    // Extract forwarded headers from client request for servers that need them
+    const forwardedHeadersByServer = handlerContext.clientRequestHeaders
+      ? extractForwardedHeaders(
+          handlerContext.clientRequestHeaders,
+          serverParams,
+        )
+      : {};
 
     // Track visited servers to detect circular references - reset on each call
     const visitedServers = new Set<string>();
@@ -677,13 +931,30 @@ export const createServer = async (
 
     await Promise.allSettled(
       validResourceServers.map(async ([uuid, params]) => {
+        // Merge forwarded headers into server params for this session
+        const effectiveParams = forwardedHeadersByServer[uuid]
+          ? {
+              ...params,
+              headers: mergeHeaders(
+                params.headers,
+                forwardedHeadersByServer[uuid],
+              ),
+            }
+          : params;
+
         const session = await mcpServerPool.getSession(
           sessionId,
           uuid,
-          params,
+          effectiveParams,
           namespaceUuid,
         );
-        if (!session) return;
+        if (!session) {
+          logger.error(
+            `resources/list: no session available for server ${params.name || uuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
+          );
+          failedServers.push(params.name || uuid);
+          return;
+        }
 
         // Now check for self-referencing using the actual MCP server name
         const serverVersion = session.client.getServerVersion();
@@ -704,20 +975,35 @@ export const createServer = async (
         const serverName =
           params.name || session.client.getServerVersion()?.name || "";
         try {
-          const result = await session.client.request(
-            {
-              method: "resources/list",
-              params: {
-                cursor: request.params?.cursor,
-                _meta: request.params?._meta,
-              },
+          let activeSession = session;
+          const result = await requestWithSessionRecovery({
+            pool: mcpServerPool,
+            sessionId,
+            serverUuid: uuid,
+            params,
+            namespaceUuid,
+            operation: "resources/list",
+            serverName,
+            session,
+            attempt: (active) =>
+              active.client.request(
+                {
+                  method: "resources/list",
+                  params: {
+                    cursor: request.params?.cursor,
+                    _meta: request.params?._meta,
+                  },
+                },
+                ListResourcesResultSchema,
+              ),
+            onFreshSession: (fresh) => {
+              activeSession = fresh;
             },
-            ListResourcesResultSchema,
-          );
+          });
 
           if (result.resources) {
             const resourcesWithSource = result.resources.map((resource) => {
-              resourceToClient[resource.uri] = session;
+              resourceToClient[resource.uri] = activeSession;
               return {
                 ...resource,
                 name: resource.name || "",
@@ -727,9 +1013,16 @@ export const createServer = async (
           }
         } catch (error) {
           logger.error(`Error fetching resources from: ${serverName}`, error);
+          failedServers.push(serverName || uuid);
         }
       }),
     );
+
+    if (failedServers.length > 0) {
+      logger.error(
+        `resources/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allResources.length} resources`,
+      );
+    }
 
     return {
       resources: allResources,
@@ -777,11 +1070,20 @@ export const createServer = async (
         includeInactiveServers,
       );
       const allTemplates: ResourceTemplate[] = [];
+      const failedServers: string[] = [];
 
       // Track visited servers to detect circular references - reset on each call
       const visitedServers = new Set<string>();
 
       // Filter out self-referencing servers before processing
+      // Extract forwarded headers from client request for servers that need them
+      const forwardedHeadersByServer = handlerContext.clientRequestHeaders
+        ? extractForwardedHeaders(
+            handlerContext.clientRequestHeaders,
+            serverParams,
+          )
+        : {};
+
       const validTemplateServers = Object.entries(serverParams).filter(
         ([uuid, params]) => {
           // Skip if we've already visited this server to prevent circular references
@@ -808,13 +1110,30 @@ export const createServer = async (
 
       await Promise.allSettled(
         validTemplateServers.map(async ([uuid, params]) => {
+          // Merge forwarded headers into server params for this session
+          const effectiveParams = forwardedHeadersByServer[uuid]
+            ? {
+                ...params,
+                headers: mergeHeaders(
+                  params.headers,
+                  forwardedHeadersByServer[uuid],
+                ),
+              }
+            : params;
+
           const session = await mcpServerPool.getSession(
             sessionId,
             uuid,
-            params,
+            effectiveParams,
             namespaceUuid,
           );
-          if (!session) return;
+          if (!session) {
+            logger.error(
+              `resources/templates/list: no session available for server ${params.name || uuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
+            );
+            failedServers.push(params.name || uuid);
+            return;
+          }
 
           // Now check for self-referencing using the actual MCP server name
           const serverVersion = session.client.getServerVersion();
@@ -835,16 +1154,30 @@ export const createServer = async (
             params.name || session.client.getServerVersion()?.name || "";
 
           try {
-            const result = await session.client.request(
-              {
-                method: "resources/templates/list",
-                params: {
-                  cursor: request.params?.cursor,
-                  _meta: request.params?._meta,
-                },
-              },
-              ListResourceTemplatesResultSchema,
-            );
+            // No per-client map to repoint here (templates aren't keyed to a
+            // client), so onFreshSession is omitted — the recovery still
+            // invalidates + retries on the fresh session.
+            const result = await requestWithSessionRecovery({
+              pool: mcpServerPool,
+              sessionId,
+              serverUuid: uuid,
+              params,
+              namespaceUuid,
+              operation: "resources/templates/list",
+              serverName,
+              session,
+              attempt: (active) =>
+                active.client.request(
+                  {
+                    method: "resources/templates/list",
+                    params: {
+                      cursor: request.params?.cursor,
+                      _meta: request.params?._meta,
+                    },
+                  },
+                  ListResourceTemplatesResultSchema,
+                ),
+            });
 
             if (result.resourceTemplates) {
               const templatesWithSource = result.resourceTemplates.map(
@@ -860,10 +1193,17 @@ export const createServer = async (
               `Error fetching resource templates from: ${serverName}`,
               error,
             );
+            failedServers.push(serverName || uuid);
             return;
           }
         }),
       );
+
+      if (failedServers.length > 0) {
+        logger.error(
+          `resources/templates/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allTemplates.length} templates`,
+        );
+      }
 
       return {
         resourceTemplates: allTemplates,
@@ -877,5 +1217,5 @@ export const createServer = async (
     await mcpServerPool.cleanupSession(sessionId);
   };
 
-  return { server, cleanup };
+  return { server, cleanup, internalSessionId: sessionId };
 };

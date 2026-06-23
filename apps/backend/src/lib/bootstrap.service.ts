@@ -989,7 +989,7 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
   console.log("🔧 Setting registration controls...");
   try {
     await upsertConfig(
-      ConfigKeyEnum.Enum.DISABLE_SIGNUP,
+      ConfigKeyEnum.enum.DISABLE_SIGNUP,
       config.disableUiRegistration.toString(),
       "Whether new user signup is disabled",
     );
@@ -999,7 +999,7 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
 
   try {
     await upsertConfig(
-      ConfigKeyEnum.Enum.DISABLE_SSO_SIGNUP,
+      ConfigKeyEnum.enum.DISABLE_SSO_SIGNUP,
       config.disableSsoRegistration.toString(),
       "Whether new user signup via SSO/OAuth is disabled",
     );

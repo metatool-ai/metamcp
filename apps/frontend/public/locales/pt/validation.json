@@ -1,0 +1,68 @@
+{
+  "required": "Este campo é obrigatório",
+  "nameRequired": "O nome é obrigatório",
+  "minLength": "Deve ter pelo menos {{min}} caracteres",
+  "maxLength": "Deve ter no máximo {{max}} caracteres",
+  "email": "Por favor, insira um endereço de email válido",
+  "urlFormat": "Por favor, insira uma URL válida",
+  "invalidFormat": "Formato inválido",
+  "serverName": {
+    "required": "O nome do server é obrigatório",
+    "invalidCharacters": "O nome do server deve conter apenas letras, números, underscores e hifens",
+    "consecutiveUnderscores": "O nome do server não pode conter underscores consecutivos",
+    "alreadyExists": "O nome do server já existe. Nomes de server devem ser únicos dentro do seu escopo."
+  },
+  "command": {
+    "required": "O comando é obrigatório para servers stdio",
+    "invalidCommand": "Por favor, insira um comando válido"
+  },
+  "url": {
+    "required": "A URL é obrigatória para tipos SSE e Streamable HTTP",
+    "invalidUrl": "A URL deve ser válida para tipos SSE e Streamable HTTP"
+  },
+  "namespaceName": {
+    "required": "O nome do namespace é obrigatório",
+    "invalidCharacters": "O nome do namespace deve conter apenas letras, números, underscores e hifens"
+  },
+  "endpointName": {
+    "required": "O nome do endpoint é obrigatório",
+    "invalidCharacters": "O nome do endpoint deve ser compatível com URL",
+    "urlCompatible": "O nome deve ser compatível com URL"
+  },
+  "apiKeyName": {
+    "required": "O nome da API key é obrigatório"
+  },
+  "description": {
+    "tooLong": "A descrição é muito longa"
+  },
+  "password": {
+    "tooShort": "A senha deve ter pelo menos 8 caracteres",
+    "mismatch": "As senhas não coincidem"
+  },
+  "generic": {
+    "invalid": "Valor inválido",
+    "required": "Este campo é obrigatório",
+    "tooShort": "Muito curto",
+    "tooLong": "Muito longo"
+  },
+  "maxRateSeconds": {
+    "required": "Os segundos da taxa máxima são obrigatórios",
+    "tooSmall": "A taxa máxima deve ser maior que 0",
+    "tooLarge": "A taxa máxima deve ser menor que 1000000"
+  },
+  "maxRate": {
+    "required": "A taxa máxima é obrigatória",
+    "tooSmall": "A taxa máxima deve ser maior que 0",
+    "tooLarge": "A taxa máxima deve ser menor que 1000000"
+  },
+  "clientMaxRateSeconds": {
+    "required": "Os segundos da taxa máxima são obrigatórios",
+    "tooSmall": "A taxa máxima deve ser maior que 0",
+    "tooLarge": "A taxa máxima deve ser menor que 1000000"
+  },
+  "clientMaxRate": {
+    "required": "A taxa máxima é obrigatória",
+    "tooSmall": "A taxa máxima deve ser maior que 0",
+    "tooLarge": "A taxa máxima deve ser menor que 1000000"
+  }
+}

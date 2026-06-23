@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${METAMCP_NAMESPACE}
+  labels:
+    app.kubernetes.io/name: metamcp
+    app.kubernetes.io/part-of: metamcp

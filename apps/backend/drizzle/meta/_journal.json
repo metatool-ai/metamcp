@@ -99,6 +99,41 @@
       "when": 1766064780578,
       "tag": "0013_late_lilith",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1781435153166,
+      "tag": "0014_oauth_refresh_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1781435337003,
+      "tag": "0015_forward_headers",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1781439008290,
+      "tag": "0016_metamcp_admin_tools",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1781439722147,
+      "tag": "0017_audit_public_tool_calls",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1781531857640,
+      "tag": "0018_oauth_expected_state",
+      "breakpoints": true
     }
   ]
 }

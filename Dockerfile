@@ -69,7 +69,7 @@ RUN apt-get update && apt-get install -y curl postgresql-client && apt-get clean
 # Create non-root user with proper home directory
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 --home /home/nextjs nextjs && \
-    mkdir -p /home/nextjs/.cache/node/corepack && \
+    mkdir -p /home/nextjs/.cache/node/corepack /home/nextjs/.cache/uv && \
     chown -R nextjs:nodejs /home/nextjs
 
 # Copy built applications

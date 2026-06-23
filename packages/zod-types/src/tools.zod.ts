@@ -12,7 +12,7 @@ export const ToolSchema = z.object({
   description: z.string().nullable(),
   toolSchema: z.object({
     type: z.literal("object"),
-    properties: z.record(z.any()).optional(),
+    properties: z.record(z.string(), z.any()).optional(),
     required: z.array(z.string()).optional(),
   }),
   created_at: z.string().datetime(),
@@ -42,7 +42,7 @@ export const CreateToolRequestSchema = z.object({
       description: z.string().optional(),
       inputSchema: z.object({
         type: z.literal("object").optional(),
-        properties: z.record(z.any()).optional(),
+        properties: z.record(z.string(), z.any()).optional(),
         required: z.array(z.string()).optional(),
       }),
     }),
@@ -73,7 +73,7 @@ export const ToolCreateInputSchema = z.object({
   description: z.string().nullable().optional(),
   toolSchema: z.object({
     type: z.literal("object"),
-    properties: z.record(z.any()).optional(),
+    properties: z.record(z.string(), z.any()).optional(),
     required: z.array(z.string()).optional(),
   }),
   mcp_server_uuid: z.string(),
@@ -86,7 +86,7 @@ export const ToolUpsertInputSchema = z.object({
       description: z.string().nullable().optional(),
       inputSchema: z
         .object({
-          properties: z.record(z.any()).optional(),
+          properties: z.record(z.string(), z.any()).optional(),
           required: z.array(z.string()).optional(),
         })
         .optional(),
@@ -106,7 +106,7 @@ export const DatabaseToolSchema = z.object({
   description: z.string().nullable(),
   toolSchema: z.object({
     type: z.literal("object"),
-    properties: z.record(z.any()).optional(),
+    properties: z.record(z.string(), z.any()).optional(),
     required: z.array(z.string()).optional(),
   }),
   created_at: z.date(),

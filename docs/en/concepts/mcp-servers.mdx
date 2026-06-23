@@ -178,6 +178,90 @@ For servers requiring authentication:
 ```
 </CodeGroup>
 
+### OAuth Token Exchange
+
+MetaMCP performs the OAuth authorization-code → token exchange (and any
+subsequent refresh) **server-to-server, from the MetaMCP backend**. The
+browser only handles the parts of the OAuth flow that have to happen there
+(building the authorize URL, the redirect to the upstream consent screen,
+and parsing the redirect query string).
+
+This is transparent to users: you click "Authenticate" on an MCP server, get
+redirected to the upstream provider, sign in, and come back to MetaMCP. The
+only visible change is that providers which return tokens without CORS
+headers — Salesforce, Okta, Auth0, Microsoft Entra, ServiceNow, Stripe, ...
+— now work end-to-end. Previously the upstream POST succeeded on the wire
+but the browser blocked the response body, leaving tokens unpersisted and
+re-triggering the authorize flow on every click.
+
+If the token exchange fails, the callback page now shows the upstream's
+real `error` / `error_description` values instead of a generic
+"Failed to fetch". See the [OAuth
+troubleshooting](/troubleshooting/oauth-troubleshooting#issue-5-upstream-returns-invalid_client-on-register)
+page for diagnostics.
+
+### Pre-registered OAuth Clients
+
+By default, MetaMCP attempts **RFC 7591 Dynamic Client Registration** when an
+upstream MCP server protected by OAuth returns `401` with a
+`WWW-Authenticate` challenge. Most upstreams (Notion, Linear, GitHub Copilot,
+public demo servers) support this and require zero extra configuration.
+
+Some enterprise SaaS providers — for example **Salesforce Hosted MCP**,
+Zendesk, ServiceNow, and Microsoft Graph — do **not** implement RFC 7591 and
+require you to register a client out-of-band, then plug the resulting
+`client_id` (and optionally `client_secret`) into MetaMCP.
+
+For those upstreams, expand the **"Pre-registered OAuth client (advanced)"**
+section when you create or edit an SSE / Streamable HTTP MCP server, and
+fill in:
+
+| Field | Description |
+| --- | --- |
+| `client_id` | The client identifier issued by the upstream's Connected App / OAuth app. Required when any other field in this section is set. |
+| `client_secret` | Confidential clients only. Public PKCE clients can leave this blank. |
+| `authorization_endpoint` | The upstream's `/authorize` URL. Most servers advertise this via the `.well-known/oauth-authorization-server` document and you can leave this blank. |
+| `token_endpoint` | The upstream's `/token` URL. Same caveat as above. |
+| `scope` | Space-separated OAuth scopes (e.g. `api refresh_token offline_access`). |
+| `token_endpoint_auth_method` | `none` (default), `client_secret_basic`, or `client_secret_post`. |
+
+MetaMCP **derives the `redirect_uri` server-side** from `APP_URL +
+"/fe-oauth/callback"`. You configure that exact value as one of the
+allowed callback URLs on your upstream OAuth app — you do **not** enter it
+in the form.
+
+When `client_id` is set, MetaMCP populates `oauth_sessions.client_information`
+for the server. The MCP SDK reads this **before** attempting dynamic
+registration, so the `/register` POST is skipped and the SDK goes straight
+to the authorization-code-with-PKCE flow.
+
+<Card title="Salesforce Hosted MCP example" icon="cloud">
+```json
+{
+  "name": "Salesforce-MCP",
+  "type": "STREAMABLE_HTTP",
+  "url": "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+  "oauth_client_info": {
+    "client_id": "3MVG9...your-connected-app-consumer-key",
+    "scope": "api refresh_token",
+    "token_endpoint_auth_method": "none"
+  }
+}
+```
+
+Configure your Connected App in Salesforce Setup with
+`https://<your-metamcp-host>/fe-oauth/callback` as a callback URL and the
+PKCE flow enabled for the same scopes.
+</Card>
+
+<Warning>
+Most users should leave the Advanced OAuth section blank. Only fill it in
+when the upstream returns `invalid_client` on `/register` or its docs
+explicitly require pre-registration. See the [OAuth
+troubleshooting](/troubleshooting/oauth-troubleshooting) page for a
+diagnostic walkthrough.
+</Warning>
+
 ### Custom Headers
 
 Add custom HTTP headers to **SSE and Streamable HTTP servers**:

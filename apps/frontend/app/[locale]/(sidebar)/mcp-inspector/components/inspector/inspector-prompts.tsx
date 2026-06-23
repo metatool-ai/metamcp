@@ -1,9 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import {
-  ClientRequest,
   GetPromptResultSchema,
   ListPromptsResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -17,10 +15,10 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MakeRequestFn, SchemaOutput } from "@/hooks/useConnection";
 import { useTranslations } from "@/hooks/useTranslations";
 
 interface Prompt {
@@ -34,15 +32,11 @@ interface Prompt {
 }
 
 // Use the actual MCP SDK types instead of custom interfaces
-type PromptGetResponse = z.infer<typeof GetPromptResultSchema>;
+type PromptGetResponse = SchemaOutput<typeof GetPromptResultSchema>;
 type PromptMessage = PromptGetResponse["messages"][0];
 
 interface InspectorPromptsProps {
-  makeRequest: <T extends z.ZodType>(
-    request: ClientRequest,
-    schema: T,
-    options?: RequestOptions & { suppressToast?: boolean },
-  ) => Promise<z.output<T>>;
+  makeRequest: MakeRequestFn;
   enabled?: boolean;
 }
 
@@ -229,12 +223,16 @@ export function InspectorPrompts({
               <div className="font-mono text-xs break-all">
                 URI: {message.content.resource?.uri}
               </div>
-              {message.content.resource?.text ? (
+              {message.content.resource &&
+              "text" in message.content.resource &&
+              message.content.resource.text ? (
                 <div className="mt-1 text-sm">
                   {String(message.content.resource.text)}
                 </div>
               ) : null}
-              {message.content.resource?.blob ? (
+              {message.content.resource &&
+              "blob" in message.content.resource &&
+              message.content.resource.blob ? (
                 <div className="mt-1 text-xs">
                   [
                   {t("inspector:promptsComponent.binaryData", {

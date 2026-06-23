@@ -20,7 +20,11 @@
 
 </div>
 
-> **📢 Update:** *[From the author: apologize for some recent maintainence delay, but will at least keep merging PRs, more background [here](recent-updates.md)]*
+> 
+
+**📢 Latest Update:** This ai-dev branch will be the forward onging dev branch which contains ai agent changes. Please test before you build the image based on this branch. There has been many PRs thanks to the community but merging and reviewing them has been a growing effort too. I decided to include ai changes. At least so far the core functionality works. There is also a community maintained fork (ty a lot!): https://github.com/Umbrella-IT-Group/metamcp
+
+**📢 Update:** *[From the author: apologize for some recent maintainence delay, but will at least keep merging PRs, more background [here](recent-updates.md)]*
 
 **MetaMCP** is a MCP proxy that lets you dynamically aggregate MCP servers into a unified MCP server, and apply middlewares. MetaMCP itself is a MCP server so it can be easily plugged into **ANY** MCP clients.
 
@@ -30,7 +34,7 @@
 
 For more details, consider visiting our documentation site: https://docs.metamcp.com
 
-English | [中文](./README_cn.md)
+English | [简体中文](./README_cn.md)
 ## 📋 Table of Contents <!-- omit in toc -->
 
 - [🎯 Use Cases](#-use-cases)

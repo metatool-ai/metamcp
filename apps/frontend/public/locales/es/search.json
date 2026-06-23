@@ -1,0 +1,79 @@
+{
+  "title": "Explorar y Buscar MCP Servers (Beta)",
+  "searchPlaceholder": "Buscar...",
+  "loading": "Cargando...",
+  "error": "Error",
+  "noResults": "No se encontraron resultados",
+  "searchResults": "Resultados de Búsqueda",
+  "resultsCount": "{{count}} resultados encontrados",
+  "previousPage": "Anterior",
+  "nextPage": "Siguiente",
+  "page": "Página {{current}} de {{total}}",
+  "searchError": "Ocurrió un error durante la búsqueda. Por favor, intente nuevamente.",
+  "tryAgain": "Intentar nuevamente",
+  "clearSearch": "Limpiar búsqueda",
+  "searchHint": "Ingrese palabras clave para buscar MCP servers",
+  "popularServers": "Servers Populares",
+  "recentServers": "Servers Recientes",
+  "categories": "Categorías",
+  "filters": "Filtros",
+  "sortBy": "Ordenar por",
+  "relevance": "Relevancia",
+  "created": "Creado",
+  "updated": "Actualizado",
+  "rating": "Valoración",
+  "card": {
+    "package": "Paquete:",
+    "command": "Comando:",
+    "args": "Args:",
+    "envVars": "Variables de Entorno:",
+    "registry": "Registro:",
+    "github": "GitHub",
+    "addServer": "Agregar Server"
+  },
+  "dialog": {
+    "title": "Crear MCP Server",
+    "description": "Configure un nuevo server Model Context Protocol.",
+    "form": {
+      "name": "Nombre",
+      "description": "Descripción",
+      "type": "Tipo",
+      "command": "Comando",
+      "arguments": "Argumentos",
+      "envVars": "Variables de Entorno",
+      "url": "URL",
+      "bearerToken": "Bearer Token (Opcional)",
+      "ownershipLabel": "Propiedad",
+      "placeholders": {
+        "name": "Ingrese el nombre del server",
+        "description": "Ingrese la descripción del server",
+        "selectType": "Seleccione el tipo",
+        "command": "ej: npx",
+        "arguments": "Argumentos separados por espacio",
+        "envVars": "CLAVE=valor (una por línea)",
+        "url": "https://example.com",
+        "bearerToken": "Bearer token"
+      },
+      "ownership": {
+        "private": "Para mí (Privado)",
+        "public": "Todos (Público)",
+        "helpText": "Los servers privados solo son accesibles para usted. Los servers públicos son accesibles para todos los usuarios."
+      }
+    },
+    "buttons": {
+      "cancel": "Cancelar",
+      "create": "Crear Server",
+      "creating": "Creando..."
+    },
+    "messages": {
+      "success": "MCP Server Creado",
+      "successDescription": "Server \"{{name}}\" creado exitosamente",
+      "nameExists": "El Nombre del Server Ya Existe",
+      "nameExistsDescription": "Por favor, elija un nombre diferente para el server",
+      "invalidName": "Nombre de Server Inválido",
+      "invalidNameDescription": "Los nombres de server solo deben contener letras, números, guiones bajos y guiones",
+      "createFailed": "Error al Crear Server",
+      "unexpectedError": "Ocurrió un error inesperado"
+    }
+  }
+}

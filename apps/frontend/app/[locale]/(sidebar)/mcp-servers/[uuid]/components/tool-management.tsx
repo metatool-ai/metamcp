@@ -1,17 +1,13 @@
 "use client";
 
-import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import {
-  ClientRequest,
-  ListToolsResultSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { Tool } from "@repo/zod-types";
 import { AlertTriangle, Database, RefreshCw, Wrench } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { MakeRequestFn } from "@/hooks/useConnection";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 
@@ -36,11 +32,7 @@ interface ToolsListResponse {
 
 interface ToolManagementProps {
   mcpServerUuid: string;
-  makeRequest: <T extends z.ZodType>(
-    request: ClientRequest,
-    schema: T,
-    options?: RequestOptions & { suppressToast?: boolean },
-  ) => Promise<z.output<T>>;
+  makeRequest: MakeRequestFn;
 }
 
 export function ToolManagement({
@@ -94,11 +86,8 @@ export function ToolManagement({
       const allTools: MCPTool[] = [];
       let cursor: string | undefined = undefined;
       let hasMore = true;
-      let pageCount = 0;
 
       while (hasMore) {
-        pageCount++;
-
         const response = (await makeRequest(
           {
             method: "tools/list" as const,

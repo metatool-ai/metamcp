@@ -359,9 +359,9 @@ export function EnhancedNamespaceToolsTable({
     }
 
     const newStatus =
-      tool.status === ToolStatusEnum.Enum.ACTIVE
-        ? ToolStatusEnum.Enum.INACTIVE
-        : ToolStatusEnum.Enum.ACTIVE;
+      tool.status === ToolStatusEnum.enum.ACTIVE
+        ? ToolStatusEnum.enum.INACTIVE
+        : ToolStatusEnum.enum.ACTIVE;
 
     updateToolStatusMutation.mutate({
       namespaceUuid,

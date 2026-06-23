@@ -1,7 +1,5 @@
 "use client";
 
-import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import { ClientRequest } from "@modelcontextprotocol/sdk/types.js";
 import {
   ActivitySquare,
   FileText,
@@ -12,9 +10,9 @@ import {
   Zap,
 } from "lucide-react";
 import { useState } from "react";
-import { z } from "zod";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MakeRequestFn } from "@/hooks/useConnection";
 import { useTranslations } from "@/hooks/useTranslations";
 
 import { InspectorPing } from "./inspector/inspector-ping";
@@ -26,11 +24,7 @@ import { InspectorTools } from "./inspector/inspector-tools";
 
 interface InspectorProps {
   mcpServerUuid: string;
-  makeRequest: <T extends z.ZodType>(
-    request: ClientRequest,
-    schema: T,
-    options?: RequestOptions & { suppressToast?: boolean },
-  ) => Promise<z.output<T>>;
+  makeRequest: MakeRequestFn;
   serverCapabilities?: Record<string, unknown> | null;
 }
 

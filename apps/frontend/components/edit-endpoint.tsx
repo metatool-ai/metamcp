@@ -125,6 +125,7 @@ export function EditEndpoint({
       clientMaxRateStrategyKey: "",
       enableOauth: false,
       useQueryParamAuth: false,
+      enableMetamcpAdminTools: false,
     },
   });
 
@@ -146,6 +147,7 @@ export function EditEndpoint({
         clientMaxRateStrategyKey: endpoint.clientMaxRateStrategyKey,
         enableOauth: endpoint.enable_oauth ?? false,
         useQueryParamAuth: endpoint.use_query_param_auth ?? false,
+        enableMetamcpAdminTools: endpoint.enable_metamcp_admin_tools ?? false,
       });
       setSelectedNamespaceUuid(endpoint.namespace.uuid);
       setSelectedNamespaceName(endpoint.namespace.name);
@@ -186,6 +188,7 @@ export function EditEndpoint({
         clientMaxRateStrategyKey: data.clientMaxRateStrategyKey,
         enableOauth: data.enableOauth,
         useQueryParamAuth: data.useQueryParamAuth,
+        enableMetamcpAdminTools: data.enableMetamcpAdminTools,
       };
       // Use tRPC mutation
       updateEndpointMutation.mutate(apiPayload);
@@ -628,6 +631,33 @@ export function EditEndpoint({
                   </p>
                 </div>
               )}
+            </div>
+
+            <div className="space-y-4 border-t pt-4">
+              <h4 className="text-sm font-medium">
+                {t("endpoints:edit.adminToolsSection")}
+              </h4>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-medium">
+                    {t("endpoints:edit.enableMetamcpAdminToolsLabel")}
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("endpoints:edit.enableMetamcpAdminToolsDescription")}
+                  </p>
+                </div>
+                <Switch
+                  checked={editForm.watch("enableMetamcpAdminTools")}
+                  onCheckedChange={(checked) =>
+                    editForm.setValue("enableMetamcpAdminTools", checked)
+                  }
+                  disabled={
+                    isUpdating ||
+                    (!editForm.watch("enableApiKeyAuth") &&
+                      !editForm.watch("enableOauth"))
+                  }
+                />
+              </div>
             </div>
           </div>
 
