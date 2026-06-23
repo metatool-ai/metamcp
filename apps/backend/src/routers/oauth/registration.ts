@@ -6,6 +6,7 @@ import { oauthRepository } from "../../db/repositories";
 import {
   generateSecureClientId,
   generateSecureClientSecret,
+  getBaseUrl,
   rateLimitToken,
   validateRedirectUri,
 } from "./utils";
@@ -152,7 +153,7 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
     await oauthRepository.upsertClient(clientRegistration);
 
     // Prepare response according to RFC 7591 with OAuth 2.1 guidance
-    const baseUrl = req.protocol + "://" + req.get("host");
+    const baseUrl = getBaseUrl(req);
     const response: Record<string, unknown> = {
       client_id: clientId,
       client_name: clientRegistration.client_name,
@@ -209,7 +210,7 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
  */
 registrationRouter.get("/oauth/register", async (req, res) => {
   try {
-    const baseUrl = req.protocol + "://" + req.get("host");
+    const baseUrl = getBaseUrl(req);
 
     res.json({
       registration_endpoint: `${baseUrl}/oauth/register`,
