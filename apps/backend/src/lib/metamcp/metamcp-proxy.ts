@@ -35,6 +35,7 @@ import {
 } from "../admin-mcp/tools-registry";
 import { configService } from "../config.service";
 import { ConnectedClient } from "./client";
+import { createDownstreamSessionUnavailableError } from "./downstream-session-error";
 import { getMcpServers } from "./fetch-metamcp";
 import { extractForwardedHeaders, mergeHeaders } from "./header-forwarding";
 import { requestWithSessionRecovery } from "./list-handler-recovery";
@@ -449,6 +450,7 @@ export const createServer = async (
     // Try to find the tool in pre-populated mappings first
     let clientForTool = toolToClient[name];
     let serverUuid = toolToServerUuid[name];
+    let unavailableServerLabel: string | undefined;
 
     // If not found in mappings, dynamically find the server and route the call
     if (!clientForTool || !serverUuid) {
@@ -477,65 +479,90 @@ export const createServer = async (
               }
             : params;
 
-          const session = await mcpServerPool.getSession(
-            sessionId,
-            mcpServerUuid,
-            effectiveParams,
-            namespaceUuid,
-          );
+          const configuredServerName = params.name || "";
+          const configuredNameMatches = configuredServerName
+            ? sanitizeName(configuredServerName) === serverPrefix
+            : false;
 
-          if (session) {
-            const capabilities = session.client.getServerCapabilities();
-            if (!capabilities?.tools) continue;
+          let session: ConnectedClient | undefined;
+          try {
+            session = await mcpServerPool.getSession(
+              sessionId,
+              mcpServerUuid,
+              effectiveParams,
+              namespaceUuid,
+            );
+          } catch (error) {
+            if (configuredNameMatches) {
+              unavailableServerLabel = `${configuredServerName} (${mcpServerUuid})`;
+            }
+            logger.error(
+              `Error getting session for server ${configuredServerName || mcpServerUuid}:`,
+              error,
+            );
+            continue;
+          }
 
-            // Use name assigned by user, fallback to name from server
-            const serverName =
-              params.name || session.client.getServerVersion()?.name || "";
+          if (!session) {
+            if (configuredNameMatches) {
+              unavailableServerLabel = `${configuredServerName} (${mcpServerUuid})`;
+            }
+            continue;
+          }
 
-            if (sanitizeName(serverName) === serverPrefix) {
-              // Found the server, now check if it has this tool with pagination
-              try {
-                let foundTool = false;
-                let cursor: string | undefined = undefined;
-                let hasMore = true;
+          const capabilities = session.client.getServerCapabilities();
+          if (!capabilities?.tools) continue;
 
-                while (hasMore && !foundTool) {
-                  const result: ListToolsResult = await session.client.request(
-                    {
-                      method: "tools/list",
-                      params: { cursor: cursor },
-                    },
-                    ListToolsResultSchema,
-                  );
+          // Use name assigned by user, fallback to name from server
+          const serverName =
+            params.name || session.client.getServerVersion()?.name || "";
 
-                  if (
-                    result.tools?.some(
-                      (tool: Tool) => tool.name === originalToolName,
-                    )
-                  ) {
-                    foundTool = true;
-                    // Tool exists, populate mappings for future use and use it
-                    clientForTool = session;
-                    serverUuid = mcpServerUuid;
-                    toolToClient[name] = session;
-                    toolToServerUuid[name] = mcpServerUuid;
-                    break;
-                  }
+          if (sanitizeName(serverName) === serverPrefix) {
+            // Found the server, now check if it has this tool with pagination
+            try {
+              let foundTool = false;
+              let cursor: string | undefined = undefined;
+              let hasMore = true;
 
-                  cursor = result.nextCursor;
-                  hasMore = !!result.nextCursor;
-                }
+              while (hasMore && !foundTool) {
+                const result: ListToolsResult = await session.client.request(
+                  {
+                    method: "tools/list",
+                    params: { cursor: cursor },
+                  },
+                  ListToolsResultSchema,
+                );
 
-                if (foundTool) {
+                if (
+                  result.tools?.some(
+                    (tool: Tool) => tool.name === originalToolName,
+                  )
+                ) {
+                  foundTool = true;
+                  // Tool exists, populate mappings for future use and use it
+                  clientForTool = session;
+                  serverUuid = mcpServerUuid;
+                  toolToClient[name] = session;
+                  toolToServerUuid[name] = mcpServerUuid;
                   break;
                 }
-              } catch (error) {
-                logger.error(
-                  `Error checking tools for server ${serverName}:`,
-                  error,
-                );
-                continue;
+
+                cursor = result.nextCursor;
+                hasMore = !!result.nextCursor;
               }
+
+              if (foundTool) {
+                break;
+              }
+            } catch (error) {
+              logger.error(
+                `Error checking tools for server ${serverName}:`,
+                error,
+              );
+              if (isBackendSessionLostError(error)) {
+                unavailableServerLabel = `${serverName} (${mcpServerUuid})`;
+              }
+              continue;
             }
           }
         }
@@ -545,6 +572,12 @@ export const createServer = async (
     }
 
     if (!clientForTool) {
+      if (unavailableServerLabel) {
+        throw createDownstreamSessionUnavailableError(
+          name,
+          unavailableServerLabel,
+        );
+      }
       throw new Error(`Unknown tool: ${name}`);
     }
 

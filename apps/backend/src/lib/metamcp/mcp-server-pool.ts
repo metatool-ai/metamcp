@@ -8,6 +8,19 @@ import { serverRequiresForwardedHeaders } from "./header-forwarding";
 import { metamcpLogStore } from "./log-store";
 import { serverErrorTracker } from "./server-error-tracker";
 
+const DEFAULT_MAX_TOTAL_CONNECTIONS = 100;
+const DEFAULT_MAX_CONNECTIONS_PER_SERVER = 5;
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export interface McpServerPoolStatus {
   idle: number;
   active: number;
@@ -65,11 +78,14 @@ export class McpServerPool {
 
   private constructor(
     defaultIdleCount: number = 1,
-    maxTotalConnections: number = parseInt(
-      process.env.MAX_TOTAL_CONNECTIONS || "100",
-      10,
+    maxTotalConnections: number = readPositiveIntEnv(
+      "MAX_TOTAL_CONNECTIONS",
+      DEFAULT_MAX_TOTAL_CONNECTIONS,
     ),
-    maxConnectionsPerServer: number = 5,
+    maxConnectionsPerServer: number = readPositiveIntEnv(
+      "MAX_CONNECTIONS_PER_SERVER",
+      DEFAULT_MAX_CONNECTIONS_PER_SERVER,
+    ),
   ) {
     this.defaultIdleCount = defaultIdleCount;
     this.maxTotalConnections = maxTotalConnections;
@@ -83,11 +99,16 @@ export class McpServerPool {
    */
   static getInstance(
     defaultIdleCount: number = 1,
-    maxConnectionsPerServer: number = 5,
+    maxConnectionsPerServer: number = readPositiveIntEnv(
+      "MAX_CONNECTIONS_PER_SERVER",
+      DEFAULT_MAX_CONNECTIONS_PER_SERVER,
+    ),
   ): McpServerPool {
     if (!McpServerPool.instance) {
-      const envMax = parseInt(process.env.MAX_TOTAL_CONNECTIONS || "", 10);
-      const maxConn = Number.isFinite(envMax) && envMax > 0 ? envMax : 100;
+      const maxConn = readPositiveIntEnv(
+        "MAX_TOTAL_CONNECTIONS",
+        DEFAULT_MAX_TOTAL_CONNECTIONS,
+      );
       McpServerPool.instance = new McpServerPool(
         defaultIdleCount,
         maxConn,
@@ -165,6 +186,18 @@ export class McpServerPool {
   }
 
   /**
+   * Remove bookkeeping for a session that never obtained any server connection.
+   */
+  private cleanupEmptySession(sessionId: string): void {
+    const sessionServers = this.activeSessions[sessionId];
+    if (sessionServers && Object.keys(sessionServers).length === 0) {
+      delete this.activeSessions[sessionId];
+      delete this.sessionToServers[sessionId];
+      delete this.sessionTimestamps[sessionId];
+    }
+  }
+
+  /**
    * Get or create a session for a specific MCP server
    */
   async getSession(
@@ -224,10 +257,17 @@ export class McpServerPool {
         this.sessionToServers[sessionId].add(serverUuid);
         return reusable;
       }
+
+      logger.warn(
+        `Cannot create connection for server ${serverUuid}: per-server limit ${this.maxConnectionsPerServer} is reached and no reusable active connection is available`,
+      );
+      this.cleanupEmptySession(sessionId);
+      return undefined;
     }
 
     const newClient = await this.createNewConnection(params, namespaceUuid);
     if (!newClient) {
+      this.cleanupEmptySession(sessionId);
       return undefined;
     }
 
@@ -242,6 +282,36 @@ export class McpServerPool {
         );
       });
       return this.activeSessions[sessionId][serverUuid];
+    }
+
+    // Re-check the per-server cap after the async connection attempt. Another
+    // concurrent request may have filled the last slot while we were awaiting
+    // process startup, so this is the final capacity gate before storing.
+    if (!this.canCreateConnectionForServer(serverUuid)) {
+      const reusable = this.findOldestActiveConnectionForServer(serverUuid);
+      if (reusable) {
+        logger.info(
+          `Discarding over-cap connection and reusing existing connection for server ${serverUuid} (at per-server cap ${this.maxConnectionsPerServer})`,
+        );
+        newClient.cleanup().catch((error) => {
+          logger.error(
+            `Error cleaning up over-cap connection for server ${params.uuid}:`,
+            error,
+          );
+        });
+        this.activeSessions[sessionId][serverUuid] = reusable;
+        this.sessionToServers[sessionId].add(serverUuid);
+        return reusable;
+      }
+
+      newClient.cleanup().catch((error) => {
+        logger.error(
+          `Error cleaning up refused over-cap connection for server ${params.uuid}:`,
+          error,
+        );
+      });
+      this.cleanupEmptySession(sessionId);
+      return undefined;
     }
 
     this.activeSessions[sessionId][serverUuid] = newClient;
@@ -725,6 +795,7 @@ export class McpServerPool {
       );
       delete sessionServers[serverUuid];
       this.sessionToServers[sid]?.delete(serverUuid);
+      this.cleanupEmptySession(sid);
     }
 
     const idleClient = this.idleSessions[serverUuid];
@@ -962,6 +1033,7 @@ export class McpServerPool {
         }
         delete sessionServers[serverUuid];
         this.sessionToServers[sessionId]?.delete(serverUuid);
+        this.cleanupEmptySession(sessionId);
       }
     }
   }

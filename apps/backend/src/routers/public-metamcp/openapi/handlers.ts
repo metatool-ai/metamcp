@@ -10,6 +10,7 @@ import logger from "@/utils/logger";
 
 import { configService } from "../../../lib/config.service";
 import { ConnectedClient } from "../../../lib/metamcp";
+import { createDownstreamSessionUnavailableError } from "../../../lib/metamcp/downstream-session-error";
 import { getMcpServers } from "../../../lib/metamcp/fetch-metamcp";
 import { mcpServerPool } from "../../../lib/metamcp/mcp-server-pool";
 import { createAuditCallToolMiddleware } from "../../../lib/metamcp/metamcp-middleware/audit-requests.functional";
@@ -120,15 +121,39 @@ export const createOriginalCallToolHandler = (): CallToolHandler => {
     // Get server parameters and find the right session for this tool
     const serverParams = await getMcpServers(context.namespaceUuid);
     let targetSession = null;
+    let unavailableServerLabel: string | undefined;
 
     for (const [mcpServerUuid, params] of Object.entries(serverParams)) {
-      const session = await mcpServerPool.getSession(
-        context.sessionId,
-        mcpServerUuid,
-        params,
-        context.namespaceUuid,
-      );
-      if (!session) continue;
+      const configuredServerName = params.name || "";
+      const configuredNameMatches = configuredServerName
+        ? sanitizeName(configuredServerName) === serverPrefix
+        : false;
+
+      let session: ConnectedClient | undefined;
+      try {
+        session = await mcpServerPool.getSession(
+          context.sessionId,
+          mcpServerUuid,
+          params,
+          context.namespaceUuid,
+        );
+      } catch (error) {
+        if (configuredNameMatches) {
+          unavailableServerLabel = `${configuredServerName} (${mcpServerUuid})`;
+        }
+        logger.error(
+          `Error getting session for server ${configuredServerName || mcpServerUuid}:`,
+          error,
+        );
+        continue;
+      }
+
+      if (!session) {
+        if (configuredNameMatches) {
+          unavailableServerLabel = `${configuredServerName} (${mcpServerUuid})`;
+        }
+        continue;
+      }
 
       const capabilities = session.client.getServerCapabilities();
       if (!capabilities?.tools) continue;
@@ -146,6 +171,12 @@ export const createOriginalCallToolHandler = (): CallToolHandler => {
     }
 
     if (!targetSession) {
+      if (unavailableServerLabel) {
+        throw createDownstreamSessionUnavailableError(
+          name,
+          unavailableServerLabel,
+        );
+      }
       throw new Error(`Unknown tool: ${name}`);
     }
 
