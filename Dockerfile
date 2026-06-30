@@ -48,9 +48,15 @@ COPY . .
 # Build all packages and apps
 RUN pnpm build
 
-RUN sed -i -e "s/30000/600000/" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/server/lib/router-utils/proxy-request.js" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js"
+# Bump Next.js dev proxy timeout 30s -> 600s. The pnpm store dir for `next`
+# embeds the resolved react/react-dom versions, so we glob it instead of
+# hardcoding (a hardcoded path silently breaks on every react/next bump).
+RUN found=0; \
+    for f in node_modules/.pnpm/next@*/node_modules/next/dist/server/lib/router-utils/proxy-request.js \
+             node_modules/.pnpm/next@*/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js; do \
+      if [ -f "$f" ]; then sed -i -e "s/30000/600000/" "$f"; found=1; fi; \
+    done; \
+    if [ "$found" = 0 ]; then echo "WARN: next proxy-request.js not found; timeout patch skipped"; fi
 
 # Production runner stage
 FROM base AS runner
@@ -86,11 +92,27 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
 
-# Install production dependencies only
-RUN pnpm install --prod
+# drizzle-kit is a backend devDependency but is required at runtime for
+# `pnpm exec drizzle-kit migrate` (see docker-entrypoint.sh). `pnpm install --prod`
+# prunes devDependencies, so promote it to a prod dependency first; the prod
+# install below then keeps it and links its bin. (A separate `pnpm add
+# drizzle-kit --prod` no-ops because it is an already-satisfied devDep, leaving
+# no binary and breaking migrations at startup.)
+RUN cd apps/backend \
+    && pnpm pkg set dependencies.drizzle-kit="^0.31.1" \
+    && pnpm pkg delete devDependencies.drizzle-kit
 
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+# Install production dependencies only.
+# pnpm >=10 refuses to purge the copied node_modules without a TTY
+# (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY) during a non-interactive Docker
+# build. Disable the purge confirmation: pnpm v10 reads npm_config_*, v11 reads
+# pnpm_config_* (set both), and CI=true makes pnpm treat the build as
+# non-interactive. --no-frozen-lockfile lets pnpm reconcile the drizzle-kit
+# promotion above.
+ENV CI=true \
+    npm_config_confirm_modules_purge=false \
+    pnpm_config_confirm_modules_purge=false
+RUN pnpm install --prod --no-frozen-lockfile
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
