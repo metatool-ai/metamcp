@@ -48,9 +48,11 @@ COPY . .
 # Build all packages and apps
 RUN pnpm build
 
-RUN sed -i -e "s/30000/600000/" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/server/lib/router-utils/proxy-request.js" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js"
+# Locate proxy-request.js dynamically: the .pnpm dir name embeds peer-dep
+# versions (react etc.) and goes stale whenever the lockfile bumps them.
+RUN files="$(find node_modules/.pnpm -path '*/next/dist/*lib/router-utils/proxy-request.js')" && \
+    test -n "$files" && \
+    sed -i -e "s/30000/600000/" $files
 
 # Production runner stage
 FROM base AS runner
@@ -86,11 +88,16 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
 
-# Install production dependencies only
-RUN pnpm install --prod
+# Install drizzle-kit locally in backend for migrations. Must run BEFORE the
+# --prod prune (pnpm add requires the modules dir's include set — still
+# dev-included from the builder copy — to match), and with -P: backend's
+# package.json already has drizzle-kit in devDependencies, so a plain add
+# updates it in place there and the prune below would delete it.
+RUN cd apps/backend && CI=true pnpm add -P drizzle-kit@0.31.1
 
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+# Install production dependencies only (CI=true: pnpm prompts before
+# pruning the copied dev node_modules and there is no TTY in docker build)
+RUN CI=true pnpm install --prod
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
