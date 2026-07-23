@@ -434,6 +434,37 @@ If you want to deploy it to a online service or a VPS, a instance of at least 2G
 
 Since MCP leverages SSE for long connection, if you are using reverse proxy like nginx, please refer to an example setup [nginx.conf.example](nginx.conf.example)
 
+## 🔒 Adding Security with mcp-slim-guard
+
+MetaMCP aggregates your MCP servers into one endpoint. For defense-in-depth, add **[mcp-slim-guard](https://github.com/lennney/mcp-slim-guard)** — an MIT-licensed security proxy — in front of your MetaMCP endpoint:
+
+```
+AI Client → mcp-slim-guard → MetaMCP → Your MCP Servers
+```
+
+**What you get:**
+
+| Feature | Description |
+|---------|-------------|
+| SSRF Protection | Blocks internal IP ranges (10.\*, 192.168.\*, 169.254.\*) |
+| Injection Detection | 17 heuristic patterns (shell, SQL, NoSQL, prompt injection) |
+| Tool Allow/Deny | Glob-based filtering, fail-closed by default |
+| Schema Compression | Up to 83% token savings on tool schemas |
+| Rate Limiting | Per-tool token bucket, configurable |
+| Audit Logging | Structured JSON log with rotation |
+
+**Setup (one command):**
+
+```bash
+npm install -g mcp-slim-guard
+mcp-slim-guard init    # auto-discovers your MCP config
+mcp-slim-guard start   # starts the security proxy
+```
+
+Then point your AI client at `mcp-slim-guard` instead of MetaMCP directly. Configure MetaMCP as the upstream in `mcp-slim-guard.yml`.
+
+mcp-slim-guard and MetaMCP are complementary: MetaMCP **aggregates** your tools, mcp-slim-guard **protects** the pipeline.
+
 ## 🏗️ Architecture
 
 - **Frontend**: Next.js
