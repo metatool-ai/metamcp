@@ -19,7 +19,7 @@ export class ServerErrorTracker {
   private crashAttempts: Map<string, number> = new Map();
 
   // Default max attempts before marking as ERROR (fallback if config is not available)
-  private readonly fallbackMaxAttempts: number = 1;
+  private readonly fallbackMaxAttempts: number = 3;
 
   // Server-specific max attempts (can be configured per server)
   private serverMaxAttempts: Map<string, number> = new Map();
@@ -120,7 +120,7 @@ export class ServerErrorTracker {
       // Update the server-level error status
       await mcpServersRepository.updateServerErrorStatus({
         serverUuid,
-        errorStatus: McpServerErrorStatusEnum.Enum.ERROR,
+        errorStatus: McpServerErrorStatusEnum.enum.ERROR,
       });
 
       logger.error(`Server ${serverUuid} marked as ERROR at server level`);
@@ -137,6 +137,13 @@ export class ServerErrorTracker {
   }
 
   /**
+   * Reset all crash attempts (e.g., on startup for a clean slate)
+   */
+  resetAllAttempts(): void {
+    this.crashAttempts.clear();
+  }
+
+  /**
    * Get current crash attempts for a server
    */
   getServerAttempts(serverUuid: string): number {
@@ -149,7 +156,7 @@ export class ServerErrorTracker {
   async isServerInErrorState(serverUuid: string): Promise<boolean> {
     try {
       const server = await mcpServersRepository.findByUuid(serverUuid);
-      return server?.error_status === McpServerErrorStatusEnum.Enum.ERROR;
+      return server?.error_status === McpServerErrorStatusEnum.enum.ERROR;
     } catch (error) {
       logger.error(
         `Error checking server error state for ${serverUuid}:`,
@@ -170,7 +177,7 @@ export class ServerErrorTracker {
       // Update the database to clear the error status
       await mcpServersRepository.updateServerErrorStatus({
         serverUuid,
-        errorStatus: McpServerErrorStatusEnum.Enum.NONE,
+        errorStatus: McpServerErrorStatusEnum.enum.NONE,
       });
 
       logger.info(`Reset error state for server ${serverUuid}`);

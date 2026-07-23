@@ -5,14 +5,14 @@ import { configRepo } from "../db/repositories/config.repo";
 export const configService = {
   async isSignupDisabled(): Promise<boolean> {
     const config = await configRepo.getConfig(
-      ConfigKeyEnum.Enum.DISABLE_SIGNUP,
+      ConfigKeyEnum.enum.DISABLE_SIGNUP,
     );
     return config?.value === "true";
   },
 
   async setSignupDisabled(disabled: boolean): Promise<void> {
     await configRepo.setConfig(
-      ConfigKeyEnum.Enum.DISABLE_SIGNUP,
+      ConfigKeyEnum.enum.DISABLE_SIGNUP,
       disabled.toString(),
       "Whether new user signup is disabled",
     );
@@ -20,14 +20,14 @@ export const configService = {
 
   async isSsoSignupDisabled(): Promise<boolean> {
     const config = await configRepo.getConfig(
-      ConfigKeyEnum.Enum.DISABLE_SSO_SIGNUP,
+      ConfigKeyEnum.enum.DISABLE_SSO_SIGNUP,
     );
     return config?.value === "true";
   },
 
   async setSsoSignupDisabled(disabled: boolean): Promise<void> {
     await configRepo.setConfig(
-      ConfigKeyEnum.Enum.DISABLE_SSO_SIGNUP,
+      ConfigKeyEnum.enum.DISABLE_SSO_SIGNUP,
       disabled.toString(),
       "Whether new user signup via SSO/OAuth is disabled",
     );
@@ -35,14 +35,14 @@ export const configService = {
 
   async isBasicAuthDisabled(): Promise<boolean> {
     const config = await configRepo.getConfig(
-      ConfigKeyEnum.Enum.DISABLE_BASIC_AUTH,
+      ConfigKeyEnum.enum.DISABLE_BASIC_AUTH,
     );
     return config?.value === "true";
   },
 
   async setBasicAuthDisabled(disabled: boolean): Promise<void> {
     await configRepo.setConfig(
-      ConfigKeyEnum.Enum.DISABLE_BASIC_AUTH,
+      ConfigKeyEnum.enum.DISABLE_BASIC_AUTH,
       disabled.toString(),
       "Whether basic email/password authentication is disabled",
     );
@@ -50,27 +50,27 @@ export const configService = {
 
   async getMcpResetTimeoutOnProgress(): Promise<boolean> {
     const config = await configRepo.getConfig(
-      ConfigKeyEnum.Enum.MCP_RESET_TIMEOUT_ON_PROGRESS,
+      ConfigKeyEnum.enum.MCP_RESET_TIMEOUT_ON_PROGRESS,
     );
     return config?.value === "true" || true;
   },
 
   async setMcpResetTimeoutOnProgress(enabled: boolean): Promise<void> {
     await configRepo.setConfig(
-      ConfigKeyEnum.Enum.MCP_RESET_TIMEOUT_ON_PROGRESS,
+      ConfigKeyEnum.enum.MCP_RESET_TIMEOUT_ON_PROGRESS,
       enabled.toString(),
       "Whether to reset timeout on progress for MCP requests",
     );
   },
 
   async getMcpTimeout(): Promise<number> {
-    const config = await configRepo.getConfig(ConfigKeyEnum.Enum.MCP_TIMEOUT);
+    const config = await configRepo.getConfig(ConfigKeyEnum.enum.MCP_TIMEOUT);
     return config?.value ? parseInt(config.value, 10) : 60000;
   },
 
   async setMcpTimeout(timeout: number): Promise<void> {
     await configRepo.setConfig(
-      ConfigKeyEnum.Enum.MCP_TIMEOUT,
+      ConfigKeyEnum.enum.MCP_TIMEOUT,
       timeout.toString(),
       "MCP request timeout in milliseconds",
     );
@@ -78,14 +78,14 @@ export const configService = {
 
   async getMcpMaxTotalTimeout(): Promise<number> {
     const config = await configRepo.getConfig(
-      ConfigKeyEnum.Enum.MCP_MAX_TOTAL_TIMEOUT,
+      ConfigKeyEnum.enum.MCP_MAX_TOTAL_TIMEOUT,
     );
     return config?.value ? parseInt(config.value, 10) : 60000;
   },
 
   async setMcpMaxTotalTimeout(timeout: number): Promise<void> {
     await configRepo.setConfig(
-      ConfigKeyEnum.Enum.MCP_MAX_TOTAL_TIMEOUT,
+      ConfigKeyEnum.enum.MCP_MAX_TOTAL_TIMEOUT,
       timeout.toString(),
       "MCP maximum total timeout in milliseconds",
     );
@@ -93,14 +93,16 @@ export const configService = {
 
   async getMcpMaxAttempts(): Promise<number> {
     const config = await configRepo.getConfig(
-      ConfigKeyEnum.Enum.MCP_MAX_ATTEMPTS,
+      ConfigKeyEnum.enum.MCP_MAX_ATTEMPTS,
     );
-    return config?.value ? parseInt(config.value, 10) : 1;
+    // Default to 3: a single transient blip (e.g. a slow cold-cache `uvx`
+    // spawn) shouldn't immediately flag a server as ERROR.
+    return config?.value ? parseInt(config.value, 10) : 3;
   },
 
   async setMcpMaxAttempts(maxAttempts: number): Promise<void> {
     await configRepo.setConfig(
-      ConfigKeyEnum.Enum.MCP_MAX_ATTEMPTS,
+      ConfigKeyEnum.enum.MCP_MAX_ATTEMPTS,
       maxAttempts.toString(),
       "Maximum number of crash attempts before marking MCP server as ERROR",
     );
@@ -108,10 +110,16 @@ export const configService = {
 
   async getSessionLifetime(): Promise<number | null> {
     const config = await configRepo.getConfig(
-      ConfigKeyEnum.Enum.SESSION_LIFETIME,
+      ConfigKeyEnum.enum.SESSION_LIFETIME,
     );
     if (!config?.value) {
-      return null; // No session lifetime set - infinite sessions
+      // Fallback to env var (milliseconds), then null (infinite sessions)
+      const envLifetime = process.env.SESSION_LIFETIME;
+      if (envLifetime) {
+        const parsed = parseInt(envLifetime, 10);
+        return isNaN(parsed) ? null : parsed;
+      }
+      return null;
     }
     const lifetime = parseInt(config.value, 10);
     return isNaN(lifetime) ? null : lifetime;
@@ -120,10 +128,10 @@ export const configService = {
   async setSessionLifetime(lifetime?: number | null): Promise<void> {
     if (lifetime === null || lifetime === undefined) {
       // Remove the config to indicate infinite session lifetime
-      await configRepo.deleteConfig(ConfigKeyEnum.Enum.SESSION_LIFETIME);
+      await configRepo.deleteConfig(ConfigKeyEnum.enum.SESSION_LIFETIME);
     } else {
       await configRepo.setConfig(
-        ConfigKeyEnum.Enum.SESSION_LIFETIME,
+        ConfigKeyEnum.enum.SESSION_LIFETIME,
         lifetime.toString(),
         "Session lifetime in milliseconds before automatic cleanup",
       );

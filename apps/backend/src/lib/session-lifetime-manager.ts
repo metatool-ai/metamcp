@@ -19,9 +19,9 @@ export interface SessionLifetimeManager<T> {
   stopCleanupTimer(): void;
 }
 
-export class SessionLifetimeManagerImpl<T>
-  implements SessionLifetimeManager<T>
-{
+export class SessionLifetimeManagerImpl<
+  T,
+> implements SessionLifetimeManager<T> {
   private sessions: Map<string, T> = new Map();
   private sessionTimestamps: Map<string, number> = new Map();
   private cleanupTimer: NodeJS.Timeout | null = null;

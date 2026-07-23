@@ -20,7 +20,11 @@
 
 </div>
 
-> **📢 Update:** *[From the author: apologize for some recent maintainence delay, but will at least keep merging PRs, more background [here](recent-updates.md)]*
+> 
+
+**📢 Latest Update:** This ai-dev branch will be the forward onging dev branch which contains ai agent changes. Please test before you build the image based on this branch. There has been many PRs thanks to the community but merging and reviewing them has been a growing effort too. I decided to include ai changes. At least so far the core functionality works. There is also a community maintained fork (ty a lot!): https://github.com/Umbrella-IT-Group/metamcp
+
+**📢 Update:** *[From the author: apologize for some recent maintainence delay, but will at least keep merging PRs, more background [here](recent-updates.md)]*
 
 **MetaMCP** is a MCP proxy that lets you dynamically aggregate MCP servers into a unified MCP server, and apply middlewares. MetaMCP itself is a MCP server so it can be easily plugged into **ANY** MCP clients.
 
@@ -30,7 +34,7 @@
 
 For more details, consider visiting our documentation site: https://docs.metamcp.com
 
-English | [中文](./README_cn.md)
+English | [简体中文](./README_cn.md)
 ## 📋 Table of Contents <!-- omit in toc -->
 
 - [🎯 Use Cases](#-use-cases)
@@ -429,6 +433,37 @@ Both controls work independently, giving you full flexibility over your registra
 If you want to deploy it to a online service or a VPS, a instance of at least 2GB-4GB of memory is required. And the larger size, the better performance.
 
 Since MCP leverages SSE for long connection, if you are using reverse proxy like nginx, please refer to an example setup [nginx.conf.example](nginx.conf.example)
+
+## 🔒 Adding Security with mcp-slim-guard
+
+MetaMCP aggregates your MCP servers into one endpoint. For defense-in-depth, add **[mcp-slim-guard](https://github.com/lennney/mcp-slim-guard)** — an MIT-licensed security proxy — in front of your MetaMCP endpoint:
+
+```
+AI Client → mcp-slim-guard → MetaMCP → Your MCP Servers
+```
+
+**What you get:**
+
+| Feature | Description |
+|---------|-------------|
+| SSRF Protection | Blocks internal IP ranges (10.\*, 192.168.\*, 169.254.\*) |
+| Injection Detection | 17 heuristic patterns (shell, SQL, NoSQL, prompt injection) |
+| Tool Allow/Deny | Glob-based filtering, fail-closed by default |
+| Schema Compression | Up to 83% token savings on tool schemas |
+| Rate Limiting | Per-tool token bucket, configurable |
+| Audit Logging | Structured JSON log with rotation |
+
+**Setup (one command):**
+
+```bash
+npm install -g mcp-slim-guard
+mcp-slim-guard init    # auto-discovers your MCP config
+mcp-slim-guard start   # starts the security proxy
+```
+
+Then point your AI client at `mcp-slim-guard` instead of MetaMCP directly. Configure MetaMCP as the upstream in `mcp-slim-guard.yml`.
+
+mcp-slim-guard and MetaMCP are complementary: MetaMCP **aggregates** your tools, mcp-slim-guard **protects** the pipeline.
 
 ## 🏗️ Architecture
 

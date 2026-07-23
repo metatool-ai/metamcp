@@ -20,6 +20,10 @@ services:
       - /app/packages/eslint-config/node_modules
       - /app/packages/typescript-config/node_modules
     environment:
+      # pnpm runs non-interactively here (detached compose has no TTY). Without
+      # CI=true, a `pnpm install` that needs to purge node_modules aborts with
+      # ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY and kills the container.
+      CI: "true"
       LOG_LEVEL: ${LOG_LEVEL:-all}
       # Postgres connection details
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}

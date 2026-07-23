@@ -8,10 +8,10 @@ import { ToolStatusEnum } from "@repo/zod-types";
 import { AlertTriangle, Database, RefreshCw, Wrench } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { z } from "zod";
 
 import { ToolManagementSkeleton } from "@/components/skeletons/tool-management-skeleton";
 import { Button } from "@/components/ui/button";
+import { MakeRequestFn } from "@/hooks/useConnection";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 
@@ -24,11 +24,7 @@ interface NamespaceToolManagementProps {
     status: string;
   }>;
   namespaceUuid: string;
-  makeRequest?: <T extends z.ZodType>(
-    request: ClientRequest,
-    schema: T,
-    options?: { suppressToast?: boolean },
-  ) => Promise<z.output<T>>; // Optional makeRequest function for MetaMCP connections
+  makeRequest?: MakeRequestFn; // Optional makeRequest function for MetaMCP connections
   sessionInitializing?: boolean; // Whether session initialization is in progress
 }
 
@@ -214,11 +210,11 @@ export function NamespaceToolManagement({
   // Calculate counts
   const serverCount = servers.length;
   const activeServerCount = servers.filter(
-    (s) => s.status === ToolStatusEnum.Enum.ACTIVE,
+    (s) => s.status === ToolStatusEnum.enum.ACTIVE,
   ).length;
   const savedToolCount = namespaceTools.length;
   const activeToolCount = namespaceTools.filter(
-    (t) => t.status === ToolStatusEnum.Enum.ACTIVE,
+    (t) => t.status === ToolStatusEnum.enum.ACTIVE,
   ).length;
   const mcpToolCount = mcpTools.length;
 

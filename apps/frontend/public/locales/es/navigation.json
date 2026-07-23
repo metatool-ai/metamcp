@@ -1,0 +1,13 @@
+{
+  "exploreMcpServers": "Explorar MCP Servers (beta)",
+  "mcpServers": "MCP Servers",
+  "metamcpNamespaces": "MetaMCP Namespaces",
+  "metamcpEndpoints": "MetaMCP Endpoints",
+  "mcpInspector": "MCP Inspector",
+  "apiKeys": "API Keys",
+  "settings": "Configuración",
+  "liveLogs": "Logs en Tiempo Real",
+  "application": "Aplicación",
+  "logout": "Cerrar Sesión",
+  "profile": "Perfil"
+}

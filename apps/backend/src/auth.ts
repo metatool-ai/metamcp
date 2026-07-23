@@ -109,8 +109,21 @@ export const auth = betterAuth({
     },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // 1 day (how often to update the session)
+    // Session lifetimes are env-var configurable so deployers can tune
+    // how often users re-touch the gateway via SSO without rebuilding
+    // the image. Defaults match the previous hardcoded values exactly,
+    // so this is a strict superset — no behavior change for existing
+    // installs that don't set the env vars.
+    expiresIn: (() => {
+      const raw = process.env.BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS;
+      const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 60 * 60 * 24 * 7; // 7 days (default)
+    })(),
+    updateAge: (() => {
+      const raw = process.env.BETTER_AUTH_SESSION_UPDATE_AGE_SECONDS;
+      const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 60 * 60 * 24; // 1 day (default — how often the session expiry is bumped on access)
+    })(),
   },
   user: {
     additionalFields: {

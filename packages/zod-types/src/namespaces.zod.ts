@@ -7,7 +7,7 @@ import {
 } from "./mcp-servers.zod";
 import { ToolSchema, ToolStatusEnum } from "./tools.zod";
 
-const ToolAnnotationsSchema = z.record(z.unknown());
+const ToolAnnotationsSchema = z.record(z.string(), z.unknown());
 
 // Namespace schema definitions
 export const createNamespaceFormSchema = z.object({
@@ -165,7 +165,7 @@ export const RefreshNamespaceToolsRequestSchema = z.object({
     z.object({
       name: z.string(), // This will contain "ServerName__toolName" format
       description: z.string().optional(),
-      inputSchema: z.record(z.any()),
+      inputSchema: z.record(z.string(), z.any()),
       // Remove serverUuid since we'll resolve it from the tool name
     }),
   ),
@@ -299,12 +299,14 @@ export const DatabaseNamespaceServerSchema = z.object({
   command: z.string().nullable(),
   args: z.array(z.string()),
   url: z.string().nullable(),
-  env: z.record(z.string()),
+  env: z.record(z.string(), z.string()),
   bearerToken: z.string().nullable(),
-  headers: z.record(z.string()),
+  headers: z.record(z.string(), z.string()),
+  forward_headers: z.record(z.string(), z.string()),
   created_at: z.date(),
   user_id: z.string().nullable(),
   status: McpServerStatusEnum,
+  error_status: McpServerErrorStatusEnum.optional(),
 });
 
 export const DatabaseNamespaceWithServersSchema =
@@ -318,7 +320,7 @@ export const DatabaseNamespaceToolSchema = z.object({
   description: z.string().nullable(),
   toolSchema: z.object({
     type: z.literal("object"),
-    properties: z.record(z.any()).optional(),
+    properties: z.record(z.string(), z.any()).optional(),
   }),
   created_at: z.date(),
   updated_at: z.date(),

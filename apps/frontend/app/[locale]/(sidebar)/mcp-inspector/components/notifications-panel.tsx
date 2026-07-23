@@ -130,15 +130,17 @@ export function NotificationsPanel({
     if (notification.type === "stderr") {
       return (
         <div className="text-xs text-red-700 dark:text-red-300 font-mono bg-red-50 dark:bg-red-950/20 p-1.5 rounded border border-red-200 dark:border-red-800">
-          {(notification.notification as any).params?.content ||
-            "stderr output"}
+          {(notification.notification as { params?: { content?: string } })
+            .params?.content || "stderr output"}
         </div>
       );
     }
 
     // For other notifications, display the method and params
     const method = notification.notification.method;
-    const params = (notification.notification as any).params;
+    const params = (
+      notification.notification as { params?: Record<string, unknown> }
+    ).params;
 
     return (
       <div className="space-y-1">

@@ -153,7 +153,7 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
 
     // Prepare response according to RFC 7591 with OAuth 2.1 guidance
     const baseUrl = req.protocol + "://" + req.get("host");
-    const response: any = {
+    const response: Record<string, unknown> = {
       client_id: clientId,
       client_name: clientRegistration.client_name,
       redirect_uris: clientRegistration.redirect_uris,

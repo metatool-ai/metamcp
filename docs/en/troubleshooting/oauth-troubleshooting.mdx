@@ -222,3 +222,76 @@ curl -H "Authorization: Bearer mcp_token_1234567890abcdef" \
 2. **Use correct authentication method**:
    - API key: `X-API-Key` header or `api_key` query parameter
    - OAuth: `Authorization: Bearer` header
+
+### Previously Known Issue: Token Exchange CORS Failure (fixed)
+
+**Symptoms (no longer reproducible):**
+- DevTools showed `POST https://login.salesforce.com/services/oauth2/token
+  net::ERR_FAILED 200 (OK)` with a CORS error in the console
+- `oauth_sessions.tokens` stayed `NULL` after a successful upstream consent
+- Clicking the MCP server kicked off the authorize redirect again, on a loop
+- Affected Salesforce, Okta, Auth0, Microsoft Entra, ServiceNow, Stripe,
+  and any other upstream whose token endpoint does not return
+  `Access-Control-Allow-Origin`
+
+**Root Cause:** MetaMCP used to run the OAuth authorization-code-to-token
+POST from the browser via the MCP TypeScript SDK. The upstream returned a
+valid 200 with tokens, but the browser blocked the response body because
+the response had no CORS headers. The SDK saw the fetch fail and silently
+dropped the tokens.
+
+**Fix:** As of [fix(oauth): exchange tokens server-side]
+(https://github.com/metatool-ai/metamcp/pull/), the
+authorization-code → token exchange runs in the MetaMCP backend
+(`frontend.oauth.exchangeToken` tRPC mutation), which is a normal
+server-to-server fetch and has no CORS constraints. The frontend callback
+page now only forwards `{code, state}` to the backend and renders the
+upstream's real error message on failure.
+
+If you previously saw this symptom, simply trigger the authorize flow once
+more after upgrading and the tokens will be persisted normally.
+
+### Issue 5: Upstream Returns `invalid_client` on `/register`
+
+**Symptoms**:
+- Authorize flow for an SSE or Streamable HTTP MCP server bounces back with
+  `invalid_client`, `unsupported_grant_type`, or a 404 on `/register`
+- Inspector log shows `Failed to register OAuth client` before the
+  authorization redirect even fires
+- Upstreams known to hit this: **Salesforce Hosted MCP** (Connected App
+  required), **Zendesk**, **ServiceNow**, **Microsoft Graph**
+
+**Root Cause**: The upstream does not implement
+[RFC 7591 Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591).
+MetaMCP cannot register itself on the fly — the upstream expects a
+pre-registered Connected App / OAuth client with a fixed `client_id`.
+
+**Solutions**:
+
+1. **Register an OAuth client with the upstream** manually (Salesforce
+   Connected App, ServiceNow OAuth Application Registry, Microsoft Entra
+   app registration, ...). Configure the callback URL as
+   `https://<your-metamcp-host>/fe-oauth/callback`.
+
+2. **Open the MCP server in MetaMCP** (Create or Edit dialog) and expand
+   the **"Pre-registered OAuth client (advanced)"** section.
+
+3. **Fill in at minimum the `client_id`**. For confidential clients also
+   provide `client_secret` and set `token_endpoint_auth_method` to
+   `client_secret_basic` or `client_secret_post`.
+
+4. **Optionally set `scope`** to a space-separated list, e.g.
+   `api refresh_token` for Salesforce.
+
+5. **Save and re-trigger the authorize flow.** MetaMCP populates
+   `oauth_sessions.client_information` for that server, the SDK skips the
+   `/register` POST, and the authorization redirect goes straight to the
+   upstream's `authorize` endpoint.
+
+6. **If the section was filled incorrectly**, click **"Clear OAuth
+   fields"** and Save — MetaMCP drops the row from `oauth_sessions` and
+   falls back to dynamic registration on the next attempt.
+
+See [MCP Servers → Pre-registered OAuth
+Clients](/concepts/mcp-servers#pre-registered-oauth-clients) for the
+worked Salesforce example.

@@ -1,8 +1,6 @@
 "use client";
 
-import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import {
-  ClientRequest,
   ListResourcesResultSchema,
   ListResourceTemplatesResultSchema,
   ReadResourceResultSchema,
@@ -24,6 +22,7 @@ import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
+import { MakeRequestFn } from "@/hooks/useConnection";
 import { useTranslations } from "@/hooks/useTranslations";
 
 interface ResourceContent {
@@ -34,11 +33,7 @@ interface ResourceContent {
 }
 
 interface InspectorResourcesProps {
-  makeRequest: <T extends z.ZodType>(
-    request: ClientRequest,
-    schema: T,
-    options?: RequestOptions & { suppressToast?: boolean },
-  ) => Promise<z.output<T>>;
+  makeRequest: MakeRequestFn;
   enabled?: boolean;
 }
 

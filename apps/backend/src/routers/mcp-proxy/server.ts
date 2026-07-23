@@ -135,7 +135,7 @@ const checkServerErrorStatus = async (serverUuid: string): Promise<boolean> => {
     }
 
     const isInError =
-      server.error_status === McpServerErrorStatusEnum.Enum.ERROR;
+      server.error_status === McpServerErrorStatusEnum.enum.ERROR;
     if (isInError) {
       logger.info(`Server ${server.name} (${serverUuid}) is in ERROR state`);
     }
@@ -157,12 +157,12 @@ const getHttpHeaders = (
 ): Record<string, string> => {
   const headers: Record<string, string> = {
     Accept:
-      transportType === McpServerTypeEnum.Enum.SSE
+      transportType === McpServerTypeEnum.enum.SSE
         ? "text/event-stream"
         : "text/event-stream, application/json",
   };
   const defaultHeaders =
-    transportType === McpServerTypeEnum.Enum.SSE
+    transportType === McpServerTypeEnum.enum.SSE
       ? SSE_HEADERS_PASSTHROUGH
       : STREAMABLE_HTTP_HEADERS_PASSTHROUGH;
 
@@ -236,7 +236,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
 
   const transportType = query.transportType as string;
 
-  if (transportType === McpServerTypeEnum.Enum.STDIO) {
+  if (transportType === McpServerTypeEnum.enum.STDIO) {
     const command = query.command as string;
     const origArgs = shellParseArgs(query.args as string) as string[];
     const queryEnv = query.env ? JSON.parse(query.env as string) : {};
@@ -292,7 +292,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       );
       throw error;
     }
-  } else if (transportType === McpServerTypeEnum.Enum.SSE) {
+  } else if (transportType === McpServerTypeEnum.enum.SSE) {
     const url = transformDockerUrl(query.url as string);
 
     // Check if the server is in error state (for SSE, we need to find server by URL)
@@ -329,7 +329,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     });
     await transport.start();
     return transport;
-  } else if (transportType === McpServerTypeEnum.Enum.STREAMABLE_HTTP) {
+  } else if (transportType === McpServerTypeEnum.enum.STREAMABLE_HTTP) {
     const url = transformDockerUrl(query.url as string);
 
     // Check if the server is in error state (for STREAMABLE_HTTP, we need to find server by URL)

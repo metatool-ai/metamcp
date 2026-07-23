@@ -117,6 +117,7 @@ export async function convertDbServerToParams(
       oauth_tokens: oauthTokens,
       bearerToken: server.bearerToken,
       headers: server.headers || {},
+      forward_headers: server.forward_headers || {},
     };
 
     // Process based on server type
@@ -155,10 +156,14 @@ export async function convertDbServerToParams(
  * @param envObject Environment object that may contain placeholder values
  * @returns Environment object with resolved values
  */
-export function resolveEnvVariables(
-  envObject: Record<string, any>,
-): Record<string, any> {
-  const resolved: Record<string, any> = {};
+// Env values flow from process.env (string | undefined) through the loosely-typed
+// stdio spawn chain (createStdioKey/isStdioInCooldown/ProcessManagedStdioTransport),
+// so this stays intentionally permissive; tightening it cascades through that chain.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type EnvRecord = Record<string, any>;
+
+export function resolveEnvVariables(envObject: EnvRecord): EnvRecord {
+  const resolved: EnvRecord = {};
 
   for (const [key, value] of Object.entries(envObject)) {
     if (
@@ -167,8 +172,9 @@ export function resolveEnvVariables(
       value.endsWith("}")
     ) {
       const varName = value.slice(2, -1);
-      if (process.env[varName]) {
-        resolved[key] = process.env[varName];
+      const envValue = process.env[varName];
+      if (envValue) {
+        resolved[key] = envValue;
         logger.info(
           `Resolved environment variable: ${key}=${value} -> ${varName}=[REDACTED]`,
         );

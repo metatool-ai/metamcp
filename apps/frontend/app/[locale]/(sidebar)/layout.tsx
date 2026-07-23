@@ -2,6 +2,7 @@
 
 import {
   FileTerminal,
+  History,
   Key,
   Link as LinkIcon,
   Package,
@@ -71,6 +72,11 @@ const getMenuItems = (t: (key: string) => string, locale: SupportedLocale) => [
     icon: Key,
   },
   {
+    title: t("navigation:auditLogs"),
+    url: getLocalizedPath("/audit-logs", locale),
+    icon: History,
+  },
+  {
     title: t("navigation:settings"),
     url: getLocalizedPath("/settings", locale),
     icon: Settings,
@@ -95,7 +101,10 @@ function LiveLogsMenuItem() {
 
 function UserInfoFooter() {
   const { t } = useTranslations();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{
+    name?: string | null;
+    email?: string | null;
+  } | null>(null);
 
   // Get user info
   useEffect(() => {
@@ -119,7 +128,7 @@ function UserInfoFooter() {
             <LanguageSwitcher />
             <ThemeToggle />
           </div>
-          <p className="text-xs text-muted-foreground">v2.4.22</p>
+          <p className="text-xs text-muted-foreground">v2.5-ai-dev</p>
         </div>
         <Separator />
         {user && (

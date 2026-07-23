@@ -51,7 +51,8 @@
               "en/concepts/namespaces",
               "en/concepts/endpoints",
               "en/concepts/middleware",
-              "en/concepts/inspector"
+              "en/concepts/inspector",
+              "en/concepts/audit-logs"
             ]
           },
           {
@@ -103,7 +104,8 @@
               "cn/concepts/namespaces",
               "cn/concepts/endpoints",
               "cn/concepts/middleware",
-              "cn/concepts/inspector"
+              "cn/concepts/inspector",
+              "cn/concepts/audit-logs"
             ]
           },
           {

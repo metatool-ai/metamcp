@@ -31,6 +31,9 @@ export class OAuthSessionsRepository {
         }),
         ...(input.tokens && { tokens: input.tokens }),
         ...(input.code_verifier && { code_verifier: input.code_verifier }),
+        ...(input.expected_state && {
+          expected_state: input.expected_state,
+        }),
       })
       .returning();
 
@@ -48,6 +51,9 @@ export class OAuthSessionsRepository {
         }),
         ...(input.tokens && { tokens: input.tokens }),
         ...(input.code_verifier && { code_verifier: input.code_verifier }),
+        ...(input.expected_state && {
+          expected_state: input.expected_state,
+        }),
         updated_at: sql`NOW()`,
       })
       .where(eq(oauthSessionsTable.mcp_server_uuid, input.mcp_server_uuid))
@@ -56,23 +62,61 @@ export class OAuthSessionsRepository {
     return updatedSession;
   }
 
-  async upsert(input: OAuthSessionUpdateInput): Promise<DatabaseOAuthSession> {
-    // Check if session exists
-    const existingSession = await this.findByMcpServerUuid(
-      input.mcp_server_uuid,
-    );
+  // Dedicated clear path for `expected_state`. The truthy-spread upsert
+  // cannot write NULL through `input.expected_state` (a `null` value would
+  // be elided by the `&&` guard), so the one-shot clear after a successful
+  // token exchange goes through this method instead. Returns the updated
+  // row, or undefined if no row exists for the server.
+  async clearExpectedState(
+    mcpServerUuid: string,
+  ): Promise<DatabaseOAuthSession | undefined> {
+    const [updatedSession] = await db
+      .update(oauthSessionsTable)
+      .set({
+        expected_state: null,
+        updated_at: sql`NOW()`,
+      })
+      .where(eq(oauthSessionsTable.mcp_server_uuid, mcpServerUuid))
+      .returning();
 
-    if (existingSession) {
-      // Update existing session
-      const updatedSession = await this.update(input);
-      if (!updatedSession) {
-        throw new Error("Failed to update OAuth session");
-      }
-      return updatedSession;
-    } else {
-      // Create new session
-      return await this.create(input);
+    return updatedSession;
+  }
+
+  async upsert(input: OAuthSessionUpdateInput): Promise<DatabaseOAuthSession> {
+    // Single-statement atomic upsert. Concurrent callers for the same
+    // mcp_server_uuid resolve via ON CONFLICT instead of racing a
+    // SELECT-then-INSERT, which previously crashed the loser with a
+    // unique-constraint violation. Only fields present on `input` are written
+    // so a partial update (e.g. tokens only) does not clear unrelated columns
+    // such as code_verifier.
+    const [row] = await db
+      .insert(oauthSessionsTable)
+      .values({
+        mcp_server_uuid: input.mcp_server_uuid,
+        ...(input.client_information && {
+          client_information: input.client_information,
+        }),
+        ...(input.tokens && { tokens: input.tokens }),
+        ...(input.code_verifier && { code_verifier: input.code_verifier }),
+      })
+      .onConflictDoUpdate({
+        target: oauthSessionsTable.mcp_server_uuid,
+        set: {
+          ...(input.client_information && {
+            client_information: input.client_information,
+          }),
+          ...(input.tokens && { tokens: input.tokens }),
+          ...(input.code_verifier && { code_verifier: input.code_verifier }),
+          updated_at: sql`NOW()`,
+        },
+      })
+      .returning();
+
+    if (!row) {
+      throw new Error("Failed to upsert OAuth session");
     }
+
+    return row;
   }
 
   async deleteByMcpServerUuid(

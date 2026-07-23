@@ -24,6 +24,7 @@ export const createEndpointFormSchema = z.object({
   clientMaxRateStrategyKey: z.string().optional(),
   enableOauth: z.boolean(),
   useQueryParamAuth: z.boolean(),
+  enableMetamcpAdminTools: z.boolean().default(false),
   createMcpServer: z.boolean(),
   user_id: z.string().nullable().optional(),
 });
@@ -49,6 +50,7 @@ export const editEndpointFormSchema = z.object({
   clientMaxRateStrategyKey: z.string().optional(),
   enableOauth: z.boolean().optional(),
   useQueryParamAuth: z.boolean().optional(),
+  enableMetamcpAdminTools: z.boolean().optional(),
   user_id: z.string().nullable().optional(),
 });
 
@@ -73,6 +75,7 @@ export const CreateEndpointRequestSchema = z.object({
   clientMaxRateStrategyKey: z.string().optional(),
   enableOauth: z.boolean().default(false),
   useQueryParamAuth: z.boolean().default(false),
+  enableMetamcpAdminTools: z.boolean().default(false),
   createMcpServer: z.boolean().default(true),
   user_id: z.string().nullable().optional(),
 });
@@ -96,6 +99,7 @@ export const EndpointSchema = z.object({
   clientMaxRateStrategyKey: z.string().optional(),
   enable_oauth: z.boolean(),
   use_query_param_auth: z.boolean(),
+  enable_metamcp_admin_tools: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
   user_id: z.string().nullable(),
@@ -146,6 +150,7 @@ export const UpdateEndpointRequestSchema = z.object({
   clientMaxRateStrategyKey: z.string().optional(),
   enableOauth: z.boolean().optional(),
   useQueryParamAuth: z.boolean().optional(),
+  enableMetamcpAdminTools: z.boolean().optional(),
   user_id: z.string().nullable().optional(),
 });
 
@@ -200,6 +205,7 @@ export const EndpointCreateInputSchema = z.object({
   client_max_rate_strategy_key: z.string().nullable().optional(),
   enable_oauth: z.boolean().optional().default(false),
   use_query_param_auth: z.boolean().optional().default(false),
+  enable_metamcp_admin_tools: z.boolean().optional().default(false),
   user_id: z.string().nullable().optional(),
 });
 
@@ -219,6 +225,7 @@ export const EndpointUpdateInputSchema = z.object({
   client_max_rate_strategy_key: z.string().nullable().optional(),
   enable_oauth: z.boolean().optional(),
   use_query_param_auth: z.boolean().optional(),
+  enable_metamcp_admin_tools: z.boolean().optional(),
   user_id: z.string().nullable().optional(),
 });
 
@@ -242,6 +249,7 @@ export const DatabaseEndpointSchema = z.object({
   client_max_rate_strategy_key: z.string().nullable().optional(),
   enable_oauth: z.boolean(),
   use_query_param_auth: z.boolean(),
+  enable_metamcp_admin_tools: z.boolean(),
   created_at: z.date(),
   updated_at: z.date(),
   user_id: z.string().nullable(),

@@ -90,7 +90,7 @@ function McpInspectorContent() {
   // MCP Connection setup - only enable when server data is loaded and valid
   const connection = useConnection({
     mcpServerUuid: selectedServerUuid,
-    transportType: selectedServer?.type || McpServerTypeEnum.Enum.STDIO,
+    transportType: selectedServer?.type || McpServerTypeEnum.enum.STDIO,
     command: selectedServer?.command || "",
     args: selectedServer?.args?.join(" ") || "",
     url: selectedServer?.url || "",

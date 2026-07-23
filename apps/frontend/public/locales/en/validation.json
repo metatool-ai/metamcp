@@ -20,6 +20,15 @@
     "required": "URL is required for SSE and Streamable HTTP types",
     "invalidUrl": "URL must be valid for SSE and Streamable HTTP types"
   },
+  "oauthClientId": {
+    "required": "Client ID is required when any pre-registered OAuth field is set"
+  },
+  "oauthAuthorizationEndpoint": {
+    "invalid": "Authorization endpoint must be a valid URL"
+  },
+  "oauthTokenEndpoint": {
+    "invalid": "Token endpoint must be a valid URL"
+  },
   "namespaceName": {
     "required": "Namespace name is required",
     "invalidCharacters": "Namespace name must only contain letters, numbers, underscores, and hyphens"
@@ -38,6 +47,9 @@
   "password": {
     "tooShort": "Password must be at least 8 characters long",
     "mismatch": "Passwords do not match"
+  },
+  "forwardHeaders": {
+    "invalidHeaderName": "Invalid or forbidden header name. Forbidden: Host, Cookie, Set-Cookie, Connection, Proxy-*, Sec-*, etc."
   },
   "generic": {
     "invalid": "Invalid value",

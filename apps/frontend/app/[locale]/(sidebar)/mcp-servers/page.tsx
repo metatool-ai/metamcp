@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { AdvancedOAuthSection } from "@/components/advanced-oauth-section";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -52,14 +53,21 @@ export default function McpServersPage() {
     defaultValues: {
       name: "",
       description: "",
-      type: McpServerTypeEnum.Enum.STDIO,
+      type: McpServerTypeEnum.enum.STDIO,
       command: "",
       args: "",
       env: "",
       url: "",
       bearerToken: "",
       headers: "",
+      forward_headers: "",
       user_id: undefined, // Default to private (current user)
+      oauth_client_id: "",
+      oauth_client_secret: "",
+      oauth_authorization_endpoint: "",
+      oauth_token_endpoint: "",
+      oauth_scope: "",
+      oauth_token_endpoint_auth_method: "none",
     },
   });
 
@@ -125,6 +133,49 @@ export default function McpServersPage() {
       }
     }
 
+    // Parse forward_headers string into record
+    // Each line is either "HeaderName" (1:1) or "ClientHeader=ServerHeader" (rename)
+    const forwardHeadersRecord: Record<string, string> = {};
+    if (data.forward_headers) {
+      const lines = data.forward_headers
+        .trim()
+        .split("\n")
+        .map((h) => h.trim())
+        .filter((h) => h.length > 0);
+      for (const line of lines) {
+        const eqIdx = line.indexOf("=");
+        if (eqIdx === -1) {
+          // Bare name: 1:1 mapping
+          forwardHeadersRecord[line] = line;
+        } else {
+          const clientName = line.slice(0, eqIdx).trim();
+          const serverName = line.slice(eqIdx + 1).trim();
+          if (clientName && serverName) {
+            forwardHeadersRecord[clientName] = serverName;
+          }
+        }
+      }
+    }
+
+    // Only attach the pre-registered OAuth payload for HTTP-style servers,
+    // and only when the user actually filled in client_id.
+    const isHttpServer =
+      data.type === McpServerTypeEnum.enum.SSE ||
+      data.type === McpServerTypeEnum.enum.STREAMABLE_HTTP;
+    const oauthClientInfo =
+      isHttpServer && data.oauth_client_id && data.oauth_client_id.trim() !== ""
+        ? {
+            client_id: data.oauth_client_id.trim(),
+            client_secret: data.oauth_client_secret || undefined,
+            authorization_endpoint:
+              data.oauth_authorization_endpoint || undefined,
+            token_endpoint: data.oauth_token_endpoint || undefined,
+            scope: data.oauth_scope || undefined,
+            token_endpoint_auth_method:
+              data.oauth_token_endpoint_auth_method || "none",
+          }
+        : undefined;
+
     const request: CreateMcpServerRequest = {
       name: data.name,
       description: data.description,
@@ -135,7 +186,9 @@ export default function McpServersPage() {
       url: data.url,
       bearerToken: data.bearerToken,
       headers: headersObject,
+      forward_headers: forwardHeadersRecord,
       user_id: data.user_id,
+      oauth_client_info: oauthClientInfo,
     };
 
     createMutation.mutate(request);
@@ -164,7 +217,7 @@ export default function McpServersPage() {
                 {t("mcp-servers:addServer")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{t("mcp-servers:addServer")}</DialogTitle>
                 <DialogDescription>
@@ -227,12 +280,12 @@ export default function McpServersPage() {
                               variant="outline"
                               className="w-full justify-between"
                             >
-                              {field.value === McpServerTypeEnum.Enum.STDIO
+                              {field.value === McpServerTypeEnum.enum.STDIO
                                 ? t("mcp-servers:stdio")
-                                : field.value === McpServerTypeEnum.Enum.SSE
+                                : field.value === McpServerTypeEnum.enum.SSE
                                   ? t("mcp-servers:sse")
                                   : field.value ===
-                                      McpServerTypeEnum.Enum.STREAMABLE_HTTP
+                                      McpServerTypeEnum.enum.STREAMABLE_HTTP
                                     ? "Streamable HTTP"
                                     : t("mcp-servers:selectType")}
                               <ChevronDown className="ml-2 h-4 w-4" />
@@ -244,14 +297,14 @@ export default function McpServersPage() {
                           >
                             <DropdownMenuItem
                               onClick={() =>
-                                field.onChange(McpServerTypeEnum.Enum.STDIO)
+                                field.onChange(McpServerTypeEnum.enum.STDIO)
                               }
                             >
                               {t("mcp-servers:stdio")}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
-                                field.onChange(McpServerTypeEnum.Enum.SSE)
+                                field.onChange(McpServerTypeEnum.enum.SSE)
                               }
                             >
                               {t("mcp-servers:sse")}
@@ -259,7 +312,7 @@ export default function McpServersPage() {
                             <DropdownMenuItem
                               onClick={() =>
                                 field.onChange(
-                                  McpServerTypeEnum.Enum.STREAMABLE_HTTP,
+                                  McpServerTypeEnum.enum.STREAMABLE_HTTP,
                                 )
                               }
                             >
@@ -315,7 +368,7 @@ export default function McpServersPage() {
                   />
 
                   {/* STDIO specific fields */}
-                  {form.watch("type") === McpServerTypeEnum.Enum.STDIO && (
+                  {form.watch("type") === McpServerTypeEnum.enum.STDIO && (
                     <>
                       <FormField
                         control={form.control}
@@ -375,9 +428,9 @@ export default function McpServersPage() {
                   )}
 
                   {/* SSE and STREAMABLE_HTTP specific fields */}
-                  {(form.watch("type") === McpServerTypeEnum.Enum.SSE ||
+                  {(form.watch("type") === McpServerTypeEnum.enum.SSE ||
                     form.watch("type") ===
-                      McpServerTypeEnum.Enum.STREAMABLE_HTTP) && (
+                      McpServerTypeEnum.enum.STREAMABLE_HTTP) && (
                     <>
                       <FormField
                         control={form.control}
@@ -437,6 +490,44 @@ export default function McpServersPage() {
                             <FormMessage />
                           </FormItem>
                         )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="forward_headers"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              {t("mcp-servers:forwardHeaders")}
+                            </FormLabel>
+                            <FormControl>
+                              <Textarea
+                                {...field}
+                                placeholder={t(
+                                  "mcp-servers:forwardHeadersPlaceholder",
+                                )}
+                                rows={3}
+                                className="whitespace-pre-wrap break-all overflow-x-hidden"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              {t("mcp-servers:forwardHeadersHelp")}
+                            </p>
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              {t("mcp-servers:forwardHeadersWarning")}
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <AdvancedOAuthSection
+                        form={
+                          form as unknown as Parameters<
+                            typeof AdvancedOAuthSection
+                          >[0]["form"]
+                        }
+                        idPrefix="create"
                       />
                     </>
                   )}

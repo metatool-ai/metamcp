@@ -3,9 +3,24 @@ import express from "express";
 
 import logger from "@/utils/logger";
 
+import { MetaMCPHandlerContext } from "../../../lib/metamcp/metamcp-middleware/functional-middleware";
 import { metaMcpServerPool } from "../../../lib/metamcp/metamcp-server-pool";
 import { createMiddlewareEnabledHandlers } from "./handlers";
 import { ToolExecutionRequest } from "./types";
+
+function getRequestContext(
+  req: ToolExecutionRequest,
+): Pick<MetaMCPHandlerContext, "endpointName" | "auth"> {
+  return {
+    endpointName: req.endpointName,
+    auth: {
+      method: req.authMethod || "none",
+      apiKeyUuid: req.apiKeyUuid,
+      apiKeyUserId: req.apiKeyUserId,
+      oauthUserId: req.oauthUserId,
+    },
+  };
+}
 
 // Refactored tool execution logic to use middleware
 export const executeToolWithMiddleware = async (
@@ -29,7 +44,11 @@ export const executeToolWithMiddleware = async (
 
     // Create middleware-enabled handlers
     const { handlerContext, callToolWithMiddleware } =
-      createMiddlewareEnabledHandlers(sessionId, namespaceUuid);
+      createMiddlewareEnabledHandlers(
+        sessionId,
+        namespaceUuid,
+        getRequestContext(req),
+      );
 
     // Use middleware-enabled call tool handler
     const callToolRequest: CallToolRequest = {
@@ -47,9 +66,12 @@ export const executeToolWithMiddleware = async (
 
     // Check if the result indicates an error (from middleware)
     if (result.isError) {
+      const firstBlock = result.content?.[0];
+      const message =
+        firstBlock && "text" in firstBlock ? firstBlock.text : undefined;
       return res.status(403).json({
         error: "Tool access denied",
-        message: result.content?.[0]?.text || "Tool is inactive",
+        message: message || "Tool is inactive",
         timestamp: new Date().toISOString(),
       });
     }

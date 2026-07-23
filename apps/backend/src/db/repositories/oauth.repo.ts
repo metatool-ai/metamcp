@@ -6,7 +6,7 @@ import {
   OAuthClient,
   OAuthClientCreateInput,
 } from "@repo/zod-types";
-import { eq, lt } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 
 import { db } from "../index";
 import {
@@ -86,7 +86,10 @@ export class OAuthRepository {
 
   async setAccessToken(
     token: string,
-    data: OAuthAccessTokenCreateInput,
+    data: OAuthAccessTokenCreateInput & {
+      refresh_token?: string;
+      refresh_token_expires_at?: number;
+    },
   ): Promise<void> {
     await db.insert(oauthAccessTokensTable).values({
       access_token: token,
@@ -94,6 +97,10 @@ export class OAuthRepository {
       user_id: data.user_id,
       scope: data.scope,
       expires_at: new Date(data.expires_at),
+      refresh_token: data.refresh_token ?? null,
+      refresh_token_expires_at: data.refresh_token_expires_at
+        ? new Date(data.refresh_token_expires_at)
+        : null,
     });
   }
 
@@ -101,6 +108,17 @@ export class OAuthRepository {
     await db
       .delete(oauthAccessTokensTable)
       .where(eq(oauthAccessTokensTable.access_token, token));
+  }
+
+  // ===== Refresh Tokens =====
+
+  async getByRefreshToken(refreshToken: string) {
+    const result = await db
+      .select()
+      .from(oauthAccessTokensTable)
+      .where(eq(oauthAccessTokensTable.refresh_token, refreshToken))
+      .limit(1);
+    return result[0] || null;
   }
 
   // ===== Cleanup =====
@@ -111,9 +129,24 @@ export class OAuthRepository {
       db
         .delete(oauthAuthorizationCodesTable)
         .where(lt(oauthAuthorizationCodesTable.expires_at, now)),
+      // Delete tokens where both access token AND refresh token are expired
+      // (or refresh token is null)
       db
         .delete(oauthAccessTokensTable)
-        .where(lt(oauthAccessTokensTable.expires_at, now)),
+        .where(
+          and(
+            lt(oauthAccessTokensTable.expires_at, now),
+            lt(oauthAccessTokensTable.refresh_token_expires_at, now),
+          ),
+        ),
+      db
+        .delete(oauthAccessTokensTable)
+        .where(
+          and(
+            lt(oauthAccessTokensTable.expires_at, now),
+            isNull(oauthAccessTokensTable.refresh_token),
+          ),
+        ),
     ]);
   }
 }

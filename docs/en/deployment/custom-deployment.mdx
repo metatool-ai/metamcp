@@ -11,6 +11,7 @@ This guide walks you through deploying MetaMCP on a DigitalOcean VPS running Ubu
 MetaMCP requires at least **2GB-4GB of memory** for optimal performance. The larger the instance, the better the performance due to MCP server pre-allocation and Docker operations.
 
 **Recommended DigitalOcean Droplet:**
+
 - **Basic/Regular**: 2GB RAM, 1 vCPU, 50GB SSD ($12/month)
 - **Better Performance**: 4GB RAM, 2 vCPU, 80GB SSD ($24/month)
 
@@ -118,6 +119,11 @@ newgrp docker
 ```
 
 ## Step 3: Deploy MetaMCP
+
+<Tip>
+  If you deploy on Kubernetes, see the plain YAML manifests and walkthrough in
+  [`deploy/kubernetes/README.md`](../../../deploy/kubernetes/README.md).
+</Tip>
 
 ### 3.1 Clone the Repository
 
@@ -236,17 +242,17 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
         # SSE-specific optimizations for MCP connections
         proxy_buffering off;
         proxy_cache off;
         proxy_read_timeout 86400s;  # 24 hours for long-lived SSE connections
         proxy_send_timeout 86400s;
-        
+
         # HTTP/1.1 with proper connection handling for SSE
         proxy_set_header Connection '';
         proxy_http_version 1.1;
-        
+
         # Additional headers for better SSE support
         proxy_set_header Cache-Control 'no-cache';
         proxy_set_header X-Accel-Buffering 'no';

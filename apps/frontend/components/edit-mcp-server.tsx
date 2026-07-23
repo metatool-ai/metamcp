@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { AdvancedOAuthSection } from "@/components/advanced-oauth-section";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -151,29 +152,54 @@ export function EditMcpServer({
     defaultValues: {
       name: "",
       description: "",
-      type: McpServerTypeEnum.Enum.STDIO,
+      type: McpServerTypeEnum.enum.STDIO,
       command: "",
       args: "",
       url: "",
       bearerToken: "",
       headers: "",
+      forward_headers: "",
       env: "",
       user_id: undefined,
+      oauth_client_id: "",
+      oauth_client_secret: "",
+      oauth_authorization_endpoint: "",
+      oauth_token_endpoint: "",
+      oauth_scope: "",
+      oauth_token_endpoint_auth_method: "none",
     },
   });
+
+  // Pull existing pre-registered OAuth client info so the edit form prefills
+  // (and the section opens by default when any value is set).
+  const existingOauthQuery = trpc.frontend.oauth.get.useQuery(
+    { mcp_server_uuid: server?.uuid ?? "" },
+    {
+      enabled: Boolean(server?.uuid && isOpen),
+      retry: false,
+    },
+  );
 
   // Watch for type changes in edit form and clear irrelevant fields
   useEffect(() => {
     const subscription = editForm.watch((value, { name }) => {
       if (name === "type" && value.type) {
-        if (value.type === McpServerTypeEnum.Enum.STDIO) {
-          // Clear URL, bearer token, and headers when switching to stdio
+        if (value.type === McpServerTypeEnum.enum.STDIO) {
+          // Clear URL, bearer token, headers, forward headers, and pre-registered
+          // OAuth fields when switching to stdio
           editForm.setValue("url", "");
           editForm.setValue("bearerToken", "");
           editForm.setValue("headers", "");
+          editForm.setValue("forward_headers", "");
+          editForm.setValue("oauth_client_id", "");
+          editForm.setValue("oauth_client_secret", "");
+          editForm.setValue("oauth_authorization_endpoint", "");
+          editForm.setValue("oauth_token_endpoint", "");
+          editForm.setValue("oauth_scope", "");
+          editForm.setValue("oauth_token_endpoint_auth_method", "none");
         } else if (
-          value.type === McpServerTypeEnum.Enum.SSE ||
-          value.type === McpServerTypeEnum.Enum.STREAMABLE_HTTP
+          value.type === McpServerTypeEnum.enum.SSE ||
+          value.type === McpServerTypeEnum.enum.STREAMABLE_HTTP
         ) {
           // Clear command, args, and env when switching to sse or streamable_http
           editForm.setValue("command", "");
@@ -185,9 +211,24 @@ export function EditMcpServer({
     return () => subscription.unsubscribe();
   }, [editForm]);
 
-  // Pre-populate form when server changes
+  // Pre-populate form when server changes (and re-pull existing OAuth client
+  // information from the matching oauth_sessions row, if any).
   useEffect(() => {
     if (server && isOpen) {
+      const existingClient =
+        existingOauthQuery.data && existingOauthQuery.data.success
+          ? (existingOauthQuery.data.data.client_information as
+              | (Record<string, unknown> & {
+                  client_id?: string;
+                  client_secret?: string;
+                  scope?: string;
+                  authorization_endpoint?: string;
+                  token_endpoint?: string;
+                  token_endpoint_auth_method?: string;
+                })
+              | null)
+          : null;
+
       editForm.reset({
         name: server.name,
         description: server.description || "",
@@ -199,13 +240,28 @@ export function EditMcpServer({
         headers: Object.entries(server.headers)
           .map(([key, value]) => `${key}=${value}`)
           .join("\n"),
+        forward_headers: Object.entries(server.forward_headers || {})
+          .map(([k, v]) => (k === v ? k : `${k}=${v}`))
+          .join("\n"),
         env: Object.entries(server.env)
           .map(([key, value]) => `${key}=${value}`)
           .join("\n"),
         user_id: server.user_id,
+        oauth_client_id: existingClient?.client_id ?? "",
+        oauth_client_secret: existingClient?.client_secret ?? "",
+        oauth_authorization_endpoint:
+          existingClient?.authorization_endpoint ?? "",
+        oauth_token_endpoint: existingClient?.token_endpoint ?? "",
+        oauth_scope: existingClient?.scope ?? "",
+        oauth_token_endpoint_auth_method:
+          (existingClient?.token_endpoint_auth_method as
+            | "none"
+            | "client_secret_basic"
+            | "client_secret_post"
+            | undefined) ?? "none",
       });
     }
-  }, [server, isOpen, editForm]);
+  }, [server, isOpen, editForm, existingOauthQuery.data]);
 
   // Handle edit server
   const handleEditServer = async (data: EditServerFormData) => {
@@ -253,6 +309,61 @@ export function EditMcpServer({
         }
       }
 
+      // Parse forward_headers string into record
+      // Each line is either "HeaderName" (1:1) or "ClientHeader=ServerHeader" (rename)
+      const forwardHeadersRecord: Record<string, string> = {};
+      if (data.forward_headers) {
+        const lines = data.forward_headers
+          .trim()
+          .split("\n")
+          .map((h: string) => h.trim())
+          .filter((h: string) => h.length > 0);
+        for (const line of lines) {
+          const eqIdx = line.indexOf("=");
+          if (eqIdx === -1) {
+            // Bare name: 1:1 mapping
+            forwardHeadersRecord[line] = line;
+          } else {
+            const clientName = line.slice(0, eqIdx).trim();
+            const serverName = line.slice(eqIdx + 1).trim();
+            if (clientName && serverName) {
+              forwardHeadersRecord[clientName] = serverName;
+            }
+          }
+        }
+      }
+
+      // Only attach the pre-registered OAuth payload when the user actually
+      // touched the Advanced OAuth section. Otherwise an unrelated edit
+      // (e.g. fixing a typo in the description) would re-derive
+      // `oauth_sessions.client_information` and potentially clobber an
+      // SDK-populated row from a prior dynamic-registration flow.
+      const isHttpServer =
+        data.type === McpServerTypeEnum.enum.SSE ||
+        data.type === McpServerTypeEnum.enum.STREAMABLE_HTTP;
+      const dirty = editForm.formState.dirtyFields as Record<string, unknown>;
+      const oauthSectionTouched = Boolean(
+        dirty.oauth_client_id ||
+        dirty.oauth_client_secret ||
+        dirty.oauth_authorization_endpoint ||
+        dirty.oauth_token_endpoint ||
+        dirty.oauth_scope ||
+        dirty.oauth_token_endpoint_auth_method,
+      );
+      const oauthClientInfo =
+        isHttpServer && oauthSectionTouched
+          ? {
+              client_id: data.oauth_client_id?.trim() || undefined,
+              client_secret: data.oauth_client_secret || undefined,
+              authorization_endpoint:
+                data.oauth_authorization_endpoint || undefined,
+              token_endpoint: data.oauth_token_endpoint || undefined,
+              scope: data.oauth_scope || undefined,
+              token_endpoint_auth_method:
+                data.oauth_token_endpoint_auth_method || "none",
+            }
+          : undefined;
+
       // Create the API request payload
       const apiPayload: UpdateMcpServerRequest = {
         uuid: server.uuid,
@@ -265,7 +376,9 @@ export function EditMcpServer({
         url: data.url,
         bearerToken: data.bearerToken,
         headers: headersObject,
+        forward_headers: forwardHeadersRecord,
         user_id: data.user_id,
+        oauth_client_info: oauthClientInfo,
       };
 
       // Use tRPC mutation instead of direct fetch
@@ -287,7 +400,7 @@ export function EditMcpServer({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("mcp-servers:editServer")}</DialogTitle>
           <DialogDescription>
@@ -371,12 +484,12 @@ export function EditMcpServer({
                   className="w-full justify-between"
                   type="button"
                 >
-                  {editForm.watch("type") === McpServerTypeEnum.Enum.STDIO
+                  {editForm.watch("type") === McpServerTypeEnum.enum.STDIO
                     ? t("mcp-servers:stdio")
-                    : editForm.watch("type") === McpServerTypeEnum.Enum.SSE
+                    : editForm.watch("type") === McpServerTypeEnum.enum.SSE
                       ? t("mcp-servers:sse")
                       : editForm.watch("type") ===
-                          McpServerTypeEnum.Enum.STREAMABLE_HTTP
+                          McpServerTypeEnum.enum.STREAMABLE_HTTP
                         ? "Streamable HTTP"
                         : t("mcp-servers:selectType")}
                   <ChevronDown className="h-4 w-4" />
@@ -385,14 +498,14 @@ export function EditMcpServer({
               <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
                 <DropdownMenuItem
                   onClick={() =>
-                    editForm.setValue("type", McpServerTypeEnum.Enum.STDIO)
+                    editForm.setValue("type", McpServerTypeEnum.enum.STDIO)
                   }
                 >
                   {t("mcp-servers:stdio")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
-                    editForm.setValue("type", McpServerTypeEnum.Enum.SSE)
+                    editForm.setValue("type", McpServerTypeEnum.enum.SSE)
                   }
                 >
                   {t("mcp-servers:sse")}
@@ -401,7 +514,7 @@ export function EditMcpServer({
                   onClick={() =>
                     editForm.setValue(
                       "type",
-                      McpServerTypeEnum.Enum.STREAMABLE_HTTP,
+                      McpServerTypeEnum.enum.STREAMABLE_HTTP,
                     )
                   }
                 >
@@ -411,7 +524,7 @@ export function EditMcpServer({
             </DropdownMenu>
           </div>
 
-          {editForm.watch("type") === McpServerTypeEnum.Enum.STDIO && (
+          {editForm.watch("type") === McpServerTypeEnum.enum.STDIO && (
             <>
               <div className="flex flex-col gap-2">
                 <label htmlFor="edit-command" className="text-sm font-medium">
@@ -460,9 +573,9 @@ export function EditMcpServer({
             </>
           )}
 
-          {(editForm.watch("type") === McpServerTypeEnum.Enum.SSE ||
+          {(editForm.watch("type") === McpServerTypeEnum.enum.SSE ||
             editForm.watch("type") ===
-              McpServerTypeEnum.Enum.STREAMABLE_HTTP) && (
+              McpServerTypeEnum.enum.STREAMABLE_HTTP) && (
             <>
               <div className="flex flex-col gap-2">
                 <label htmlFor="edit-url" className="text-sm font-medium">
@@ -509,6 +622,50 @@ export function EditMcpServer({
                   One header per line in KEY=VALUE format
                 </p>
               </div>
+
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="edit-forward-headers"
+                  className="text-sm font-medium"
+                >
+                  {t("mcp-servers:forwardHeaders")}
+                </label>
+                <Textarea
+                  id="edit-forward-headers"
+                  {...editForm.register("forward_headers")}
+                  placeholder={t("mcp-servers:forwardHeadersPlaceholder")}
+                  className="h-24 whitespace-pre-wrap break-all overflow-x-hidden"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("mcp-servers:forwardHeadersHelp")}
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  {t("mcp-servers:forwardHeadersWarning")}
+                </p>
+                {editForm.formState.errors.forward_headers && (
+                  <p className="text-sm text-red-500">
+                    {editForm.formState.errors.forward_headers.message ||
+                      t("mcp-servers:forwardHeadersInvalid")}
+                  </p>
+                )}
+              </div>
+
+              <AdvancedOAuthSection
+                form={
+                  editForm as unknown as Parameters<
+                    typeof AdvancedOAuthSection
+                  >[0]["form"]
+                }
+                idPrefix="edit"
+                defaultOpen={Boolean(
+                  existingOauthQuery.data?.success &&
+                  (
+                    existingOauthQuery.data.data.client_information as {
+                      client_id?: string;
+                    } | null
+                  )?.client_id,
+                )}
+              />
             </>
           )}
 

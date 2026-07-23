@@ -288,12 +288,12 @@ function CreateServerDialog({
                         variant="outline"
                         className="w-full justify-between"
                       >
-                        {field.value === McpServerTypeEnum.Enum.STDIO
+                        {field.value === McpServerTypeEnum.enum.STDIO
                           ? "STDIO"
-                          : field.value === McpServerTypeEnum.Enum.SSE
+                          : field.value === McpServerTypeEnum.enum.SSE
                             ? "SSE"
                             : field.value ===
-                                McpServerTypeEnum.Enum.STREAMABLE_HTTP
+                                McpServerTypeEnum.enum.STREAMABLE_HTTP
                               ? "Streamable HTTP"
                               : t("search:dialog.form.placeholders.selectType")}
                         <ChevronDown className="ml-2 h-4 w-4" />
@@ -305,21 +305,21 @@ function CreateServerDialog({
                     >
                       <DropdownMenuItem
                         onClick={() =>
-                          field.onChange(McpServerTypeEnum.Enum.STDIO)
+                          field.onChange(McpServerTypeEnum.enum.STDIO)
                         }
                       >
                         STDIO
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() =>
-                          field.onChange(McpServerTypeEnum.Enum.SSE)
+                          field.onChange(McpServerTypeEnum.enum.SSE)
                         }
                       >
                         SSE
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() =>
-                          field.onChange(McpServerTypeEnum.Enum.STREAMABLE_HTTP)
+                          field.onChange(McpServerTypeEnum.enum.STREAMABLE_HTTP)
                         }
                       >
                         Streamable HTTP
@@ -373,7 +373,7 @@ function CreateServerDialog({
               )}
             />
 
-            {form.watch("type") === McpServerTypeEnum.Enum.STDIO && (
+            {form.watch("type") === McpServerTypeEnum.enum.STDIO && (
               <>
                 <FormField
                   control={form.control}
@@ -436,9 +436,9 @@ function CreateServerDialog({
               </>
             )}
 
-            {(form.watch("type") === McpServerTypeEnum.Enum.SSE ||
+            {(form.watch("type") === McpServerTypeEnum.enum.SSE ||
               form.watch("type") ===
-                McpServerTypeEnum.Enum.STREAMABLE_HTTP) && (
+                McpServerTypeEnum.enum.STREAMABLE_HTTP) && (
               <>
                 <FormField
                   control={form.control}
@@ -524,7 +524,7 @@ export default function CardGrid({ items }: { items: SearchIndex }) {
     const defaultValues: CreateServerFormData = {
       name: sanitizedName,
       description: item.description,
-      type: McpServerTypeEnum.Enum.STDIO,
+      type: McpServerTypeEnum.enum.STDIO,
       command: item.command,
       args: item.args?.join(" ") || "",
       url: "",

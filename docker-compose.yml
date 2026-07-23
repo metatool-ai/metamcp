@@ -162,6 +162,14 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    volumes:
+      # Persist the uv cache across container recreates. Without this, every
+      # `docker compose up -d`/recreate wipes the writable layer and the next
+      # `uvx <pkg>@latest` spawn for each STDIO server cold-installs from
+      # scratch — slow enough to trip the crash detector and stick the server
+      # in error_status=ERROR. The image ships /home/nextjs/.cache/uv owned by
+      # nextjs (uid 1001) so a fresh named volume inherits correct ownership.
+      - uv_cache:/home/nextjs/.cache/uv
     networks:
       - metamcp-network
 
@@ -190,6 +198,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  uv_cache:
     driver: local
 
 networks:

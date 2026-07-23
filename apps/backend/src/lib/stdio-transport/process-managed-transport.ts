@@ -182,6 +182,9 @@ export class ProcessManagedStdioTransport implements Transport {
       });
 
       this._process.on("spawn", () => {
+        logger.info(
+          `[transport.start] spawned PID ${this._process?.pid} — command: ${this._serverParams.command}`,
+        );
         resolve();
       });
 
@@ -259,15 +262,45 @@ export class ProcessManagedStdioTransport implements Transport {
 
   async close(): Promise<void> {
     this._isCleanup = true;
-    this._abortController.abort();
 
-    // Kill the entire process group to ensure full cleanup
-    if (this._process?.pid) {
+    const proc = this._process;
+    const pid = proc?.pid ?? null;
+
+    if (pid && proc) {
+      // Register the "close" listener BEFORE sending any signal so a fast-exiting
+      // child cannot emit "close" in between and cause the promise to time out.
+      const exitedPromise = new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => resolve(false), 5000);
+        proc.once("close", () => {
+          clearTimeout(timeout);
+          resolve(true);
+        });
+      });
+
+      this._abortController.abort();
+
       try {
-        process.kill(-this._process.pid, "SIGTERM");
+        process.kill(-pid, "SIGTERM");
+        logger.info(`[transport.close] SIGTERM sent to process group -${pid}`);
       } catch (error) {
-        // Process might already be terminated, ignore errors
-        logger.warn("Failed to kill process group:", error);
+        logger.warn(
+          `[transport.close] SIGTERM failed for process group -${pid}:`,
+          error,
+        );
+      }
+
+      // Wait up to 5 seconds for graceful shutdown, then escalate to SIGKILL
+      const exited = await exitedPromise;
+
+      if (!exited) {
+        logger.warn(
+          `[transport.close] Process ${pid} still alive after 5s — sending SIGKILL`,
+        );
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch {
+          // Process may have already exited between the timeout check and the kill
+        }
       }
     }
 

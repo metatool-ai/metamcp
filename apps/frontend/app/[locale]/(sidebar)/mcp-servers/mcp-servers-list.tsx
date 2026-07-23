@@ -208,7 +208,7 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
       },
       cell: ({ row }) => {
         const errorStatus = row.getValue("error_status") as string;
-        const hasError = errorStatus === McpServerErrorStatusEnum.Enum.ERROR;
+        const hasError = errorStatus === McpServerErrorStatusEnum.enum.ERROR;
         return (
           <div className="px-3 py-2">
             <Badge variant={hasError ? "destructive" : "success"}>
@@ -327,7 +327,7 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
             config.description = server.description;
           }
 
-          if (server.type === McpServerTypeEnum.Enum.STDIO) {
+          if (server.type === McpServerTypeEnum.enum.STDIO) {
             if (server.command) {
               config.command = server.command;
             }
@@ -338,8 +338,8 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
               config.env = server.env;
             }
           } else if (
-            server.type === McpServerTypeEnum.Enum.SSE ||
-            server.type === McpServerTypeEnum.Enum.STREAMABLE_HTTP
+            server.type === McpServerTypeEnum.enum.SSE ||
+            server.type === McpServerTypeEnum.enum.STREAMABLE_HTTP
           ) {
             if (server.url) {
               config.url = server.url;

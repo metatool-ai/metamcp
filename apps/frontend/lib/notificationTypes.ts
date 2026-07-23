@@ -3,7 +3,9 @@ import {
   NotificationSchema as BaseNotificationSchema,
   ServerNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
+// SDK 1.26 schemas use the zod 4 API; compose with zod 4 so .extend()/.or()
+// and z.infer line up with the SDK's schema types.
+import { z } from "zod/v4";
 
 export const StdErrNotificationSchema = BaseNotificationSchema.extend({
   method: z.literal("notifications/stderr"),

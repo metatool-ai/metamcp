@@ -85,6 +85,7 @@ export const endpointsImplementations = {
         client_max_rate_strategy_key: input.clientMaxRateStrategyKey,
         enable_oauth: input.enableOauth ?? false,
         use_query_param_auth: input.useQueryParamAuth ?? false,
+        enable_metamcp_admin_tools: input.enableMetamcpAdminTools ?? false,
         user_id: effectiveUserId,
       });
 
@@ -354,6 +355,7 @@ export const endpointsImplementations = {
         client_max_rate_strategy_key: input.clientMaxRateStrategyKey,
         enable_oauth: input.enableOauth,
         use_query_param_auth: input.useQueryParamAuth,
+        enable_metamcp_admin_tools: input.enableMetamcpAdminTools,
       });
 
       return {

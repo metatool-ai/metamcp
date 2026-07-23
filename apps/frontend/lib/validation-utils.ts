@@ -1,20 +1,20 @@
-import { ZodError, ZodIssue } from "zod";
+import { ZodError } from "zod";
+
+// zod v4 no longer exports `ZodIssue`; derive the issue type from ZodError.
+type ZodIssue = ZodError["issues"][number];
 
 // Type for translation function
 type TranslationFunction = (
   key: string,
-  params?: Record<string, any>,
+  params?: Record<string, string | number>,
 ) => string;
 
 // Map of Zod issue codes to translation keys
 const issueCodeToTranslationKey: Record<string, string> = {
-  required_error: "validation:required",
   invalid_type: "validation:invalidFormat",
-  invalid_string: "validation:invalidFormat",
+  invalid_format: "validation:invalidFormat",
   too_small: "validation:minLength",
   too_big: "validation:maxLength",
-  invalid_url: "validation:urlFormat",
-  invalid_email: "validation:email",
   custom: "validation:generic.invalid",
 };
 
@@ -59,20 +59,20 @@ export function translateZodIssue(
   // Handle specific issue codes with parameters
   switch (issue.code) {
     case "too_small":
-      if (issue.type === "string") {
-        return t("validation:minLength", { min: issue.minimum });
+      if (issue.origin === "string") {
+        return t("validation:minLength", { min: Number(issue.minimum) });
       }
       break;
     case "too_big":
-      if (issue.type === "string") {
-        return t("validation:maxLength", { max: issue.maximum });
+      if (issue.origin === "string") {
+        return t("validation:maxLength", { max: Number(issue.maximum) });
       }
       break;
-    case "invalid_string":
-      if (issue.validation === "email") {
+    case "invalid_format":
+      if (issue.format === "email") {
         return t("validation:email");
       }
-      if (issue.validation === "url") {
+      if (issue.format === "url") {
         return t("validation:urlFormat");
       }
       break;

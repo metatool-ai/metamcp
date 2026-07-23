@@ -1,9 +1,9 @@
 import { OAuthClientInformation } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import {
   McpServerErrorStatusEnum,
   McpServerStatusEnum,
   McpServerTypeEnum,
+  UpstreamTokenResponse,
 } from "@repo/zod-types";
 import { sql } from "drizzle-orm";
 import {
@@ -19,18 +19,29 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+// zod v4 types `ZodEnum.options` as a plain array, but drizzle's pgEnum requires
+// a non-empty tuple. Re-assert the shape while preserving the literal union so
+// the generated columns keep their narrow enum types.
+function toEnumTuple<T extends string>(options: readonly T[]): [T, ...T[]] {
+  return options as unknown as [T, ...T[]];
+}
+
 export const mcpServerTypeEnum = pgEnum(
   "mcp_server_type",
-  McpServerTypeEnum.options,
+  toEnumTuple(McpServerTypeEnum.options),
 );
 export const mcpServerStatusEnum = pgEnum(
   "mcp_server_status",
-  McpServerStatusEnum.options,
+  toEnumTuple(McpServerStatusEnum.options),
 );
 export const mcpServerErrorStatusEnum = pgEnum(
   "mcp_server_error_status",
-  McpServerErrorStatusEnum.options,
+  toEnumTuple(McpServerErrorStatusEnum.options),
 );
+export const mcpRequestAuditStatusEnum = pgEnum("mcp_request_audit_status", [
+  "SUCCESS",
+  "ERROR",
+]);
 
 export const mcpServersTable = pgTable(
   "mcp_servers",
@@ -40,7 +51,7 @@ export const mcpServersTable = pgTable(
     description: text("description"),
     type: mcpServerTypeEnum("type")
       .notNull()
-      .default(McpServerTypeEnum.Enum.STDIO),
+      .default(McpServerTypeEnum.enum.STDIO),
     command: text("command"),
     args: text("args")
       .array()
@@ -53,12 +64,16 @@ export const mcpServersTable = pgTable(
     url: text("url"),
     error_status: mcpServerErrorStatusEnum("error_status")
       .notNull()
-      .default(McpServerErrorStatusEnum.Enum.NONE),
+      .default(McpServerErrorStatusEnum.enum.NONE),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     bearerToken: text("bearer_token"),
     headers: jsonb("headers")
+      .$type<{ [key: string]: string }>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    forward_headers: jsonb("forward_headers")
       .$type<{ [key: string]: string }>()
       .notNull()
       .default(sql`'{}'::jsonb`),
@@ -94,8 +109,19 @@ export const oauthSessionsTable = pgTable(
       .$type<OAuthClientInformation>()
       .notNull()
       .default(sql`'{}'::jsonb`),
-    tokens: jsonb("tokens").$type<OAuthTokens>(),
+    // Typed as UpstreamTokenResponse (RFC 6749 + .passthrough()) rather
+    // than the MCP SDK's narrow OAuthTokens so providers' extra response
+    // fields (Salesforce `instance_url`, OIDC `id_token`, Microsoft
+    // `ext_expires_in`, ...) round-trip without `as unknown as` casts at
+    // the call sites.
+    tokens: jsonb("tokens").$type<UpstreamTokenResponse>(),
     code_verifier: text("code_verifier"),
+    // CSRF defence (RFC 6749 §10.12). Generated server-side at the
+    // authorize-redirect step (`DbOAuthClientProvider.state()`), compared
+    // against the upstream's echoed `state` at token exchange, and cleared
+    // on success (one-shot). NEVER returned to the frontend — the
+    // serializer strips it.
+    expected_state: text("expected_state"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -265,6 +291,9 @@ export const endpointsTable = pgTable(
     use_query_param_auth: boolean("use_query_param_auth")
       .notNull()
       .default(false),
+    enable_metamcp_admin_tools: boolean("enable_metamcp_admin_tools")
+      .notNull()
+      .default(false),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -299,7 +328,7 @@ export const namespaceServerMappingsTable = pgTable(
       .references(() => mcpServersTable.uuid, { onDelete: "cascade" }),
     status: mcpServerStatusEnum("status")
       .notNull()
-      .default(McpServerStatusEnum.Enum.ACTIVE),
+      .default(McpServerStatusEnum.enum.ACTIVE),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -335,7 +364,7 @@ export const namespaceToolMappingsTable = pgTable(
       .references(() => mcpServersTable.uuid, { onDelete: "cascade" }),
     status: mcpServerStatusEnum("status")
       .notNull()
-      .default(McpServerStatusEnum.Enum.ACTIVE),
+      .default(McpServerStatusEnum.enum.ACTIVE),
     override_name: text("override_name"),
     override_title: text("override_title"),
     override_description: text("override_description"),
@@ -382,6 +411,84 @@ export const apiKeysTable = pgTable(
     index("api_keys_key_idx").on(table.key),
     index("api_keys_is_active_idx").on(table.is_active),
     unique("api_keys_name_per_user_idx").on(table.user_id, table.name),
+  ],
+);
+
+export const mcpRequestAuditLogsTable = pgTable(
+  "mcp_request_audit_logs",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    endpoint_name: text("endpoint_name").notNull(),
+    namespace_uuid: uuid("namespace_uuid").references(
+      () => namespacesTable.uuid,
+      {
+        onDelete: "set null",
+      },
+    ),
+    session_id: text("session_id").notNull(),
+    auth_method: text("auth_method").notNull(),
+    api_key_uuid: uuid("api_key_uuid").references(() => apiKeysTable.uuid, {
+      onDelete: "set null",
+    }),
+    api_key_user_id: text("api_key_user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    oauth_user_id: text("oauth_user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    mcp_server_uuid: uuid("mcp_server_uuid").references(
+      () => mcpServersTable.uuid,
+      {
+        onDelete: "set null",
+      },
+    ),
+    mcp_server_name: text("mcp_server_name"),
+    tool_name: text("tool_name").notNull(),
+    status: mcpRequestAuditStatusEnum("status").notNull(),
+    duration_ms: integer("duration_ms").notNull(),
+    error_message: text("error_message"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("mcp_request_audit_logs_created_at_idx").on(table.created_at),
+    index("mcp_request_audit_logs_endpoint_name_idx").on(table.endpoint_name),
+    index("mcp_request_audit_logs_namespace_uuid_idx").on(table.namespace_uuid),
+    index("mcp_request_audit_logs_session_id_idx").on(table.session_id),
+    index("mcp_request_audit_logs_api_key_uuid_idx").on(table.api_key_uuid),
+    index("mcp_request_audit_logs_api_key_user_id_idx").on(
+      table.api_key_user_id,
+    ),
+    index("mcp_request_audit_logs_oauth_user_id_idx").on(table.oauth_user_id),
+    index("mcp_request_audit_logs_mcp_server_uuid_idx").on(
+      table.mcp_server_uuid,
+    ),
+    index("mcp_request_audit_logs_mcp_server_name_idx").on(
+      table.mcp_server_name,
+    ),
+    index("mcp_request_audit_logs_tool_name_idx").on(table.tool_name),
+    index("mcp_request_audit_logs_status_idx").on(table.status),
+    index("mcp_request_audit_logs_api_key_user_created_at_idx").on(
+      table.api_key_user_id,
+      table.created_at,
+    ),
+    index("mcp_request_audit_logs_oauth_user_created_at_idx").on(
+      table.oauth_user_id,
+      table.created_at,
+    ),
+    index("mcp_request_audit_logs_api_key_created_at_idx").on(
+      table.api_key_uuid,
+      table.created_at,
+    ),
+    index("mcp_request_audit_logs_namespace_created_at_idx").on(
+      table.namespace_uuid,
+      table.created_at,
+    ),
+    index("mcp_request_audit_logs_status_created_at_idx").on(
+      table.status,
+      table.created_at,
+    ),
   ],
 );
 
@@ -474,6 +581,10 @@ export const oauthAccessTokensTable = pgTable(
       .references(() => usersTable.id, { onDelete: "cascade" }),
     scope: text("scope").notNull().default("admin"),
     expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+    refresh_token: text("refresh_token"),
+    refresh_token_expires_at: timestamp("refresh_token_expires_at", {
+      withTimezone: true,
+    }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -482,5 +593,6 @@ export const oauthAccessTokensTable = pgTable(
     index("oauth_access_tokens_client_id_idx").on(table.client_id),
     index("oauth_access_tokens_user_id_idx").on(table.user_id),
     index("oauth_access_tokens_expires_at_idx").on(table.expires_at),
+    index("oauth_access_tokens_refresh_token_idx").on(table.refresh_token),
   ],
 );

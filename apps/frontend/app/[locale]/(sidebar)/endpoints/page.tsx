@@ -81,6 +81,7 @@ export default function EndpointsPage() {
           clientMaxRateStrategyKey: "",
           enableOauth: false,
           useQueryParamAuth: false,
+          enableMetamcpAdminTools: false,
           createMcpServer: true,
           user_id: undefined, // Default to "For myself" (Private)
         });
@@ -126,6 +127,7 @@ export default function EndpointsPage() {
       enableApiKeyAuth: true,
       enableOauth: false,
       useQueryParamAuth: false,
+      enableMetamcpAdminTools: false,
       createMcpServer: true,
       user_id: undefined, // Default to "For myself" (Private)
     },
@@ -150,6 +152,7 @@ export default function EndpointsPage() {
         clientMaxRateStrategyKey: data.clientMaxRateStrategyKey,
         enableOauth: data.enableOauth,
         useQueryParamAuth: data.useQueryParamAuth,
+        enableMetamcpAdminTools: data.enableMetamcpAdminTools,
         createMcpServer: data.createMcpServer,
         user_id: data.user_id,
       };
@@ -675,6 +678,33 @@ export default function EndpointsPage() {
                       </p>
                     </div>
                   )}
+                </div>
+
+                <div className="space-y-4 border-t pt-4">
+                  <h4 className="text-sm font-medium">
+                    {t("endpoints:adminToolsSection")}
+                  </h4>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <label className="text-sm font-medium">
+                        {t("endpoints:enableMetamcpAdminTools")}
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("endpoints:enableMetamcpAdminToolsDescription")}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={form.watch("enableMetamcpAdminTools")}
+                      onCheckedChange={(checked) =>
+                        form.setValue("enableMetamcpAdminTools", checked)
+                      }
+                      disabled={
+                        isSubmitting ||
+                        (!form.watch("enableApiKeyAuth") &&
+                          !form.watch("enableOauth"))
+                      }
+                    />
+                  </div>
                 </div>
 
                 <div className="flex items-center space-x-2">

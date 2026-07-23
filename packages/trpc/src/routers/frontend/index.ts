@@ -2,6 +2,7 @@ import { createApiKeysRouter } from "./api-keys";
 import { createConfigRouter } from "./config";
 import { createEndpointsRouter } from "./endpoints";
 import { createLogsRouter } from "./logs";
+import { createMcpRequestAuditLogsRouter } from "./mcp-request-audit-logs";
 import { createMcpServersRouter } from "./mcp-servers";
 import { createNamespacesRouter } from "./namespaces";
 import { createOAuthRouter } from "./oauth";
@@ -14,6 +15,7 @@ export { createOAuthRouter };
 export { createToolsRouter };
 export { createApiKeysRouter };
 export { createConfigRouter };
+export { createMcpRequestAuditLogsRouter };
 
 export const createFrontendRouter = (implementations: {
   mcpServers: Parameters<typeof createMcpServersRouter>[0];
@@ -24,6 +26,7 @@ export const createFrontendRouter = (implementations: {
   apiKeys: Parameters<typeof createApiKeysRouter>[0];
   config: Parameters<typeof createConfigRouter>[0];
   logs: Parameters<typeof createLogsRouter>[0];
+  mcpRequestAuditLogs: Parameters<typeof createMcpRequestAuditLogsRouter>[0];
 }) => {
   return {
     mcpServers: createMcpServersRouter(implementations.mcpServers),
@@ -34,5 +37,8 @@ export const createFrontendRouter = (implementations: {
     apiKeys: createApiKeysRouter(implementations.apiKeys),
     config: createConfigRouter(implementations.config),
     logs: createLogsRouter(implementations.logs),
+    mcpRequestAuditLogs: createMcpRequestAuditLogsRouter(
+      implementations.mcpRequestAuditLogs,
+    ),
   };
 };

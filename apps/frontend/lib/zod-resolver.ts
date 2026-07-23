@@ -5,7 +5,7 @@ import { translateZodError } from "./validation-utils";
 // Type for translation function
 type TranslationFunction = (
   key: string,
-  params?: Record<string, any>,
+  params?: Record<string, string | number>,
 ) => string;
 
 /**
@@ -15,7 +15,7 @@ export function createTranslatedZodResolver<T extends ZodSchema>(
   schema: T,
   t: TranslationFunction,
 ) {
-  return (data: any) => {
+  return (data: unknown) => {
     try {
       // Parse the data with the schema
       const result = schema.parse(data);
