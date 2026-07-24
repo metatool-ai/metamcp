@@ -61,7 +61,7 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
       if (!validateRedirectUri(uri)) {
         return res.status(400).json({
           error: "invalid_redirect_uri",
-          error_description: `Invalid redirect URI: ${uri}. Must use secure scheme and valid format.`,
+          error_description: `Invalid redirect URI: ${uri}. Use HTTPS, or HTTP with localhost, 127.0.0.1, or [::1] for native loopback redirects in production.`,
         });
       }
     }
@@ -218,7 +218,7 @@ registrationRouter.get("/oauth/register", async (req, res) => {
 
       required_parameters: {
         redirect_uris:
-          "Array of redirect URIs for your application (HTTPS required in production)",
+          "Array of redirect URIs for your application (HTTPS required in production, except HTTP native loopback redirects using localhost, 127.0.0.1, or [::1])",
       },
 
       optional_parameters: {
@@ -237,7 +237,8 @@ registrationRouter.get("/oauth/register", async (req, res) => {
 
       security_recommendations: {
         use_pkce: "Always use PKCE (token_endpoint_auth_method: 'none')",
-        https_only: "Use HTTPS redirect URIs in production",
+        https_only:
+          "Use HTTPS redirect URIs in production, except HTTP native loopback redirects using localhost, 127.0.0.1, or [::1]",
         secure_storage:
           "Store client credentials securely if using client authentication",
         code_challenge_method: "Use 'S256' for code_challenge_method",
