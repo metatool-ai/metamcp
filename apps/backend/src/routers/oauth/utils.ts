@@ -74,24 +74,29 @@ export function validateRedirectUri(
       return false;
     }
 
-    // For production, only allow HTTPS
-    if (
-      process.env.NODE_ENV === "production" &&
-      parsedUri.protocol !== "https:"
-    ) {
-      return false;
-    }
+    const hostname = parsedUri.hostname.toLowerCase();
+    // URL.hostname normalizes IPv6 loopback to "[::1]".
+    const isLoopbackHost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]";
+    const isHttpLoopbackRedirect =
+      parsedUri.protocol === "http:" && isLoopbackHost;
 
-    // Prevent localhost/private IPs in production
+    // Production permits HTTP only for native loopback redirects.
     if (process.env.NODE_ENV === "production") {
-      const hostname = parsedUri.hostname.toLowerCase();
+      if (parsedUri.protocol !== "https:" && !isHttpLoopbackRedirect) {
+        return false;
+      }
+
+      // Do not allow local/private HTTPS redirects. HTTP loopback redirects
+      // are the exception above, but still pass through allowedHosts below.
       if (
-        hostname === "localhost" ||
-        hostname === "127.0.0.1" ||
-        hostname === "::1" ||
-        hostname.startsWith("192.168.") ||
-        hostname.startsWith("10.") ||
-        hostname.startsWith("172.")
+        !isHttpLoopbackRedirect &&
+        (isLoopbackHost ||
+          hostname.startsWith("192.168.") ||
+          hostname.startsWith("10.") ||
+          hostname.startsWith("172."))
       ) {
         return false;
       }
