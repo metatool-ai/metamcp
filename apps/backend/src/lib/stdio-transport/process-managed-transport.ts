@@ -1,4 +1,5 @@
 import { ChildProcess, IOType } from "node:child_process";
+import fs from "node:fs/promises";
 import process from "node:process";
 import { PassThrough, Stream } from "node:stream";
 
@@ -9,6 +10,11 @@ import spawn from "cross-spawn";
 import logger from "@/utils/logger";
 
 import { ReadBuffer, serializeMessage } from "./shared";
+
+type ProcStat = {
+  pid: number;
+  ppid: number;
+};
 
 export type StdioServerParameters = {
   /**
@@ -267,6 +273,8 @@ export class ProcessManagedStdioTransport implements Transport {
     const pid = proc?.pid ?? null;
 
     if (pid && proc) {
+      const descendantPids = await listDescendantPids(pid);
+
       // Register the "close" listener BEFORE sending any signal so a fast-exiting
       // child cannot emit "close" in between and cause the promise to time out.
       const exitedPromise = new Promise<boolean>((resolve) => {
@@ -289,18 +297,26 @@ export class ProcessManagedStdioTransport implements Transport {
         );
       }
 
-      // Wait up to 5 seconds for graceful shutdown, then escalate to SIGKILL
-      const exited = await exitedPromise;
+      signalPids(descendantPids, "SIGTERM");
 
-      if (!exited) {
+      // Wait up to 5 seconds for graceful shutdown, then escalate to SIGKILL.
+      // The direct launcher may exit before its worker children are fully gone,
+      // so track the initial descendant set as well as the process-group close.
+      const [exited, remainingDescendants] = await Promise.all([
+        exitedPromise,
+        waitForProcessExit(descendantPids, 5000),
+      ]);
+
+      if (!exited || remainingDescendants.length > 0) {
         logger.warn(
-          `[transport.close] Process ${pid} still alive after 5s — sending SIGKILL`,
+          `[transport.close] Process ${pid} or descendants still alive after 5s — sending SIGKILL`,
         );
         try {
           process.kill(-pid, "SIGKILL");
         } catch {
           // Process may have already exited between the timeout check and the kill
         }
+        signalPids(remainingDescendants, "SIGKILL");
       }
     }
 
@@ -326,4 +342,131 @@ export class ProcessManagedStdioTransport implements Transport {
 
 function isElectron() {
   return "type" in process;
+}
+
+export function parseProcStat(stat: string): ProcStat | undefined {
+  const closeParen = stat.lastIndexOf(")");
+  if (closeParen === -1) {
+    return undefined;
+  }
+
+  const pid = Number.parseInt(stat.slice(0, stat.indexOf(" ")), 10);
+  const fieldsAfterCommand = stat
+    .slice(closeParen + 2)
+    .trim()
+    .split(/\s+/);
+  const ppid = Number.parseInt(fieldsAfterCommand[1] ?? "", 10);
+
+  if (!Number.isFinite(pid) || !Number.isFinite(ppid)) {
+    return undefined;
+  }
+
+  return { pid, ppid };
+}
+
+export function collectDescendantPids(
+  rootPid: number,
+  stats: Iterable<ProcStat>,
+): number[] {
+  const childrenByParent = new Map<number, number[]>();
+  for (const stat of stats) {
+    const children = childrenByParent.get(stat.ppid) ?? [];
+    children.push(stat.pid);
+    childrenByParent.set(stat.ppid, children);
+  }
+
+  const descendants: number[] = [];
+  const stack = [...(childrenByParent.get(rootPid) ?? [])];
+
+  while (stack.length > 0) {
+    const pid = stack.pop();
+    if (pid === undefined) {
+      continue;
+    }
+    descendants.push(pid);
+    stack.push(...(childrenByParent.get(pid) ?? []));
+  }
+
+  // Signal deepest descendants first so wrapper processes cannot abandon
+  // still-running workers while the tree is being torn down.
+  return descendants.reverse();
+}
+
+async function listDescendantPids(pid: number): Promise<number[]> {
+  if (process.platform !== "linux") {
+    return [];
+  }
+
+  try {
+    const entries = await fs.readdir("/proc", { withFileTypes: true });
+    const stats: ProcStat[] = [];
+
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) {
+          return;
+        }
+
+        try {
+          const stat = await fs.readFile(`/proc/${entry.name}/stat`, "utf8");
+          const parsed = parseProcStat(stat);
+          if (parsed) {
+            stats.push(parsed);
+          }
+        } catch {
+          // Processes can exit while /proc is being scanned.
+        }
+      }),
+    );
+
+    return collectDescendantPids(pid, stats);
+  } catch (error) {
+    logger.warn(
+      `[transport.close] Failed to scan descendant processes for ${pid}:`,
+      error,
+    );
+    return [];
+  }
+}
+
+function signalPids(pids: number[], signal: NodeJS.Signals): void {
+  for (const pid of pids) {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Process may already have exited.
+    }
+  }
+}
+
+async function waitForProcessExit(
+  pids: number[],
+  timeoutMs: number,
+): Promise<number[]> {
+  const deadline = Date.now() + timeoutMs;
+  let remaining = pids.filter(isProcessAlive);
+
+  while (remaining.length > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    remaining = remaining.filter(isProcessAlive);
+  }
+
+  return remaining;
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ESRCH"
+    ) {
+      return false;
+    }
+    return true;
+  }
 }
