@@ -83,6 +83,21 @@ MetaMCP supports three types of MCP servers:
     ```
 
     <Info>You can leave bearerToken as blank if the server uses OAuth.</Info>
+
+    Example with an OAuth-enabled Xquik server:
+
+    ```json
+    {
+      "name": "Xquik",
+      "type": "STREAMABLE_HTTP",
+      "url": "https://xquik.com/mcp"
+    }
+    ```
+
+    Open the server details page to connect and complete OAuth.
+    MetaMCP follows Xquik's OAuth discovery and dynamic registration.
+    See the [Xquik MCP guide](https://docs.xquik.com/mcp/overview).
+    Not affiliated with X Corp.
   </Accordion>
 </AccordionGroup>
 
@@ -515,4 +530,4 @@ Custom dependencies increase the Docker image size and startup time. Consider us
   <Card title="Integration Guide" icon="plug" href="/en/integrations/cursor">
     Connect your configured servers to MCP clients
   </Card>
-</CardGroup> 
+</CardGroup>
