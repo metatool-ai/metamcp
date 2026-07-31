@@ -34,6 +34,30 @@ async function issueTokenPair(clientId: string, userId: string, scope: string) {
 }
 
 /**
+ * Resolve the client_id for a token request.
+ *
+ * RFC 6749 2.3.1: a confidential client may authenticate with HTTP Basic, in
+ * which case client_id is in the Authorization header and NOT in the body.
+ * Clients registered with token_endpoint_auth_method=client_secret_basic send
+ * it that way, so reading req.body alone leaves client_id undefined for them.
+ *
+ * The body value takes precedence, so client_secret_post and public ("none")
+ * clients are unaffected.
+ */
+function resolveClientId(req: express.Request): string | undefined {
+  if (req.body?.client_id) return req.body.client_id;
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Basic ")) {
+    const decoded = Buffer.from(authHeader.substring(6), "base64").toString();
+    const separatorIndex = decoded.indexOf(":");
+    if (separatorIndex > 0) return decoded.substring(0, separatorIndex);
+  }
+
+  return undefined;
+}
+
+/**
  * OAuth 2.0 Token Endpoint
  * Handles token exchange requests from MCP clients
  * Supports authorization_code and refresh_token grant types
@@ -86,7 +110,8 @@ async function handleAuthorizationCodeGrant(
   req: express.Request,
   res: express.Response,
 ) {
-  const { code, redirect_uri, client_id, code_verifier } = req.body;
+  const { code, redirect_uri, code_verifier } = req.body;
+  const client_id = resolveClientId(req);
 
   // Validate authorization code
   if (!code) {
@@ -240,7 +265,8 @@ async function handleRefreshTokenGrant(
   req: express.Request,
   res: express.Response,
 ) {
-  const { refresh_token, client_id } = req.body;
+  const { refresh_token } = req.body;
+  const client_id = resolveClientId(req);
 
   if (!refresh_token) {
     return res.status(400).json({
