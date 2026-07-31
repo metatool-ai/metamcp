@@ -216,6 +216,26 @@ describe("buildNamespaceExport", () => {
     ]);
   });
 
+  it("keeps the namespace body identical regardless of the export clock", () => {
+    const namespace = makeNamespace({
+      servers: [makeServer({ name: "github" })],
+    });
+    const tools: DatabaseNamespaceTool[] = [
+      makeTool({ name: "delete_repository", status: "INACTIVE" }),
+    ];
+
+    const a = buildNamespaceExport(namespace, tools, {
+      now: new Date("2026-07-31T10:00:00.000Z"),
+    });
+    const b = buildNamespaceExport(namespace, tools, {
+      now: new Date("2027-01-01T00:00:00.000Z"),
+    });
+
+    // Only exportedAt varies; the reviewable body is byte-identical.
+    expect(a.exportedAt).not.toBe(b.exportedAt);
+    expect(JSON.stringify(a.namespace)).toBe(JSON.stringify(b.namespace));
+  });
+
   it("sorts override annotation keys for stable output", () => {
     const namespace = makeNamespace({
       servers: [makeServer({ name: "github" })],

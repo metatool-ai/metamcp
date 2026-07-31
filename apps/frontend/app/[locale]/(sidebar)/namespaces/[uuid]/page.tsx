@@ -138,7 +138,12 @@ export default function NamespaceDetailPage({
   const handleExportNamespace = async () => {
     setIsExporting(true);
     try {
-      const result = await utils.frontend.namespaces.export.fetch({ uuid });
+      // staleTime: 0 forces a fresh fetch so the download always reflects the
+      // current namespace state, not a cached result (global staleTime is 5m).
+      const result = await utils.frontend.namespaces.export.fetch(
+        { uuid },
+        { staleTime: 0 },
+      );
 
       if (!result.success || !result.data) {
         toast.error(t("namespaces:detail.exportFailed"), {

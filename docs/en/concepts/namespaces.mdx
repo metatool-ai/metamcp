@@ -126,8 +126,10 @@ across MetaMCP instances. Key properties:
 
 - **No secrets**: server connection details (`env` values, bearer tokens, headers)
   are never included. The document only references servers by name.
-- **Deterministic**: servers and tools are sorted by a stable key, so re-exporting
-  an unchanged namespace produces an identical file that is easy to diff.
+- **Deterministic**: servers and tools are sorted by a stable, locale-independent
+  key, so re-exporting an unchanged namespace produces an identical `namespace`
+  body. Only the top-level `exportedAt` timestamp changes between exports, so
+  diffs stay small.
 - **Deviations only**: a tool is listed only when it is `INACTIVE` or has an
   override. Tools left in the default `ACTIVE` state with no override are omitted.
 

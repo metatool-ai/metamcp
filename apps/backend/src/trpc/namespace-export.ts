@@ -15,9 +15,11 @@ export interface BuildNamespaceExportOptions {
 
 // Builds the portable export document for a namespace. Pure and secret-free: it
 // reads only server/tool names, statuses and overrides, never server connection
-// config (env / bearer token / headers). Output is deterministic for a fixed
-// clock (servers sorted by name, tools by server then name, stable key order),
-// so two exports of the same namespace produce byte-identical JSON.
+// config (env / bearer token / headers). The `namespace` body is deterministic:
+// it is byte-identical across exports of an unchanged namespace (servers sorted
+// by name, tools by server then name, stable key order, sorted annotation keys,
+// locale-independent comparison). Only the top-level `exportedAt` provenance
+// timestamp varies between exports.
 export function buildNamespaceExport(
   namespace: DatabaseNamespaceWithServers,
   tools: DatabaseNamespaceTool[],
@@ -27,18 +29,20 @@ export function buildNamespaceExport(
 
   const servers: NamespaceExportServerEntry[] = namespace.servers
     .map((server) => ({ name: server.name, status: server.status }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareStrings(a.name, b.name));
 
-  // Only export tools that deviate from the default (INACTIVE or with an
+  // Export only tools that deviate from the default (INACTIVE or with an
   // override). Plain ACTIVE tools with no override are the default and are
   // omitted to keep the document small and decoupled from the full,
-  // frequently-changing discovered-tool list.
+  // frequently-changing discovered-tool list. Build each entry once (which
+  // resolves the override) before filtering, so the override is not computed
+  // twice per tool.
   const exportTools: NamespaceExportToolEntry[] = tools
-    .filter(isToolDeviation)
     .map(buildExportTool)
+    .filter((tool) => tool.status === "INACTIVE" || tool.override !== undefined)
     .sort(
       (a, b) =>
-        a.server.localeCompare(b.server) || a.name.localeCompare(b.name),
+        compareStrings(a.server, b.server) || compareStrings(a.name, b.name),
     );
 
   return {
@@ -53,8 +57,11 @@ export function buildNamespaceExport(
   };
 }
 
-function isToolDeviation(tool: DatabaseNamespaceTool): boolean {
-  return tool.status === "INACTIVE" || buildOverride(tool) !== undefined;
+// Locale-independent string comparison (code-unit order) so the ordering is
+// stable across Node runtimes and instances, not dependent on the ambient ICU
+// locale. This matters because the document is meant to be portable.
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function buildExportTool(
