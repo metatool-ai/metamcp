@@ -178,6 +178,70 @@ export const RefreshNamespaceToolsResponseSchema = z.object({
   mappingsCreated: z.number().optional(),
 });
 
+// Namespace export/import format (portable, versioned, secret-free JSON).
+// Servers and tools are referenced by name so the document is portable across
+// instances; no server connection config (env / bearer token / headers) is included.
+export const NAMESPACE_EXPORT_VERSION = 1;
+
+export const NamespaceExportServerSchema = z.object({
+  name: z.string(),
+  status: McpServerStatusEnum,
+});
+
+export const NamespaceExportToolOverrideSchema = z.object({
+  name: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  annotations: ToolAnnotationsSchema.optional(),
+});
+
+export const NamespaceExportToolSchema = z.object({
+  server: z.string(),
+  name: z.string(),
+  status: ToolStatusEnum,
+  override: NamespaceExportToolOverrideSchema.optional(),
+});
+
+export const NamespaceExportNamespaceSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  servers: z.array(NamespaceExportServerSchema),
+  tools: z.array(NamespaceExportToolSchema),
+});
+
+export const NamespaceExportSchema = z.object({
+  version: z.literal(NAMESPACE_EXPORT_VERSION),
+  exportedAt: z.string(),
+  namespace: NamespaceExportNamespaceSchema,
+});
+
+export const ExportNamespaceRequestSchema = z.object({
+  uuid: z.string(),
+});
+
+export const ExportNamespaceResponseSchema = z.object({
+  success: z.boolean(),
+  data: NamespaceExportSchema.optional(),
+  message: z.string().optional(),
+});
+
+export type NamespaceExportServerEntry = z.infer<
+  typeof NamespaceExportServerSchema
+>;
+export type NamespaceExportToolOverride = z.infer<
+  typeof NamespaceExportToolOverrideSchema
+>;
+export type NamespaceExportToolEntry = z.infer<
+  typeof NamespaceExportToolSchema
+>;
+export type NamespaceExport = z.infer<typeof NamespaceExportSchema>;
+export type ExportNamespaceRequest = z.infer<
+  typeof ExportNamespaceRequestSchema
+>;
+export type ExportNamespaceResponse = z.infer<
+  typeof ExportNamespaceResponseSchema
+>;
+
 // Type exports
 export type CreateNamespaceRequest = z.infer<
   typeof CreateNamespaceRequestSchema

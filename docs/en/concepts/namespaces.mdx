@@ -111,6 +111,51 @@ Available tools through the namespace:
 - `git-helper__git_commit`
 - `git-helper__git_diff`
 
+## Exporting a Namespace
+
+You can export a namespace as a portable, versioned JSON document. This lets you
+store a namespace configuration in Git, review changes in a pull request, and
+promote a namespace between environments.
+
+1. **Open** the namespace detail page
+2. **Click** "Export"
+3. The browser downloads a `namespace-<name>.json` file
+
+The export document references servers and tools **by name**, so it is portable
+across MetaMCP instances. Key properties:
+
+- **No secrets**: server connection details (`env` values, bearer tokens, headers)
+  are never included. The document only references servers by name.
+- **Deterministic**: servers and tools are sorted by a stable key, so re-exporting
+  an unchanged namespace produces an identical file that is easy to diff.
+- **Deviations only**: a tool is listed only when it is `INACTIVE` or has an
+  override. Tools left in the default `ACTIVE` state with no override are omitted.
+
+Example export:
+
+```json
+{
+  "version": 1,
+  "exportedAt": "2026-07-31T10:00:00.000Z",
+  "namespace": {
+    "name": "release-manager",
+    "description": "Tools for release coordination",
+    "servers": [{ "name": "github", "status": "ACTIVE" }],
+    "tools": [
+      {
+        "server": "github",
+        "name": "create_pull_request",
+        "status": "ACTIVE",
+        "override": {
+          "description": "Create a pull request into the release branch."
+        }
+      },
+      { "server": "github", "name": "delete_repository", "status": "INACTIVE" }
+    ]
+  }
+}
+```
+
 ## Next Steps
 
 <CardGroup cols={2}>

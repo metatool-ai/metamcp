@@ -2,6 +2,7 @@ import {
   CreateNamespaceRequestSchema,
   CreateNamespaceResponseSchema,
   DeleteNamespaceResponseSchema,
+  ExportNamespaceResponseSchema,
   GetNamespaceResponseSchema,
   GetNamespaceToolsRequestSchema,
   GetNamespaceToolsResponseSchema,
@@ -33,6 +34,7 @@ import {
   mapOverrideNameToOriginal,
 } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
+import { buildNamespaceExport } from "./namespace-export";
 
 export const namespacesImplementations = {
   create: async (
@@ -234,6 +236,53 @@ export const namespacesImplementations = {
         success: false as const,
         data: [],
         message: "Failed to fetch namespace tools",
+      };
+    }
+  },
+
+  export: async (
+    input: {
+      uuid: string;
+    },
+    userId: string,
+  ): Promise<z.infer<typeof ExportNamespaceResponseSchema>> => {
+    try {
+      const namespaceWithServers =
+        await namespacesRepository.findByUuidWithServers(input.uuid);
+
+      if (!namespaceWithServers) {
+        return {
+          success: false as const,
+          message: "Namespace not found",
+        };
+      }
+
+      // Same access rule as get: owner or public namespace only
+      if (
+        namespaceWithServers.user_id &&
+        namespaceWithServers.user_id !== userId
+      ) {
+        return {
+          success: false as const,
+          message:
+            "Access denied: You can only export namespaces you own or public namespaces",
+        };
+      }
+
+      const toolsData = await namespacesRepository.findToolsByNamespaceUuid(
+        input.uuid,
+      );
+
+      return {
+        success: true as const,
+        data: buildNamespaceExport(namespaceWithServers, toolsData),
+        message: "Namespace exported successfully",
+      };
+    } catch (error) {
+      logger.error("Error exporting namespace:", error);
+      return {
+        success: false as const,
+        message: "Failed to export namespace",
       };
     }
   },
