@@ -27,9 +27,19 @@ export function buildNamespaceExport(
 ): NamespaceExport {
   const exportedAt = (options.now ?? new Date()).toISOString();
 
+  // Sorting compares every exported field, not just the name. A namespace can
+  // legitimately hold two servers with the same name (server names are unique
+  // per user, so a public server and the caller's own private server may share
+  // one), and the underlying query has no ORDER BY. Ordering on name alone
+  // would leave those entries in database row order, which Postgres does not
+  // guarantee. With a total order over the exported content, entries that still
+  // tie are byte-identical, so their order cannot change the output.
   const servers: NamespaceExportServerEntry[] = namespace.servers
     .map((server) => ({ name: server.name, status: server.status }))
-    .sort((a, b) => compareStrings(a.name, b.name));
+    .sort(
+      (a, b) =>
+        compareStrings(a.name, b.name) || compareStrings(a.status, b.status),
+    );
 
   // Export only tools that deviate from the default (INACTIVE or with an
   // override). Plain ACTIVE tools with no override are the default and are
@@ -42,7 +52,10 @@ export function buildNamespaceExport(
     .filter((tool) => tool.status === "INACTIVE" || tool.override !== undefined)
     .sort(
       (a, b) =>
-        compareStrings(a.server, b.server) || compareStrings(a.name, b.name),
+        compareStrings(a.server, b.server) ||
+        compareStrings(a.name, b.name) ||
+        compareStrings(a.status, b.status) ||
+        compareStrings(serializeOverride(a), serializeOverride(b)),
     );
 
   return {
@@ -62,6 +75,13 @@ export function buildNamespaceExport(
 // locale. This matters because the document is meant to be portable.
 function compareStrings(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+// Last-resort tiebreaker for tools that match on server, name and status. The
+// override already has sorted keys and a fixed field order, so serializing it
+// yields a stable comparison key.
+function serializeOverride(tool: NamespaceExportToolEntry): string {
+  return JSON.stringify(tool.override ?? null);
 }
 
 function buildExportTool(

@@ -216,6 +216,69 @@ describe("buildNamespaceExport", () => {
     ]);
   });
 
+  it("is deterministic when two servers share a name", () => {
+    // Server names are unique per user, so a public server and the caller's own
+    // private server can share a name inside one namespace. The underlying
+    // query has no ORDER BY, so row order must not reach the output.
+    const publicServer = makeServer({
+      uuid: "public-uuid",
+      name: "github",
+      user_id: null,
+      status: "ACTIVE",
+    });
+    const privateServer = makeServer({
+      uuid: "private-uuid",
+      name: "github",
+      user_id: "user-1",
+      status: "INACTIVE",
+    });
+
+    const oneOrder = buildNamespaceExport(
+      makeNamespace({ servers: [publicServer, privateServer] }),
+      [],
+      { now: FIXED_NOW },
+    );
+    const otherOrder = buildNamespaceExport(
+      makeNamespace({ servers: [privateServer, publicServer] }),
+      [],
+      { now: FIXED_NOW },
+    );
+
+    expect(JSON.stringify(oneOrder.namespace)).toBe(
+      JSON.stringify(otherOrder.namespace),
+    );
+  });
+
+  it("is deterministic when two tools share a server and tool name", () => {
+    const namespace = makeNamespace({
+      servers: [makeServer({ name: "github" })],
+    });
+    const inactive = makeTool({
+      uuid: "tool-a",
+      serverName: "github",
+      name: "create_pull_request",
+      status: "INACTIVE",
+    });
+    const overridden = makeTool({
+      uuid: "tool-b",
+      serverName: "github",
+      name: "create_pull_request",
+      status: "ACTIVE",
+      overrideDescription: "Use the release template.",
+    });
+
+    const oneOrder = buildNamespaceExport(namespace, [inactive, overridden], {
+      now: FIXED_NOW,
+    });
+    const otherOrder = buildNamespaceExport(namespace, [overridden, inactive], {
+      now: FIXED_NOW,
+    });
+
+    expect(JSON.stringify(oneOrder.namespace)).toBe(
+      JSON.stringify(otherOrder.namespace),
+    );
+  });
+
   it("keeps the namespace body identical regardless of the export clock", () => {
     const namespace = makeNamespace({
       servers: [makeServer({ name: "github" })],
