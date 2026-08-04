@@ -1,7 +1,15 @@
 "use client";
 
 import { McpServerTypeEnum } from "@repo/zod-types";
-import { ArrowLeft, Calendar, Edit, Hash, Plug, Server } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  Download,
+  Edit,
+  Hash,
+  Plug,
+  Server,
+} from "lucide-react";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
@@ -41,6 +49,7 @@ export default function NamespaceDetailPage({
 
   const [showDeleteDialog, setShowDeleteDialog] = useState<boolean>(false);
   const [editDialogOpen, setEditDialogOpen] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
   const lastToggleTimeRef = useRef<number>(0);
 
   // Get tRPC utils for cache invalidation
@@ -123,6 +132,48 @@ export default function NamespaceDetailPage({
   // Handle delete namespace
   const handleDeleteNamespace = async () => {
     deleteMutation.mutate({ uuid });
+  };
+
+  // Handle exporting the namespace as a portable JSON document
+  const handleExportNamespace = async () => {
+    setIsExporting(true);
+    try {
+      // staleTime: 0 forces a fresh fetch so the download always reflects the
+      // current namespace state, not a cached result (global staleTime is 5m).
+      const result = await utils.frontend.namespaces.export.fetch(
+        { uuid },
+        { staleTime: 0 },
+      );
+
+      if (!result.success || !result.data) {
+        toast.error(t("namespaces:detail.exportFailed"), {
+          description: result.message,
+        });
+        return;
+      }
+
+      const jsonString = JSON.stringify(result.data, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `namespace-${result.data.namespace.name}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(t("namespaces:detail.namespaceExported"), {
+        description: t("namespaces:detail.namespaceExportedDescription"),
+      });
+    } catch (error) {
+      console.error("Error exporting namespace:", error);
+      toast.error(t("namespaces:detail.exportFailed"), {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Handle successful edit
@@ -351,6 +402,15 @@ export default function NamespaceDetailPage({
           </Button>
         </Link>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportNamespace}
+            disabled={isExporting}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {t("namespaces:detail.exportNamespace")}
+          </Button>
           <Button
             variant="outline"
             size="sm"

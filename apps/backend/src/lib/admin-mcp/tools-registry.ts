@@ -7,6 +7,7 @@ import {
   CreateNamespaceRequestSchema,
   CreateToolRequestSchema,
   DeleteApiKeyRequestSchema,
+  ExportNamespaceRequestSchema,
   GetLogsRequestSchema,
   GetNamespaceToolsRequestSchema,
   GetOAuthSessionRequestSchema,
@@ -216,6 +217,16 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     async (userId, input) =>
       namespacesImplementations.refreshTools(
         RefreshNamespaceToolsRequestSchema.parse(input),
+        userId,
+      ),
+  ),
+  defineTool(
+    "metamcp_export_namespace",
+    "Export a namespace as a portable, versioned JSON document. References servers and tools by name and contains no secrets.",
+    ExportNamespaceRequestSchema,
+    async (userId, input) =>
+      namespacesImplementations.export(
+        ExportNamespaceRequestSchema.parse(input),
         userId,
       ),
   ),

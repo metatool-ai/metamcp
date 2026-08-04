@@ -91,7 +91,11 @@
     "toggleTooFast": "Toggle Too Fast",
     "toggleTooFastDescription": "Please wait before toggling again to allow the session to initialize properly.",
     "forceReset": "Force Reset",
-    "anErrorOccurredWhileDeleting": "An error occurred while deleting the namespace"
+    "anErrorOccurredWhileDeleting": "An error occurred while deleting the namespace",
+    "exportNamespace": "Export",
+    "namespaceExported": "Namespace Exported",
+    "namespaceExportedDescription": "Namespace configuration has been downloaded",
+    "exportFailed": "Failed to export namespace"
   },
   "enhancedToolsTable": {
     "toolName": "Tool Name",
