@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
-    && npm install -g pnpm@10.12.0 \
+    && npm install -g pnpm@10.29.3 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -48,9 +48,11 @@ COPY . .
 # Build all packages and apps
 RUN pnpm build
 
+# The pnpm store dir is suffixed with the resolved react peer versions (e.g. _react-dom@19.2.4_react@19.2.4__react@19.2.4),
+# which drift as the lockfile updates. Glob the store dir so this sed survives dependency bumps.
 RUN sed -i -e "s/30000/600000/" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/server/lib/router-utils/proxy-request.js" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js"
+    node_modules/.pnpm/next@15.5.12_*/node_modules/next/dist/server/lib/router-utils/proxy-request.js \
+    node_modules/.pnpm/next@15.5.12_*/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js
 
 # Production runner stage
 FROM base AS runner
@@ -86,11 +88,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
 
-# Install production dependencies only
-RUN pnpm install --prod
+# pnpm aborts the modules-dir removal when there's no TTY unless CI is set; CI builds are non-TTY.
+ENV CI=true
 
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+# Install production dependencies only. drizzle-kit is a production dependency
+# of apps/backend (it runs `pnpm exec drizzle-kit migrate` at startup), so the
+# --prod prune keeps it linked into apps/backend/node_modules/.bin.
+RUN pnpm install --prod
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
