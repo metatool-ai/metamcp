@@ -11,6 +11,12 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Bun into /usr/local so `bun`/`bunx` are on the system PATH for any
+# spawned process (the runtime runs as `USER nextjs`, whose non-login shells do
+# not read ~/.bashrc, so a $HOME-based install would be unreachable).
+RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash \
+    && bun --version
+
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app
