@@ -1,0 +1,85 @@
+---
+title: "Audit Logs"
+description: "Monitor and analyze MCP tool calls with comprehensive audit logging"
+---
+
+The **Audit Logs** feature provides comprehensive visibility into all MCP tool calls made through MetaMCP. Track requests by API key, endpoint, server, and result status to monitor usage patterns, debug issues, and ensure security compliance.
+
+## Overview
+
+Audit logs capture detailed information about every MCP tool call, including:
+
+- **API Key**: Which API key was used for authentication
+- **Endpoint**: The MetaMCP endpoint that handled the request
+- **Namespace**: The namespace context for the request
+- **MCP Server**: The target MCP server that processed the tool call
+- **Tool**: The specific tool that was invoked
+- **Status**: Success or error status
+- **Duration**: Request processing time in milliseconds
+- **Error Details**: Full error messages for failed requests
+
+<div align="center">
+  <img src="/images/audit-logs.png" alt="Audit Logs Interface" style={{ width: "100%", maxWidth: "1200px", margin: "2rem 0", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }} />
+</div>
+
+## Features
+
+### Multi-dimensional Filtering
+
+Filter audit logs by:
+- **API Key**: View requests from specific API keys
+- **Namespace**: Filter by namespace context
+- **Status**: Show only successful or failed requests
+- **Time Range**: Query logs within specific time periods
+
+### Grouping and Analysis
+
+Audit logs are automatically grouped by:
+- API key for usage tracking
+- Endpoint for traffic analysis
+- MCP server for performance monitoring
+- Result status for error rate analysis
+
+### Real-time Monitoring
+
+- Live updates as new requests are processed
+- Instant visibility into request patterns
+- Quick identification of errors and anomalies
+
+## Use Cases
+
+### Security Auditing
+
+Track which API keys are accessing which MCP servers and tools. Identify unauthorized access attempts or unusual usage patterns.
+
+### Performance Monitoring
+
+Monitor request durations to identify slow MCP servers or tools. Analyze traffic patterns to optimize resource allocation.
+
+### Debugging
+
+Quickly identify failed requests with full error details. Trace request flows across endpoints, namespaces, and servers.
+
+### Usage Analytics
+
+Understand which tools and servers are most frequently used. Track API key usage for billing or quota management.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Keys" icon="key" href="/en/concepts/endpoints">
+    Learn how to create and manage API keys
+  </Card>
+  
+  <Card title="Namespaces" icon="folder" href="/en/concepts/namespaces">
+    Organize MCP servers with namespaces
+  </Card>
+  
+  <Card title="Inspector" icon="magnifying-glass" href="/en/concepts/inspector">
+    Test and debug MCP servers interactively
+  </Card>
+  
+  <Card title="Middleware" icon="filter" href="/en/concepts/middleware">
+    Add custom logic to request processing
+  </Card>
+</CardGroup>

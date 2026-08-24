@@ -1,0 +1,79 @@
+{
+  "title": "MCP Server 탐색 및 검색 (베타)",
+  "searchPlaceholder": "검색...",
+  "loading": "불러오는 중...",
+  "error": "오류",
+  "noResults": "결과를 찾을 수 없습니다",
+  "searchResults": "검색 결과",
+  "resultsCount": "{{count}}개 결과 발견",
+  "previousPage": "이전",
+  "nextPage": "다음",
+  "page": "{{total}}페이지 중 {{current}}페이지",
+  "searchError": "검색 중 오류가 발생했습니다. 다시 시도하세요.",
+  "tryAgain": "다시 시도",
+  "clearSearch": "검색 지우기",
+  "searchHint": "MCP Server를 검색할 키워드를 입력하세요",
+  "popularServers": "인기 Server",
+  "recentServers": "최근 Server",
+  "categories": "카테고리",
+  "filters": "필터",
+  "sortBy": "정렬 기준",
+  "relevance": "관련성",
+  "created": "생성일",
+  "updated": "업데이트일",
+  "rating": "평점",
+  "card": {
+    "package": "Package:",
+    "command": "Command:",
+    "args": "Args:",
+    "envVars": "환경 변수:",
+    "registry": "Registry:",
+    "github": "GitHub",
+    "addServer": "Server 추가"
+  },
+  "dialog": {
+    "title": "MCP Server 생성",
+    "description": "새 Model Context Protocol Server를 구성합니다.",
+    "form": {
+      "name": "이름",
+      "description": "설명",
+      "type": "유형",
+      "command": "Command",
+      "arguments": "인수",
+      "envVars": "환경 변수",
+      "url": "URL",
+      "bearerToken": "Bearer Token (선택 사항)",
+      "ownershipLabel": "소유권",
+      "placeholders": {
+        "name": "Server 이름 입력",
+        "description": "Server 설명 입력",
+        "selectType": "유형 선택",
+        "command": "예: npx",
+        "arguments": "공백으로 구분된 인수",
+        "envVars": "KEY=value (한 줄에 하나씩)",
+        "url": "https://example.com",
+        "bearerToken": "Bearer token"
+      },
+      "ownership": {
+        "private": "나만 사용 (비공개)",
+        "public": "모두 사용 (공개)",
+        "helpText": "비공개 Server는 본인만 접근할 수 있습니다. 공개 Server는 모든 사용자가 접근할 수 있습니다."
+      }
+    },
+    "buttons": {
+      "cancel": "취소",
+      "create": "Server 생성",
+      "creating": "생성 중..."
+    },
+    "messages": {
+      "success": "MCP Server 생성됨",
+      "successDescription": "\"{{name}}\" Server가 성공적으로 생성되었습니다",
+      "nameExists": "Server 이름이 이미 존재합니다",
+      "nameExistsDescription": "다른 Server 이름을 선택하세요",
+      "invalidName": "유효하지 않은 Server 이름",
+      "invalidNameDescription": "Server 이름은 문자, 숫자, 밑줄, 하이픈만 포함할 수 있습니다",
+      "createFailed": "Server 생성 실패",
+      "unexpectedError": "예기치 않은 오류가 발생했습니다"
+    }
+  }
+}

@@ -1,0 +1,134 @@
+---
+title: "Cursor Integration"
+description: "Configure Cursor IDE to use MetaMCP endpoints via mcp.json"
+---
+
+**Cursor** is a popular AI-powered code editor that supports MCP (Model Context Protocol) integration. This guide shows you how to connect Cursor to your MetaMCP endpoints for enhanced coding capabilities.
+
+Also refer to Cursor's doc on MCP https://docs.cursor.com/context/mcp
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+- **Cursor IDE** installed and running
+- **MetaMCP** running locally or deployed
+- **Active endpoint** configured in MetaMCP
+- **API key** generated (if authentication is enabled)
+
+## Basic Configuration
+
+### Simple mcp.json Setup
+
+Create or edit your `mcp.json` file in Cursor's configuration directory:
+
+<CodeGroup>
+```json Basic Configuration
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "url": "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+    }
+  }
+}
+```
+
+```json With Authentication
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "url": "http://localhost:12008/metamcp/your-endpoint-name/mcp",
+      "headers": {
+        "Authorization": "Bearer sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json Multiple Endpoints
+{
+  "mcpServers": {
+    "MetaMCP-Dev": {
+      "url": "http://localhost:12008/metamcp/dev-tools/mcp",
+      "headers": {
+        "Authorization": "Bearer sk_mt_dev_key"
+      }
+    },
+    "MetaMCP-Research": {
+      "url": "http://localhost:12008/metamcp/research-tools/mcp",
+      "headers": {
+        "Authorization": "Bearer sk_mt_research_key"
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Configuration Options
+
+### Transport Types
+
+MetaMCP supports different transport protocols. **Streamable HTTP is recommended** for Cursor:
+
+<AccordionGroup>
+  <Accordion title="Streamable HTTP (Recommended)">
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "url": "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="SSE (Alternative)">
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "url": "http://localhost:12008/metamcp/your-endpoint-name/sse"
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Authentication Methods
+
+<AccordionGroup>
+  <Accordion icon="key" title="API Key Authentication">
+    **Most common method** using Authorization header:
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "url": "http://localhost:12008/metamcp/your-endpoint-name/mcp",
+          "headers": {
+            "Authorization": "Bearer sk_mt_your_key_here"
+          }
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="shield-minus" title="No Authentication">
+    **For public endpoints** without authentication:
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "url": "http://localhost:12008/metamcp/public-tools/sse"
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,333 @@
+---
+title: "Quick Start"
+description: "Get MetaMCP running in minutes and configure your first MCP servers"
+---
+
+Get MetaMCP up and running in just a few minutes and configure your first MCP server aggregation.
+
+## Prerequisites
+
+Before starting, ensure you have:
+- Docker and Docker Compose installed
+- Git for cloning the repository
+- Basic understanding of MCP (Model Context Protocol)
+
+## Step 1: Installation
+
+<AccordionGroup>
+  <Accordion icon="github" title="Clone the Repository">
+    Clone MetaMCP from GitHub and navigate to the project directory:
+    
+    ```bash
+    git clone https://github.com/metatool-ai/metamcp.git
+    cd metamcp
+    ```
+  </Accordion>
+
+  <Accordion icon="settings" title="Configure Environment">
+    Copy the example environment file and customize as needed:
+    
+    ```bash
+    cp example.env .env
+    ```
+    
+    <Note>
+      If you modify `APP_URL` in the `.env` file, make sure you only access MetaMCP from that URL due to CORS policy enforcement.
+    </Note>
+    <Warning>In production environment, make sure you modify POSTGRES_PASSWORD and BETTER_AUTH_SECRET. Also use HTTPS. A typical way to generate secrets is `openssl rand -hex 32 | base64`</Warning>
+  </Accordion>
+
+  <Accordion icon="docker" title="Start with Docker Compose">
+    Launch MetaMCP using Docker Compose:
+    
+    ```bash
+    docker compose up -d
+    ```
+    
+    This will start:
+    - MetaMCP fullstack docker image
+    - PostgreSQL database
+    
+    <Tip>
+      The first startup may take a few minutes as Docker images are pulled and downloaded.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+## Step 2: Access MetaMCP
+
+Once the containers are running:
+
+1. **Open your browser** and go to `http://localhost:12008` (or your configured `APP_URL`)
+2. **Create an account** or log in
+3. **Explore the dashboard** - you'll see sections for MCP Servers, Namespaces, and Endpoints
+4. **(Optional) Disable signup** You may only allow you and your team access MetaMCP, so once you setup the accounts, you can disable new user registration in Settings page.
+
+## Step 3: Configure Your First MCP Server
+
+<AccordionGroup>
+  <Accordion icon="server" title="Step 3.1: Add a MCP Server">
+    1. Navigate to **MCP Servers** in the sidebar (or you can quickly add one from **Explore & Search** page)
+    2. Click **"Add Server"** button (top right)
+    3. In the dialog that opens, fill out the server configuration:
+    
+    **Basic Information:**
+    - **Name**: `hackernews-server` (must be URL-compatible: letters, numbers, underscores, hyphens only)
+    - **Description**: `HackerNews MCP server for fetching stories and comments`
+    - **Type**: Select `STDIO` from dropdown
+    
+    **Server Configuration:**
+    - **Command**: `uvx`
+    - **Arguments**: `mcp-hn` (space-separated arguments)
+    - **Environment Variables**: Leave empty (format: `KEY=value`, one per line)
+    
+    **Ownership:**
+    - Choose **"For myself (Private)"** or **"Everyone (Public)"**
+    - Private servers are only accessible to you
+    - Public servers are accessible to all users
+    
+    4. Click **"Create Server"**
+    5. You should see a success message: "MCP Server Created"
+    
+    <Note>
+      After creating the server, you can click on it to view details, test the connection, and see available tools.
+    </Note>
+  </Accordion>
+
+  <Accordion icon="package" title="Step 3.2: Create a Namespace">
+    **Why Namespaces?** Namespaces group multiple MCP servers together and provide a unified endpoint for external access.
+    
+    1. Go to **Namespaces** in the sidebar
+    2. Click **"Create Namespace"** button (top right)
+    3. Fill out the namespace form:
+    
+    **Basic Information:**
+    - **Name**: `news-information` (descriptive name for your server group)
+    - **Description**: `Namespace containing news and information retrieval tools`
+    
+    **Ownership:**
+    - Choose **"For myself (Private)"** or **"Everyone (Public)"**
+    
+    **Select MCP Servers:**
+    - You'll see a list of available MCP servers with checkboxes
+    - Check the box next to your **"hackernews-server"**
+    - You can select multiple servers for one namespace
+    - Each server shows its type (STDIO, SSE, etc.) and description
+    
+    4. Click **"Create Namespace"**
+    5. Success message: "Namespace Created"
+    
+    <Tip>
+      You can add or remove servers from a namespace later by editing it.
+    </Tip>
+  </Accordion>
+
+
+</AccordionGroup>
+
+## Step 4: Manage Tools in Your Namespace
+
+<AccordionGroup>
+  <Accordion icon="wrench" title="Review and Disable Unused Tools">
+    **Why Manage Tools?** Each MCP server may expose many tools, but you might only want to make certain tools available through your endpoint.
+    
+    1. Go to **Namespaces** in the sidebar
+    2. Click on your **"news-information"** namespace to view details
+    3. You'll see three main sections:
+    
+    **Connection Status:**
+    - Check if the namespace can connect to its MCP servers
+    - Green status means all servers are reachable
+    - Click **"Connect"** if needed to establish connection
+    
+    **MCP Servers:**
+    - View all servers assigned to this namespace
+    - See server status (Active/Inactive/Error)
+    - Monitor server health and configuration
+    
+    **Tools Management:**
+    - See all tools available from your servers
+    - Each tool shows:
+      - **Tool name** (e.g., `get_top_stories`, `get_story`)
+      - **Source server** (which server provides this tool)
+      - **Description** and input schema
+      - **Status** (enabled/disabled)
+    
+    4. **Disable unwanted tools:**
+    - Uncheck tools you don't want to expose via the endpoint
+    - For example, you might keep `get_top_stories` but disable `get_user_info`
+    - This helps keep your endpoint focused and secure
+    
+    5. **Refresh Tools** if needed to get latest tools from servers
+    
+    <Note>
+      Only enabled tools will be available when external applications use your endpoint.
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+## Step 5: Create an Endpoint
+
+<AccordionGroup>
+  <Accordion icon="link" title="Create Your Public Endpoint">
+    **What are Endpoints?** Endpoints provide external access to your namespaces via HTTP APIs that other applications can consume.
+    
+    1. Navigate to **Endpoints** in the sidebar
+    2. Click **"Create Endpoint"** button (top right)
+    3. Configure your endpoint:
+    
+    **Basic Information:**
+    - **Name**: `news-endpoint` (URL-compatible name - this becomes `/metamcp/news-endpoint`)
+    - **Description (Optional)**: `Public endpoint for news and information tools`
+    
+    **Ownership:**
+    - Choose **"For myself (Private)"** or **"Everyone (Public)"**
+    
+    **Namespace Selection:**
+    - Click the **"Select a namespace"** dropdown
+    - Choose your **"news-information"** namespace
+    - You'll see the namespace name and description in the dropdown
+    
+    **API Key Authentication:**
+    - **Enable API Key Authentication**: Toggle ON (recommended)
+      - This requires API keys for endpoint access
+    - **Use Query Parameter Authentication**: Toggle ON/OFF
+      - When ON: Allows `?api_key=xxx` in URLs
+      - When OFF: Only accepts API keys in `Authorization: Bearer xxx` headers
+    
+    **MCP Server Creation:**
+    - **"Automatically create an MCP server for this endpoint"**: Check this box
+    - This creates a Streamable HTTP MCP server configuration for inspection
+    
+    4. Click **"Create Endpoint"**
+    5. Success message: "Endpoint Created"
+    
+    **Your endpoint will be available at:**
+    - SSE: `http://localhost:12008/metamcp/news-endpoint/sse`
+    - Streamable HTTP: `http://localhost:12008/metamcp/news-endpoint/mcp`
+    - OpenAPI: `http://localhost:12008/metamcp/news-endpoint/api`
+    - Schema: `http://localhost:12008/metamcp/news-endpoint/api/openapi.json`
+  </Accordion>
+</AccordionGroup>
+
+## Step 6: Generate API Key
+
+<AccordionGroup>
+  <Accordion icon="key" title="Create API Key">
+    1. Go to **API Keys** in the sidebar
+    2. Click **"Generate Key"** button
+    3. Fill out the API key form:
+    
+    **Key Information:**
+    - **Description**: `My first MetaMCP API key for news endpoint`
+    - **Scope**: 
+      - **Private**: Only you can use this key
+      - **Public**: All users can use this key
+    
+    4. Click **"Generate Key"**
+    5. **Important**: Copy and save the key securely - it starts with `sk_mt_`
+    6. This key will be used to authenticate requests to your endpoints
+    
+    <Warning>
+      The API key is only shown once. Make sure to copy it immediately.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## Step 7: Managing Your Configuration
+
+<AccordionGroup>
+  <Accordion icon="settings" title="Managing MCP Servers">
+    **View Server Details:**
+    - Click on any server in the MCP Servers list
+    - See connection status, available tools, and configuration
+    - Test server connection and inspect tools
+    
+    **Edit Servers:**
+    - Use the actions menu (⋯) next to each server
+    - Modify configuration, add environment variables
+    - Update commands and arguments
+    
+    **Server States:**
+    - **Active**: Server is running and available
+    - **Inactive**: Server is configured but not running
+    - **Error**: Server has connection issues
+  </Accordion>
+
+  <Accordion icon="layers" title="Managing Namespaces">
+    **View Namespace Details:**
+    - Click on any namespace to see its servers and tools
+    - Monitor which servers are active in the namespace
+    - View aggregated tools from all servers
+    
+    **Edit Namespaces:**
+    - Add or remove servers from existing namespaces
+    - Update name and description
+    - Change ownership settings
+    
+    **Tool Management:**
+    - See all tools available across servers in the namespace
+    - Enable/disable specific tools
+    - View tool schemas and documentation
+  </Accordion>
+
+  <Accordion icon="link" title="Managing Endpoints">
+    **Endpoint URLs:**
+    Each endpoint provides multiple access methods:
+    - **SSE**: Server-Sent Events for real-time communication
+    - **Streamable HTTP**: HTTP-based MCP communication
+    - **OpenAPI**: REST API with OpenAPI documentation
+    - **Schema**: OpenAPI JSON schema for integration
+    
+    **Copy URLs:**
+    - Use the actions menu (⋯) to copy specific URLs
+    - Copy URLs with or without embedded API keys
+    - Use different formats for different integrations
+    
+    **Edit Endpoints:**
+    - Change which namespace an endpoint maps to
+    - Update authentication settings
+    - Modify access permissions
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Add More Servers" icon="plus" href="/en/concepts/mcp-servers">
+    Learn how to configure different types of MCP servers (STDIO, HTTP, etc.)
+  </Card>
+  
+  <Card title="Configure Middleware" icon="filter" href="/en/concepts/middleware">
+    Apply middleware to filter tools and transform requests/responses
+  </Card>
+  
+  <Card title="Connect to Cursor" icon="mouse-pointer-2" href="/en/integrations/cursor">
+    Configure Cursor IDE to use your MetaMCP endpoints
+  </Card>
+  
+  <Card title="Connect to Claude Desktop" icon="monitor-dot" href="/en/integrations/claude-desktop">
+    Set up Claude Desktop with MetaMCP using mcp-proxy
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion icon="warning" title="Common Issues">
+    **CORS errors**: Ensure you're accessing MetaMCP from the URL specified in `APP_URL`.
+    
+    **Database connection**: Check that PostgreSQL container is running with `docker ps`.
+    
+    **Memory issues**: MetaMCP requires at least 2GB RAM for optimal performance.
+    
+    **Server connection failures**: Check MCP server logs in the server detail pages.
+    
+    **Authentication issues**: Verify API keys are active and correctly formatted.
+  </Accordion>
+
+  <Accordion icon="question" title="Need Help?">
+    - Browse [GitHub Issues](https://github.com/metatool-ai/metamcp/issues)
+    - Join our [Discord community](https://discord.gg/mNsyat7mFX)
+  </Accordion>
+</AccordionGroup>

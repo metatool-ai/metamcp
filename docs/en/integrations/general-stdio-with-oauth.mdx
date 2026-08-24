@@ -1,0 +1,104 @@
+---
+title: "General Stdio Integration using `mcp-remote` with OAuth"
+description: "Configure any stdio-based MCP client to connect to MetaMCP endpoints using mcp-remote with OAuth authentication"
+---
+
+**General Stdio Integration with OAuth** allows any MCP client that supports stdio servers to connect to MetaMCP's remote endpoints using OAuth authentication. Since MetaMCP endpoints are remote-only (SSE, Streamable HTTP), you'll need a local proxy to bridge the connection.
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+- **MCP client** that supports stdio servers (Claude Desktop, Cursor, etc.)
+- **MetaMCP** running locally or deployed with OAuth enabled
+- **Active endpoint** configured in MetaMCP
+- **OAuth application** registered in MetaMCP
+- **mcp-remote** available via npx (`npx -y mcp-remote`)
+
+## Basic Configuration
+
+### Using mcp-remote (Required)
+
+Since MetaMCP endpoints are remote only, you need `mcp-remote` to convert between stdio and HTTP/SSE protocols with OAuth authentication.
+
+<CodeGroup>
+```json Basic OAuth Configuration
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ]
+    }
+  }
+}
+```
+
+```json Multiple Endpoints
+{
+  "mcpServers": {
+    "MetaMCP-Dev": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:12008/metamcp/dev-tools/mcp"
+      ]
+    },
+    "MetaMCP-Research": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:12008/metamcp/research-tools/mcp"
+      ]
+    }
+  }
+}
+```
+</CodeGroup>
+
+## OAuth Flow
+
+When you first connect, `mcp-remote` will:
+
+1. **Open your browser** to the OAuth authorization URL
+2. **Prompt you to authorize** the application
+3. **Redirect back** to the local callback server
+4. **Store the tokens** locally for future use
+5. **Establish the MCP connection** with authenticated access
+
+### Token Management
+
+- **Tokens are stored locally** by mcp-remote
+- **Refresh tokens** are automatically used when access tokens expire
+- **Clear tokens** by deleting the mcp-remote cache directory if needed
+
+## Important Notes
+
+- **Use** `http://localhost:12008/metamcp/your-endpoint-name/mcp` for OAuth authentication
+- **Replace** `your-endpoint-name` with your actual endpoint name for public endpoints
+- **mcp-remote** handles the protocol conversion between stdio and HTTP/SSE
+- **OAuth flow** requires browser interaction on first connection
+- **No manual OAuth setup** required - MetaMCP handles it automatically
+
+<CardGroup cols={2}>
+  <Card title="MCP OAuth Troubleshooting" icon="lock" href="/en/troubleshooting/oauth-troubleshooting">
+    Troubleshoot common OAuth-related issues
+  </Card>
+  
+  <Card title="General Stdio Integration using `mcp-proxy` with API Key" icon="globe" href="/en/integrations/general-stdio-with-api-key">
+    Configure any stdio-based MCP client to connect to MetaMCP endpoints using mcp-proxy
+  </Card>
+  
+  <Card title="Connect to Cursor" icon="mouse-pointer-2" href="/en/integrations/cursor">
+    Configure Cursor IDE to use your MetaMCP endpoints
+  </Card>
+  
+  <Card title="Connect to Claude Desktop" icon="monitor-dot" href="/en/integrations/claude-desktop">
+    Set up Claude Desktop with MetaMCP using mcp-proxy
+  </Card>
+</CardGroup>

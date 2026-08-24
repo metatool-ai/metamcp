@@ -1,0 +1,411 @@
+---
+title: "Contributing to MetaMCP"
+description: "Learn how to contribute to MetaMCP development and help improve the project"
+---
+
+We welcome contributions to MetaMCP! This comprehensive guide will help you get started with contributing to the project, whether you're fixing bugs, adding features, or improving documentation.
+
+## Getting Started
+
+### Prerequisites
+
+Before contributing, ensure you have:
+
+- **Node.js 18+** and **pnpm** installed
+- **Docker** for running PostgreSQL and testing
+- **Git** for version control
+- **Basic understanding** of TypeScript, React, and MCP protocol
+
+### Development Setup
+
+<AccordionGroup>
+  <Accordion icon="github" title="Fork and Clone">
+    1. **Fork the repository** on GitHub
+    2. **Clone your fork** locally:
+       ```bash
+       git clone https://github.com/YOUR_USERNAME/metamcp.git
+       cd metamcp
+       ```
+    3. **Add upstream remote**:
+       ```bash
+       git remote add upstream https://github.com/metatool-ai/metamcp.git
+       ```
+  </Accordion>
+
+  <Accordion icon="package" title="Install Dependencies">
+    Install project dependencies using pnpm:
+    
+    ```bash
+    pnpm install
+    ```
+    
+    This will install dependencies for all workspaces in the monorepo.
+  </Accordion>
+
+  <Accordion icon="cog" title="Environment Setup">
+    Set up your development environment:
+    
+    ```bash
+    cp example.env .env
+    ```
+    
+    Modify the `.env` file as needed for your development setup.
+  </Accordion>
+
+  <Accordion icon="database" title="Database Setup">
+    Start PostgreSQL using Docker:
+    
+    ```bash
+    docker compose up -d postgres
+    # or start full stack
+    docker compose up -d
+    ```
+
+    First time migration (edit `.env.local` first)
+    ```bash
+    cd apps/backend
+
+    pnpm db:migrate:dev
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Development Workflow
+
+### Creating a Feature Branch (naming not required)
+
+<CodeGroup>
+```bash Feature Branch
+git checkout -b feature/your-feature-name
+```
+
+```bash Bug Fix Branch  
+git checkout -b fix/issue-description
+```
+
+```bash Documentation Branch
+git checkout -b docs/documentation-update
+```
+</CodeGroup>
+
+### Making Changes
+
+Follow these guidelines when making changes:
+
+<Card title="Code Quality Standards" icon="code">
+- **Follow TypeScript best practices**
+- **Use ESLint and Prettier** for consistent formatting
+- **Write descriptive commit messages**
+- **Add JSDoc comments** for complex functions
+- **Ensure type safety** throughout the codebase
+- **Test your changes** manually
+</Card>
+
+### Testing Your Changes
+
+<AccordionGroup>
+  <Accordion icon="flask-conical" title="Local Testing">
+    Run the development server and test your changes:
+    
+    ```bash
+    pnpm dev
+    ```
+    
+    This starts both frontend and backend in development mode.
+  </Accordion>
+
+  <Accordion icon="check" title="Linting and Formatting">
+    Ensure code quality:
+    
+    ```bash
+    # Run linting
+    pnpm lint
+    
+    # Fix linting issues
+    pnpm lint:fix
+    ```
+  </Accordion>
+
+  <Accordion icon="docker" title="Docker Testing">
+    Test with Docker to ensure production compatibility:
+    
+    ```bash
+    docker compose build
+    docker compose up
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Types of Contributions
+
+### Bug Fixes
+
+<AccordionGroup>
+  <Accordion icon="bug" title="Reporting Bugs">
+    **Before reporting a bug:**
+    
+    1. Check existing issues to avoid duplicates
+    2. Try to reproduce the issue consistently
+    3. Gather relevant information (OS, browser, MetaMCP version)
+    4. Include steps to reproduce the problem
+    
+    **Bug report template:**
+    ```markdown
+    ## Bug Description
+    Brief description of the issue
+    
+    ## Steps to Reproduce
+    1. Step one
+    2. Step two
+    3. Expected vs actual behavior
+    
+    ## Environment
+    - OS: [e.g., macOS 14.0]
+    - Browser: [e.g., Chrome 120]
+    - MetaMCP Version: [e.g., 1.0.0]
+    
+    ## Additional Context
+    Screenshots, logs, or other relevant information
+    ```
+  </Accordion>
+
+  <Accordion icon="wrench" title="Fixing Bugs">
+    **When fixing bugs:**
+    
+    1. Create a branch: `fix/issue-number-description`
+    2. Implement the fix
+    3. Test manually to ensure the fix works
+    4. Update documentation if necessary
+  </Accordion>
+</AccordionGroup>
+
+### Feature Development
+
+<AccordionGroup>
+  <Accordion icon="lightbulb" title="Proposing Features">
+    **Before implementing a new feature:**
+    
+    1. **Open an issue** to discuss the feature
+    2. **Provide use cases** and justification
+    3. **Consider impact** on existing functionality
+    4. **Get feedback** from maintainers
+    5. **Plan the implementation** approach
+  </Accordion>
+
+  <Accordion icon="code" title="Implementing Features">
+    **Feature development process:**
+    
+    1. **Create feature branch** from main
+    2. **Implement incrementally** with regular commits
+    3. **Update documentation**
+    4. **Test with real MCP servers**
+    5. **Consider i18n impact** for UI changes
+  </Accordion>
+</AccordionGroup>
+
+### Documentation
+
+<AccordionGroup>
+  <Accordion icon="book" title="Documentation Guidelines">
+    **When updating documentation:**
+    
+    - Use clear, concise language
+    - Include code examples where helpful
+    - Add screenshots for UI changes
+    - Update both README and docs site
+    - Test all code examples
+    - Consider multiple audiences (beginners, advanced users)
+  </Accordion>
+
+  <Accordion icon="book-type" title="Translation Contributions">
+    **Adding new language support:**
+    
+    1. Create new locale directory: `public/locales/[locale]/`
+    2. Copy English files as templates
+    3. Translate content maintaining key structure
+    4. Update i18n configuration
+    5. Test the new locale thoroughly
+    6. Submit PR with translation files
+  </Accordion>
+</AccordionGroup>
+
+## Pull Request Process
+
+### Before Submitting
+
+<Card title="Pre-submission Checklist" icon="checklist">
+- ✅ **Code follows project standards**
+- ✅ **Fix liniting as much as possible (somewhat tolerant as we dev rapidly)** (`pnpm lint`)
+- ✅ **No TypeScript errors**
+- ✅ **Documentation updated** if needed
+- ✅ **Changes tested manually**
+- ✅ **Database migrations** included if needed
+- ✅ **No sensitive information** in commits
+</Card>
+
+## Specialized Contributions
+
+### OIDC Provider Setup
+
+MetaMCP supports OpenID Connect for enterprise SSO. When working on OIDC features:
+
+<AccordionGroup>
+  <Accordion icon="shield" title="OIDC Configuration">
+    **Required environment variables:**
+    
+    ```bash
+    # Required
+    OIDC_CLIENT_ID=your-oidc-client-id
+    OIDC_CLIENT_SECRET=your-oidc-client-secret
+    OIDC_DISCOVERY_URL=https://your-provider.com/.well-known/openid-configuration
+    OIDC_AUTHORIZATION_URL=https://your-provider.com/auth/authorize
+    
+    # Optional
+    OIDC_PROVIDER_ID=oidc
+    OIDC_SCOPES=openid email profile
+    OIDC_PKCE=true
+    ```
+  </Accordion>
+
+  <Accordion icon="flask-conical" title="Testing OIDC">
+    **For OIDC development:**
+    
+    1. Use a test provider (Auth0, Keycloak)
+    2. Configure redirect URI: `${APP_URL}/api/auth/oauth2/callback/oidc`
+    3. Test the authentication flow
+    4. Verify user creation in database
+    5. Enable debug logging for troubleshooting
+  </Accordion>
+</AccordionGroup>
+
+### Database Changes
+
+When making database schema changes:
+
+<AccordionGroup>
+  <Accordion icon="database" title="Schema Migrations">
+    **Creating migrations:**
+    
+    ```bash
+    # Generate migration after schema changes
+    cd apps/backend
+    pnpm db:generate
+    
+    # Apply migrations
+    pnpm db:migrate:dev # which uses env.local for PG related env vars
+    
+    # Reset database (development only)
+    pnpm db:reset
+    ```
+  </Accordion>
+
+  <Accordion icon="table" title="Adding New Tables">
+    **Database development workflow:**
+    
+    1. Update schema in `apps/backend/src/db/schema.ts`
+    2. Create repository in `apps/backend/src/db/repositories/`
+    3. Create serializer in `apps/backend/src/db/serializers/`
+    4. Add tRPC procedures in `apps/backend/src/trpc/`
+    5. Update frontend types in `packages/zod-types/`
+    6. Generate and apply migrations
+  </Accordion>
+</AccordionGroup>
+
+### Frontend Development
+
+<AccordionGroup>
+  <Accordion icon="component" title="UI Components">
+    **Using shadcn/ui components:**
+    
+    ```bash
+    # Add new components
+    cd apps/frontend
+    npx shadcn-ui@latest add [component-name]
+    ```
+    
+    **Component guidelines:**
+    - Follow existing design patterns
+    - Ensure accessibility compliance
+    - Add proper TypeScript types
+    - Include loading and error states
+  </Accordion>
+
+  <Accordion icon="globe" title="Internationalization">
+    **For UI changes:**
+    
+    1. Add English translations first
+    2. Update other locales or mark for translation
+    3. Use the `useTranslations()` hook
+    4. Test with different languages
+    5. Ensure text expansion doesn't break layout
+  </Accordion>
+</AccordionGroup>
+
+## Community Guidelines
+
+### Code of Conduct
+
+We're committed to providing a welcoming and inclusive environment:
+
+<Card title="Community Standards" icon="heart">
+- **Be respectful** and inclusive in all interactions
+- **Provide constructive feedback** and be open to receiving it
+- **Focus on collaboration** and helping each other succeed
+- **Respect different perspectives** and experience levels
+- **Follow project guidelines** and maintain code quality
+</Card>
+
+### Communication
+
+<AccordionGroup>
+  <Accordion icon="discord" title="Discord Community">
+    Join our Discord server for:
+    
+    - Development discussions
+    - Getting help with contributions
+    - Sharing ideas and feedback
+    - Community announcements
+    
+    [Join MetaMCP Discord](https://discord.gg/mNsyat7mFX)
+  </Accordion>
+
+  <Accordion icon="github" title="GitHub Discussions">
+    Use GitHub Issues and Discussions for:
+    
+    - Bug reports and feature requests
+    - Technical discussions
+    - Documentation feedback
+    - Project roadmap discussions
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+### Resources
+
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/mNsyat7mFX">
+    Get help from the community
+  </Card>
+  
+  <Card title="GitHub Issues" icon="github" href="https://github.com/metatool-ai/metamcp/issues">
+    Browse existing issues and discussions
+  </Card>
+</CardGroup>
+
+## Recognition
+
+We appreciate all contributions to MetaMCP! Contributors are recognized through:
+
+- **GitHub contributors list** on the repository
+- **Release notes** mentioning significant contributions
+
+Thank you for helping make MetaMCP better for everyone! 🚀
+
+## Next Steps
+
+<CardGroup cols={1}>
+  <Card title="Start Contributing" icon="rocket" href="https://github.com/metatool-ai/metamcp/issues">
+    Browse open issues and start contributing
+  </Card>
+</CardGroup> 

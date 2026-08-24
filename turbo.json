@@ -1,0 +1,64 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "globalEnv": [
+    "PORT",
+    "APP_URL",
+    "DATABASE_URL",
+    "BETTER_AUTH_SECRET",
+    "NEXT_PUBLIC_APP_URL",
+    "OIDC_CLIENT_ID",
+    "OIDC_CLIENT_SECRET",
+    "OIDC_DISCOVERY_URL",
+    "OIDC_AUTHORIZATION_URL",
+    "OIDC_PKCE",
+    "OIDC_SCOPES",
+    "OIDC_PROVIDER_ID",
+    "TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL",
+    "NODE_ENV",
+    "POSTGRES_CA_CERT",
+    "LOG_LEVEL",
+    "EXTRA_TRUSTED_ORIGINS",
+    "BOOTSTRAP_USERS",
+    "BOOTSTRAP_USER_EMAIL",
+    "BOOTSTRAP_USER_PASSWORD",
+    "BOOTSTRAP_USER_NAME",
+    "BOOTSTRAP_DELETE_OTHER_USERS",
+    "BOOTSTRAP_RECREATE_USER",
+    "BOOTSTRAP_PRESERVE_API_KEYS",
+    "BOOTSTRAP_WARN_PASSWORD_CHANGE",
+    "BOOTSTRAP_ONLY_FIRST_RUN",
+    "BOOTSTRAP_DISABLE_REGISTRATION_UI",
+    "BOOTSTRAP_DISABLE_REGISTRATION_SSO",
+    "BOOTSTRAP_API_KEYS",
+    "BOOTSTRAP_NAMESPACES",
+    "BOOTSTRAP_ENDPOINTS",
+    "BOOTSTRAP_DEBUG",
+    "BOOTSTRAP_ENABLE",
+    "BOOTSTRAP_FAIL_HARD",
+    "SESSION_LIFETIME",
+    "MAX_TOTAL_CONNECTIONS",
+    "BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS",
+    "BETTER_AUTH_SESSION_UPDATE_AGE_SECONDS"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "lint:fix": {
+      "dependsOn": ["^lint:fix"]
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

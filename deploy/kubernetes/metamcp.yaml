@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metamcp
+  namespace: ${METAMCP_NAMESPACE}
+  labels:
+    app.kubernetes.io/name: metamcp
+    app.kubernetes.io/component: app
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: metamcp
+      app.kubernetes.io/component: app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: metamcp
+        app.kubernetes.io/component: app
+    spec:
+      containers:
+        - name: metamcp
+          image: ${METAMCP_IMAGE}
+          imagePullPolicy: ${METAMCP_IMAGE_PULL_POLICY}
+          env:
+            - name: POSTGRES_HOST
+              value: "metamcp-postgres.${METAMCP_NAMESPACE}.svc.cluster.local"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: "${METAMCP_POSTGRES_USER}"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: metamcp-secret
+                  key: postgres-password
+            - name: POSTGRES_DB
+              value: "${METAMCP_POSTGRES_DB}"
+            - name: DATABASE_URL
+              value: "postgresql://${METAMCP_POSTGRES_USER}:$(POSTGRES_PASSWORD)@metamcp-postgres.${METAMCP_NAMESPACE}.svc.cluster.local:5432/${METAMCP_POSTGRES_DB}"
+            - name: APP_URL
+              value: "${METAMCP_PUBLIC_URL}"
+            - name: NEXT_PUBLIC_APP_URL
+              value: "${METAMCP_PUBLIC_URL}"
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: metamcp-secret
+                  key: better-auth-secret
+            - name: TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL
+              value: "false"
+            - name: BOOTSTRAP_ENABLE
+              value: "true"
+            - name: BOOTSTRAP_ONLY_FIRST_RUN
+              value: "true"
+            - name: BOOTSTRAP_USER_EMAIL
+              value: "${METAMCP_BOOTSTRAP_USER_EMAIL}"
+            - name: BOOTSTRAP_USER_NAME
+              value: "${METAMCP_BOOTSTRAP_USER_NAME}"
+            - name: BOOTSTRAP_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: metamcp-secret
+                  key: bootstrap-user-password
+            - name: BOOTSTRAP_API_KEYS
+              value: '[{"name":"Public","is_public":true},{"name":"Private","is_public":false}]'
+            - name: BOOTSTRAP_NAMESPACES
+              value: '[{"name":"Default","description":"Default namespace","is_public":true,"update":true}]'
+            - name: BOOTSTRAP_ENDPOINTS
+              value: '[{"name":"Public","description":"Public endpoint","enable_auth":false,"enable_auth_query":false,"enable_auth_oauth":false,"is_public":true,"update":true}]'
+          ports:
+            - name: http
+              containerPort: 12008
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: ${METAMCP_APP_CPU_REQUEST}
+              memory: ${METAMCP_APP_MEMORY_REQUEST}
+            limits:
+              cpu: ${METAMCP_APP_CPU_LIMIT}
+              memory: ${METAMCP_APP_MEMORY_LIMIT}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metamcp
+  namespace: ${METAMCP_NAMESPACE}
+  labels:
+    app.kubernetes.io/name: metamcp
+    app.kubernetes.io/component: app
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: metamcp
+    app.kubernetes.io/component: app

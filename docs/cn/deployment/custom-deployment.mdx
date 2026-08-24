@@ -1,0 +1,344 @@
+---
+title: "个性化部署"
+description: "本指南将带您从头开始在运行 Ubuntu 的 DigitalOcean VPS 上部署 MetaMCP，作为示例。"
+---
+
+## 前置要求
+
+- DigitalOcean 账户
+- 指向您的 VPS 的域名
+- Linux 命令行的基础知识
+
+## 系统要求
+
+MetaMCP 需要至少 **2GB-4GB 内存**以获得最佳性能。实例越大，性能越好，这是由于 MCP 服务器预分配和 Docker 操作。
+
+**推荐的 DigitalOcean Droplet：**
+- **基础/常规**：2GB RAM，1 vCPU，50GB SSD（$12/月）
+- **更好性能**：4GB RAM，2 vCPU，80GB SSD（$24/月）
+
+## 步骤 1：创建和配置您的 VPS
+
+### 1.1 创建 Droplet
+
+1. 登录您的 DigitalOcean 账户
+2. 点击"创建" → "Droplets"
+3. 选择 **Ubuntu 22.04 LTS** 作为操作系统
+4. 选择至少 2GB RAM 的计划
+5. 选择靠近用户的数据中心区域
+6. 添加您的 SSH 密钥以安全访问
+7. 创建 droplet
+
+### 1.2 初始服务器设置
+
+通过 SSH 连接到您的服务器：
+
+```bash
+ssh root@your_server_ip
+```
+
+更新系统：
+
+```bash
+apt update && apt upgrade -y
+```
+
+安装基本包：
+
+```bash
+apt install -y curl wget git ufw nginx certbot python3-certbot-nginx
+```
+
+配置防火墙：
+
+```bash
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw enable
+```
+
+创建非 root 用户（可选但推荐）：
+
+```bash
+adduser metamcp
+usermod -aG sudo metamcp
+# 切换到新用户
+su - metamcp
+```
+
+## 步骤 2：安装 Docker 和 Docker Compose
+
+### 2.1 安装 Docker
+
+首先，更新您的包索引并安装先决条件：
+
+```bash
+sudo apt update
+sudo apt install -y apt-transport-https ca-certificates curl gnupg lsb-release
+```
+
+添加 Docker 的官方 GPG 密钥和仓库：
+
+```bash
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+```
+
+安装 Docker CE：
+
+```bash
+sudo apt update
+sudo apt install -y docker-ce
+```
+
+验证 Docker 正在运行：
+
+```bash
+sudo systemctl status docker
+```
+
+### 2.2 安装 Docker Compose
+
+下载并安装 Docker Compose：
+
+```bash
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+```
+
+### 2.3 配置 Docker 用户（可选）
+
+要在不使用 `sudo` 的情况下运行 Docker 命令：
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+注销并重新登录以使组更改生效，或运行：
+
+```bash
+newgrp docker
+```
+
+## 步骤 3：部署 MetaMCP
+
+### 3.1 克隆仓库
+
+```bash
+cd /opt
+sudo git clone https://github.com/metatool-ai/metamcp.git
+sudo chown -R $USER:$USER metamcp
+cd metamcp
+```
+
+### 3.2 配置环境
+
+```bash
+cp example.env .env
+```
+
+使用您的域名和设置编辑 `.env` 文件：
+
+```bash
+nano .env
+```
+
+**⚠️ 重要安全说明**：因为这是生产环境，请确保您修改 `POSTGRES_PASSWORD` 和 `BETTER_AUTH_SECRET` 的默认值。同时确保使用 HTTPS。生成安全密钥的典型方法是：
+
+```bash
+openssl rand -hex 32 | base64
+```
+
+要更新的关键配置：
+
+```env
+# 您的域名 URL（生产环境必须使用 HTTPS）
+APP_URL=https://yourdomain.com
+
+# 数据库 - 从默认值更改密码！
+DATABASE_URL=postgresql://postgres:YOUR_SECURE_PASSWORD@db:5432/metamcp
+POSTGRES_PASSWORD=YOUR_SECURE_PASSWORD
+
+# 生成安全密钥 - 不要使用示例值！
+BETTER_AUTH_SECRET=your-super-secret-key-here
+ENCRYPTION_KEY=your-32-character-encryption-key
+
+# 可选：如果需要配置 OIDC
+# OIDC_CLIENT_ID=your-oidc-client-id
+# OIDC_CLIENT_SECRET=your-oidc-client-secret
+# OIDC_DISCOVERY_URL=https://your-provider.com/.well-known/openid-configuration
+```
+
+### 3.3 更新生产环境的 Docker Compose
+
+编辑 `docker-compose.yml` 以确保正确的卷命名：
+
+```bash
+nano docker-compose.yml
+```
+
+更新卷部分以避免冲突：
+
+```yaml
+volumes:
+  metamcp_postgres_data:
+    driver: local
+```
+
+### 3.4 启动 MetaMCP
+
+```bash
+# 拉取镜像并启动服务
+docker-compose up -d
+
+# 检查服务是否正在运行
+docker-compose ps
+
+# 如果需要查看日志
+docker-compose logs -f
+```
+
+## 步骤 4：配置 Nginx 反向代理
+
+### 4.1 创建 Nginx 配置
+
+创建新的站点配置：
+
+```bash
+sudo nano /etc/nginx/sites-available/metamcp
+```
+
+添加以下配置（将 `yourdomain.com` 替换为您的实际域名）：
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name yourdomain.com;
+
+    # SSL 配置（将由 Certbot 管理）
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # 安全标头
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+
+    location / {
+        proxy_pass http://localhost:12008;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # MCP 连接的 SSE 特定优化
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400s;  # 长寿命 SSE 连接 24 小时
+        proxy_send_timeout 86400s;
+        
+        # 用于 SSE 的 HTTP/1.1 和适当的连接处理
+        proxy_set_header Connection '';
+        proxy_http_version 1.1;
+        
+        # 更好的 SSE 支持的附加标头
+        proxy_set_header Cache-Control 'no-cache';
+        proxy_set_header X-Accel-Buffering 'no';
+    }
+
+    # 可选：增加客户端最大正文大小以进行文件上传
+    client_max_body_size 100M;
+}
+```
+
+### 4.2 启用站点
+
+```bash
+# 启用站点
+sudo ln -s /etc/nginx/sites-available/metamcp /etc/nginx/sites-enabled/
+
+# 移除默认站点
+sudo rm /etc/nginx/sites-enabled/default
+
+# 测试 nginx 配置
+sudo nginx -t
+
+# 启动 nginx
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+## 步骤 5：使用 Let's Encrypt 的 SSL 证书
+
+### 5.1 获取 SSL 证书
+
+首先，临时使用仅 HTTP 配置进行初始证书：
+
+```bash
+# 创建临时仅 HTTP 配置
+sudo nano /etc/nginx/sites-available/metamcp-temp
+```
+
+添加此临时配置：
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:12008;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+启用临时配置：
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/metamcp-temp /etc/nginx/sites-enabled/metamcp
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+获取证书：
+
+```bash
+sudo certbot --nginx -d yourdomain.com
+```
+
+### 5.2 恢复完整配置
+
+获取证书后，恢复完整配置：
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/metamcp /etc/nginx/sites-enabled/metamcp
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 5.3 设置自动续期
+
+```bash
+# 测试自动续期
+sudo certbot renew --dry-run
+
+# 添加到 crontab 以自动续期
+sudo crontab -e
+```
+
+添加此行以每天检查两次续期：
+
+```
+0 12 * * * /usr/bin/certbot renew --quiet
+```

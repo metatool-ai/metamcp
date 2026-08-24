@@ -1,0 +1,207 @@
+services:
+  app:
+    container_name: metamcp
+    image: ghcr.io/metatool-ai/metamcp:latest
+    pull_policy: always
+    env_file:
+      - .env
+    ports:
+      - "12008:12008"
+    environment:
+      # Postgres connection details
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-metamcp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-m3t4mcp}
+      POSTGRES_DB: ${POSTGRES_DB:-metamcp_db}
+      
+      # Database configuration (composed from above vars)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-metamcp_user}:${POSTGRES_PASSWORD:-m3t4mcp}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-metamcp_db}
+      
+      # Application URL configuration
+      APP_URL: ${APP_URL:-http://localhost:12008}
+      NEXT_PUBLIC_APP_URL: ${APP_URL:-http://localhost:12008}
+      
+      # Auth configuration
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-your-super-secret-key-change-this-in-production}
+      
+      # Docker networking fix
+      TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL:-true}
+      
+      # ========================================================================
+      # Bootstrap Configuration Examples
+      # ========================================================================
+      
+      # Multiple Users - Define different users with different roles
+      # BOOTSTRAP_USERS: |
+      #   [
+      #     {
+      #       "email": "admin@company.com",
+      #       "password": "admin-secure-password",
+      #       "name": "System Administrator"
+      #     },
+      #     {
+      #       "email": "developer@company.com",
+      #       "password": "dev-secure-password",
+      #       "name": "Lead Developer"
+      #     },
+      #     {
+      #       "email": "analyst@company.com",
+      #       "password": "analyst-secure-password",
+      #       "name": "Data Analyst"
+      #     }
+      #   ]
+      
+      # API Keys - Assign keys to specific users using user_email
+      # BOOTSTRAP_API_KEYS: |
+      #   [
+      #     {
+      #       "name": "Admin Production Key",
+      #       "is_public": false,
+      #       "user_email": "admin@company.com"
+      #     },
+      #     {
+      #       "name": "Developer Key",
+      #       "is_public": false,
+      #       "user_email": "developer@company.com"
+      #     },
+      #     {
+      #       "name": "Analyst Key",
+      #       "is_public": false,
+      #       "user_email": "analyst@company.com"
+      #     },
+      #     {
+      #       "name": "Public API Key",
+      #       "is_public": true
+      #     }
+      #   ]
+      
+      # Namespaces - Create user-specific workspaces
+      # BOOTSTRAP_NAMESPACES: |
+      #   [
+      #     {
+      #       "name": "Admin Workspace",
+      #       "description": "Administrator's private workspace",
+      #       "is_public": false,
+      #       "user_email": "admin@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "Development",
+      #       "description": "Development environment",
+      #       "is_public": false,
+      #       "user_email": "developer@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "Analytics",
+      #       "description": "Data analytics workspace",
+      #       "is_public": false,
+      #       "user_email": "analyst@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "Shared Resources",
+      #       "description": "Public shared namespace",
+      #       "is_public": true,
+      #       "update": true
+      #     }
+      #   ]
+      
+      # Endpoints - Configure endpoints with different owners and auth settings
+      # Note: Endpoints can optionally specify which namespace they should be created in
+      # BOOTSTRAP_ENDPOINTS: |
+      #   [
+      #     {
+      #       "name": "admin-api",
+      #       "description": "Admin-only API endpoint",
+      #       "namespace": "Production",
+      #       "enable_auth": true,
+      #       "enable_auth_query": false,
+      #       "enable_auth_oauth": true,
+      #       "is_public": false,
+      #       "user_email": "admin@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "dev-api",
+      #       "description": "Development API endpoint",
+      #       "namespace": "Development",
+      #       "enable_auth": true,
+      #       "enable_auth_query": true,
+      #       "enable_auth_oauth": false,
+      #       "is_public": false,
+      #       "user_email": "developer@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "analytics-api",
+      #       "description": "Analytics API endpoint",
+      #       "namespace": "Analytics",
+      #       "enable_auth": true,
+      #       "enable_auth_query": false,
+      #       "enable_auth_oauth": false,
+      #       "is_public": false,
+      #       "user_email": "analyst@company.com",
+      #       "update": true
+      #     },
+      #     {
+      #       "name": "public-api",
+      #       "description": "Public API endpoint - no auth required",
+      #       "namespace": "Shared Resources",
+      #       "enable_auth": false,
+      #       "enable_auth_query": false,
+      #       "enable_auth_oauth": false,
+      #       "is_public": true,
+      #       "update": true
+      #     }
+      #   ]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    volumes:
+      # Persist the uv cache across container recreates. Without this, every
+      # `docker compose up -d`/recreate wipes the writable layer and the next
+      # `uvx <pkg>@latest` spawn for each STDIO server cold-installs from
+      # scratch — slow enough to trip the crash detector and stick the server
+      # in error_status=ERROR. The image ships /home/nextjs/.cache/uv owned by
+      # nextjs (uid 1001) so a fresh named volume inherits correct ownership.
+      - uv_cache:/home/nextjs/.cache/uv
+    networks:
+      - metamcp-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: metamcp-pg
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-metamcp_db}
+      POSTGRES_USER: ${POSTGRES_USER:-metamcp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-m3t4mcp}
+    ports:
+      - "${POSTGRES_EXTERNAL_PORT:-9433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-metamcp_user} -d ${POSTGRES_DB:-metamcp_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - metamcp-network
+
+volumes:
+  postgres_data:
+    driver: local
+  uv_cache:
+    driver: local
+
+networks:
+  metamcp-network:
+    driver: bridge

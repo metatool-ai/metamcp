@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: metamcp
+  namespace: ${METAMCP_NAMESPACE}
+  labels:
+    app.kubernetes.io/name: metamcp
+    app.kubernetes.io/component: app
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: ${METAMCP_INGRESS_CLASS}
+  tls:
+    - hosts:
+        - ${METAMCP_HOST}
+      secretName: ${METAMCP_TLS_SECRET}
+  rules:
+    - host: ${METAMCP_HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: metamcp
+                port:
+                  number: 80

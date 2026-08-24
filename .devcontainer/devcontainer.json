@@ -1,0 +1,81 @@
+{
+  "name": "MetaMCP Dev Environment",
+  "dockerComposeFile": ["docker-compose.yml"],
+  "service": "app",
+  "workspaceFolder": "/workspaces/metamcp",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "configureZsh": true,
+      "installZsh": true,
+      "upgradePackages": false
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "prisma.prisma",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+        "bradlc.vscode-tailwindcss",
+        "dsznajder.es7-react-js-snippets",
+        "formulahendry.auto-rename-tag",
+        "christian-kohler.path-intellisense",
+        "usernamehw.errorlens",
+        "ms-playwright.playwright"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "typescript.enablePromptUseWorkspaceTsdk": true,
+        "files.watcherExclude": {
+          "**/node_modules/**": true,
+          "**/.git/objects/**": true,
+          "**/.git/subtree-cache/**": true
+        },
+        "search.exclude": {
+          "**/node_modules": true,
+          "**/dist": true,
+          "**/.next": true
+        },
+        "eslint.workingDirectories": [
+          "apps/frontend",
+          "apps/backend",
+          "packages/trpc"
+        ]
+      }
+    }
+  },
+  "forwardPorts": [12008, 12009, "9433:5432"],
+  "portsAttributes": {
+    "12008": {
+      "label": "Frontend (Next.js)",
+      "onAutoForward": "notify"
+    },
+    "12009": {
+      "label": "Backend (Express)",
+      "onAutoForward": "notify"
+    },
+    "9433": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    }
+  },
+  "overrideCommand": true,
+  "remoteUser": "root",
+  "shutdownAction": "stopCompose",
+  "postAttachCommand": "CI=true pnpm install --no-frozen-lockfile && cd apps/backend && pnpm drizzle-kit migrate --config=drizzle.config.ts && echo \"\\033[1mWhat's next:\\n\\t\\033[0;36m💡\\033[0m Open the terminal and run \\033[0;36mpnpm dev\\033[0m to start the development servers.\"",
+  "remoteEnv": {
+    "NODE_ENV": "development",
+    "NEXT_TELEMETRY_DISABLED": "1"
+  },
+  "mounts": [
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached"
+  ]
+}

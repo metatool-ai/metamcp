@@ -1,0 +1,172 @@
+---
+title: "Claude Desktop Integration"
+description: "Configure Claude Desktop to connect to MetaMCP endpoints using mcp-proxy"
+---
+
+**Claude Desktop** integration allows you to access MetaMCP tools directly through Claude's interface. Since Claude Desktop only supports stdio servers, you'll need a local proxy to connect to MetaMCP's remote endpoints.
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+- **Claude Desktop** installed and running
+- **MetaMCP** running locally or deployed
+- **Active endpoint** configured in MetaMCP
+- **API key** generated (if authentication is enabled)
+
+## Basic Configuration
+
+### Using mcp-proxy (Recommended)
+
+Since MetaMCP endpoints are remote only (SSE, Streamable HTTP), Claude Desktop needs a local proxy to connect. Based on testing, `mcp-proxy` is the recommended solution for API key authentication.
+
+<CodeGroup>
+```json Streamable HTTP (Recommended)
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json SSE (Alternative)
+{
+  "mcpServers": {
+    "MetaMCP": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/your-endpoint-name/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+```json Multiple Endpoints
+{
+  "mcpServers": {
+    "MetaMCP-Dev": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "http://localhost:12008/metamcp/dev-tools/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_dev_key"
+      }
+    },
+    "MetaMCP-Research": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "http://localhost:12008/metamcp/research-tools/sse"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_research_key"
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Configuration File Location
+
+Edit Claude Desktop's configuration file at:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/claude/claude_desktop_config.json`
+
+## Authentication Methods
+
+<AccordionGroup>
+  <Accordion icon="key" title="API Key Authentication">
+    **Most common method** using environment variable:
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "--transport",
+            "streamablehttp",
+            "http://localhost:12008/metamcp/your-endpoint-name/mcp"
+          ],
+          "env": {
+            "API_ACCESS_TOKEN": "sk_mt_your_key_here"
+          }
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion icon="shield-minus" title="No Authentication">
+    **For public endpoints** without authentication:
+    
+    ```json
+    {
+      "mcpServers": {
+        "MetaMCP": {
+          "command": "uvx",
+          "args": [
+            "mcp-proxy",
+            "http://localhost:12008/metamcp/public-tools/sse"
+          ]
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Remote/Production Setup
+
+For remote MetaMCP instances, simply replace the localhost URL:
+
+```json
+{
+  "mcpServers": {
+    "MetaMCP-Production": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "https://your-metamcp-domain.com/metamcp/your-endpoint-name/mcp"
+      ],
+      "env": {
+        "API_ACCESS_TOKEN": "sk_mt_production_key"
+      }
+    }
+  }
+}
+```
+
+## Important Notes
+
+- **Replace** `your-endpoint-name` with your actual endpoint name
+- **Replace** `sk_mt_your_api_key_here` with your MetaMCP API key
+- **mcp-proxy** handles the protocol conversion between stdio and HTTP/SSE
+- **Environment variables** are the secure way to pass API keys
+- For detailed troubleshooting, see [issue #76](https://github.com/metatool-ai/metamcp/issues/76) 
