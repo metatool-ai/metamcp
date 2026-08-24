@@ -69,7 +69,10 @@ export class McpServerPool {
       process.env.MAX_TOTAL_CONNECTIONS || "100",
       10,
     ),
-    maxConnectionsPerServer: number = 5,
+    maxConnectionsPerServer: number = parseInt(
+      process.env.MAX_CONNECTIONS_PER_SERVER || "5",
+      10,
+    ),
   ) {
     this.defaultIdleCount = defaultIdleCount;
     this.maxTotalConnections = maxTotalConnections;
@@ -83,7 +86,10 @@ export class McpServerPool {
    */
   static getInstance(
     defaultIdleCount: number = 1,
-    maxConnectionsPerServer: number = 5,
+    maxConnectionsPerServer: number = parseInt(
+      process.env.MAX_CONNECTIONS_PER_SERVER || "5",
+      10,
+    ),
   ): McpServerPool {
     if (!McpServerPool.instance) {
       const envMax = parseInt(process.env.MAX_TOTAL_CONNECTIONS || "", 10);
