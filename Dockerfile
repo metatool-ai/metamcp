@@ -91,6 +91,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
 
+# pnpm aborts the modules-dir removal when there's no TTY unless CI is set; CI builds are non-TTY.
+ENV CI=true
+
 # Install production dependencies only
 RUN pnpm install --prod
 
