@@ -77,10 +77,16 @@ export async function initializeIdleServers() {
       );
     }
 
-    // Fetch ALL MCP servers from the database (not just namespace-associated ones)
-    console.log("Fetching all MCP servers from database...");
-    const allDbServers = await mcpServersRepository.findAll();
-    console.log(`Found ${allDbServers.length} total MCP servers in database`);
+    // Fetch MCP servers that have at least one ACTIVE namespace mapping. A
+    // server the operator turned off (status INACTIVE in namespace_server_mappings)
+    // must NOT be prewarmed at startup — otherwise the startup idle-prewarm
+    // keeps booting servers the UI says are off (and the tools/list path
+    // correctly filters them out via includeInactiveServers=false).
+    console.log("Fetching ACTIVE MCP servers from database...");
+    const allDbServers = await mcpServersRepository.findActiveByMappings();
+    console.log(
+      `Found ${allDbServers.length} active MCP servers in database (${allDbServers.length} with an ACTIVE namespace mapping)`,
+    );
 
     // Convert all database servers to ServerParameters format
     const allServerParams: Record<string, ServerParameters> = {};

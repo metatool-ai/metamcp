@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { homedir } from "node:os";
 
 import logger from "@/utils/logger";
 
@@ -99,7 +100,22 @@ async function prewarmWith(
   const installOne = async (pkg: string): Promise<number> => {
     // args is the "shape" of the install command per package manager, e.g.
     // ["install", "-g"] for npm — the package name is appended per install.
-    const result = await run(cmd, [...args, pkg], { npm_config_yes: "true" });
+    //
+    // npm: install into a USER-WRITABLE prefix. Images built from the official
+    // node image (or deb.nodesource) ship an npm global prefix of /usr, which
+    // is root-owned — a runtime prewarm running as the app user would hit
+    // EACCES mkdir /usr/lib/node_modules. npx -y resolves its fallback global
+    // install from npm_config_prefix, so pointing it at a writable prefix both
+    // fixes the install AND makes on-demand spawns actually reuse it.
+    const runEnv: Record<string, string> = { npm_config_yes: "true" };
+    if (kind === "npm") {
+      // See the comment above: install into a user-writable prefix so a runtime
+      // prewarm running as a non-root user doesn't hit EACCES on /usr, and npx
+      // can reuse the warm on spawn.
+      runEnv.npm_config_prefix =
+        process.env.MCP_PREWARM_NPM_PREFIX || `${homedir()}/.npm-global`;
+    }
+    const result = await run(cmd, [...args, pkg], runEnv);
     if (result.code === 0) {
       logger.info(
         `[prewarm] ${label}: pre-installed ${pkg} (${result.output.trim().slice(0, 200) || "ok"})`,
@@ -123,6 +139,30 @@ async function prewarmWith(
   const results = [];
   for (const pkg of packages) {
     results.push(await installOne(pkg));
+    // uvx: `uv tool install <pkg>` only works when the package ships an
+    // executable named exactly <pkg> (postgres-mcp, jupyter-mcp-server, ... do
+    // NOT — they are module-runners invoked via `uvx <pkg>` with a different
+    // bin). For those, fall back to a `uvx <pkg> --help` warm: it pulls the
+    // wheel into ~/.cache/uv (the same store uvx resolves on spawn) without
+    // installing a tool. Keep the per-package isolation — a failing fallback
+    // logs its own warning and does not block the rest.
+    if (kind === "uv" && results[results.length - 1] !== 0) {
+      const warmResult = await run(
+        process.env.MCP_PREWARM_UVX_CMD || "uvx",
+        [pkg, "--help"],
+        { npm_config_yes: "true" },
+      );
+      if (warmResult.code === 0) {
+        logger.info(
+          `[prewarm] uvx: warmed ${pkg} cache via uvx --help (no executable tool; ${warmResult.output.trim().slice(0, 200) || "ok"})`,
+        );
+        results[results.length - 1] = 0;
+      } else {
+        logger.warn(
+          `[prewarm] uvx: cache-warm fallback failed for ${pkg} (${warmResult.code}) — ${warmResult.output.trim().slice(0, 300) || "no output"}. Spawns will fall back to on-demand uvx.`,
+        );
+      }
+    }
   }
 
   // Pass 2 — if EVERY package failed AND the cache could be corrupt, purge it
