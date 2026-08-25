@@ -2,10 +2,10 @@
 FROM ghcr.io/astral-sh/uv:debian AS base
 
 # Install Node.js and pnpm directly
-RUN apt-get update && apt-get install -y \
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4 && apt-get update && apt-get install -y \
     curl \
     gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g pnpm@10.12.0 \
     && apt-get clean \
@@ -30,7 +30,7 @@ COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY packages/zod-types/package.json ./packages/zod-types/
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN CI=true pnpm install --frozen-lockfile
 
 # Builder stage
 FROM base AS builder
@@ -87,13 +87,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/backend/drizzle.config.ts ./
 COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
+COPY --from=builder --chown=nextjs:nodejs /app/pnpm-lock.yaml ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
 
 # Install production dependencies only
-RUN pnpm install --prod
-
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+RUN CI=true pnpm install --prod --frozen-lockfile
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
@@ -109,4 +107,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:12008/health || exit 1
 
 # Start both backend and frontend
-CMD ["./docker-entrypoint.sh"] 
+CMD ["./docker-entrypoint.sh"]
