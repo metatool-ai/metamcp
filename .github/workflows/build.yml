@@ -1,0 +1,38 @@
+# Canonical intarweb build workflow — the ONLY workflow a repo needs to produce
+# ghcr.io/intarweb/<repo>:latest. No logic here: everything (fork sync, PR
+# folding, fingerprint/no-op, build) lives in the shared workflow it calls.
+# This file is identical in every repo by construction — operations' build step
+# re-asserts this exact copy onto a fork's mirror main after every sync.
+#
+#   FORK:       main is synced to the upstream default branch; every open
+#               intarweb→upstream PR is folded into the built image. Rebuilds
+#               when our PRs update, a PR is opened against the fork, or
+#               upstream moves (see schedule).
+#   GREENFIELD: every push to the default branch builds :latest.
+# Shared logic: intarweb/operations/.github/workflows/build.yml (public repo —
+# reusable workflows resolve + unlimited Actions minutes).
+
+name: build
+
+on:
+  push:                    # any branch push — a push to a branch that heads an
+                           # upstream PR fires instantly when build.yml is seeded
+                           # on it (GH uses the branch's own workflow file).
+  pull_request:            # PRs opened AGAINST the fork (fork-internal PRs)
+  schedule:
+    # Low-cadence re-sync only (no poll). GitHub fires NO event on the fork
+    # when an intarweb->upstream PR is opened, so this is what keeps the fork
+    # main mirrored to upstream, re-arms the seed onto PR branches that a
+    # rebase dropped it from, and folds newly-opened PRs. The instant path is
+    # `push` above.
+    - cron: '4 4 * * *'    # daily upstream re-sync + seed re-arm + fold (~4 AM local)
+  workflow_dispatch:
+
+permissions:
+  contents: write   # shared workflow re-applies this overlay on fork mirror main
+  packages: write   # GHCR push
+
+jobs:
+  publish:
+    uses: intarweb/operations/.github/workflows/build.yml@main
+    secrets: inherit
