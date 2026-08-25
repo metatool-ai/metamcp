@@ -26,6 +26,7 @@ import {
 import logger from "@/utils/logger";
 
 import { namespacesRepository } from "../../db/repositories/namespaces.repo";
+import { toolsRepository } from "../../db/repositories/tools.repo";
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { getAdminToolsContext } from "../admin-mcp/admin-session-context";
 import {
@@ -58,6 +59,8 @@ import {
 } from "./metamcp-middleware/tool-overrides.functional";
 import { isBackendSessionLostError } from "./session-error";
 import { parseToolName } from "./tool-name-parser";
+import { backgroundToolsSync } from "./background-tools-sync";
+import { filterOutOverrideTools } from "./override-filter";
 import { toolsSyncCache } from "./tools-sync-cache";
 import { sanitizeName } from "./utils";
 
@@ -104,56 +107,6 @@ async function getSessionWithDeadline(
       clearTimeout(timer);
     }
   }
-}
-
-/**
- * Filter out tools that are overrides of existing tools to prevent duplicates in database
- * Uses the existing tool overrides cache for optimal performance
- */
-async function filterOutOverrideTools(
-  tools: Tool[],
-  namespaceUuid: string,
-  serverName: string,
-): Promise<Tool[]> {
-  if (!tools || tools.length === 0) {
-    return tools;
-  }
-
-  const filteredTools: Tool[] = [];
-
-  await Promise.allSettled(
-    tools.map(async (tool) => {
-      try {
-        // Check if this tool name is actually an override name for an existing tool
-        // by using the existing mapOverrideNameToOriginal function
-        const fullToolName = `${sanitizeName(serverName)}__${tool.name}`;
-        const originalName = await mapOverrideNameToOriginal(
-          fullToolName,
-          namespaceUuid,
-          true, // use cache
-        );
-
-        // If the original name is different from the current name,
-        // this tool is an override and should be filtered out
-        if (originalName !== fullToolName) {
-          // This is an override, skip it (don't save to database)
-          return;
-        }
-
-        // This is not an override, include it
-        filteredTools.push(tool);
-      } catch (error) {
-        logger.error(
-          `Error checking if tool ${tool.name} is an override:`,
-          error,
-        );
-        // On error, include the tool (fail-safe behavior)
-        filteredTools.push(tool);
-      }
-    }),
-  );
-
-  return filteredTools;
 }
 
 export const createServer = async (
@@ -228,6 +181,76 @@ export const createServer = async (
       context.namespaceUuid,
       includeInactiveServers,
     );
+
+    // ---- Serve-from-DB fast path ----
+    // Read the fully-scoped tool list for the namespace from the `tools` table
+    // (one indexed query, no backend I/O). This is the hot path that keeps
+    // tools/list fast under many backends. Stale/absent servers are flagged
+    // PENDING and refreshed in the background (or fetched one-off below).
+    try {
+      const dbTools = await toolsRepository.readToolsForNamespace(
+        context.namespaceUuid,
+      );
+
+      // If we have cached tools for this namespace, prefer them. Servers with
+      // fresh DB rows are served from the DB; servers that are stale or absent
+      // are marked PENDING and a background refresh is kicked.
+      const serverUuids = Object.keys(serverParams);
+      const freshUuids = new Set<string>();
+      const pendingServers: string[] = [];
+
+      for (const serverUuid of serverUuids) {
+        if (backgroundToolsSync.isFresh(serverUuid)) {
+          freshUuids.add(serverUuid);
+        } else {
+          pendingServers.push(serverUuid);
+        }
+      }
+
+      if (dbTools.length > 0) {
+        // Trigger background refresh for stale/absent servers (debounced,
+        // non-blocking). The request returns immediately from the DB.
+        for (const [serverUuid, params] of Object.entries(serverParams)) {
+          if (!freshUuids.has(serverUuid)) {
+            backgroundToolsSync.ensureFresh(
+              serverUuid,
+              params,
+              context.namespaceUuid,
+            );
+          }
+        }
+
+        const dbToolsWithName = dbTools.map((tool) => {
+          const serverName = serverParams[tool.mcp_server_uuid]?.name || "";
+          const toolName = `${sanitizeName(serverName)}__${tool.name}`;
+          return {
+            ...tool,
+            name: toolName,
+            description: tool.description,
+          };
+        });
+
+        console.log(
+          `[DEBUG-TOOLS] ✅ tools/list served from DB in ${(performance.now() - startTime).toFixed(2)}ms (${dbToolsWithName.length} tools, ${pendingServers.length} pending)`,
+        );
+
+        return {
+          tools: dbToolsWithName,
+          ...(pendingServers.length > 0
+            ? { _meta: { pending: pendingServers } }
+            : {}),
+        };
+      }
+      // No cached tools for this namespace — fall through to the backend
+      // fan-out (bounded) below.
+    } catch (dbError) {
+      // DB read failed — fall through to the backend fan-out rather than
+      // returning an error.
+      logger.error(
+        `tools/list: DB read failed for namespace ${context.namespaceUuid}, falling back to backend fan-out:`,
+        dbError,
+      );
+    }
 
     // Extract forwarded headers from client request for servers that need them
     const forwardedHeadersByServer = context.clientRequestHeaders

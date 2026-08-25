@@ -3,6 +3,7 @@ import { ServerParameters } from "@repo/zod-types";
 import { mcpServersRepository, namespacesRepository } from "../db/repositories";
 import { initializeEnvironmentConfiguration } from "./bootstrap.service";
 import { metaMcpServerPool } from "./metamcp";
+import { backgroundToolsSync } from "./metamcp/background-tools-sync";
 import { serverErrorTracker } from "./metamcp/server-error-tracker";
 import { convertDbServerToParams } from "./metamcp/utils";
 import { startRuntimePrewarm } from "./stdio-transport/prewarm";
@@ -121,6 +122,11 @@ export async function initializeIdleServers() {
     console.log(
       "✅ Successfully initialized idle servers for all namespaces and all MCP servers",
     );
+
+    // Start the background tools-sync loop (keeps the `tools` table fresh so
+    // tools/list can be served from the DB). Non-blocking; runs off the request
+    // path entirely.
+    backgroundToolsSync.start();
   } catch (error) {
     console.log("❌ Error initializing idle servers:", error);
     // Don't exit the process, just log the error
