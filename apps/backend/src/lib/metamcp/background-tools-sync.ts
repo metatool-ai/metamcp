@@ -119,6 +119,10 @@ class BackgroundToolsSync {
     try {
       const timeout = await configService.getMcpTimeoutForNamespace(namespaceUuid);
       const tools = await this.fetchToolsForServer(params, timeout);
+      // Circuit breaker: a clean sync (tools fetched) is evidence the backend
+      // is healthy — clear any prior tripped state so a recovered server is
+      // synced again on the next pass.
+      circuitBreaker.onSuccess(serverUuid);
       const toolNames = tools.map((t) => t.name);
       const hasChanged = toolsSyncCache.hasChanged(serverUuid, toolNames);
       // ALWAYS reap: syncTools runs deleteObsoleteTools every pass (the hash
@@ -140,6 +144,16 @@ class BackgroundToolsSync {
         );
       }
       this.lastSyncedAt.set(serverUuid, Date.now());
+    } catch (error) {
+      // Circuit breaker: a failed connect/sync counts toward tripping the
+      // server, so the loop stops hammering a cold/dead backend every pass
+      // and gives it a cooldown window to recover (MCP_BREAKER_*).
+      circuitBreaker.onFailure(serverUuid);
+      logger.warn(
+        `[tools-sync] sync failed for ${params.name} (${serverUuid}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     } finally {
       this.inFlight.delete(serverUuid);
     }
@@ -176,7 +190,11 @@ class BackgroundToolsSync {
     // Pool refused (at cap / error state) — one-off bounded connect.
     const { connectMetaMcpClient } = await import("./client");
     const connected = await connectMetaMcpClient(params);
-    if (!connected) return [];
+    if (!connected) {
+      throw new Error(
+        `[tools-sync] connect failed for ${params.name} (${params.uuid})`,
+      );
+    }
     try {
       const result = await connected.client.request(
         { method: "tools/list", params: {} },

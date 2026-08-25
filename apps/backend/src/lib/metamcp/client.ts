@@ -19,6 +19,22 @@ import { resolveEnvVariables } from "./utils";
 const sleep = (time: number) =>
   new Promise<void>((resolve) => setTimeout(() => resolve(), time));
 
+/**
+ * Connect handshake timeout for a stdio/HTTP backend, from
+ * MCP_STDIO_CONNECT_TIMEOUT_MS (default 120s). The MCP SDK's default request
+ * timeout is 60s, which is too short for heavy stdio servers (postgres,
+ * jupyter, unifi-*) that take longer to boot after a cold spawn — their
+ * initialize handshake would be killed at 60s and the whole retry cascade
+ * (5×60s) burns through the sync loop. Bound `client.connect()` to this
+ * instead so slow-booting servers get the full configured window.
+ */
+const getStdioConnectTimeoutMs = (): number => {
+  const raw = process.env.MCP_STDIO_CONNECT_TIMEOUT_MS;
+  if (!raw) return 120_000;
+  const parsed = parseInt(raw, 10);
+  return Number.isNaN(parsed) || parsed <= 0 ? 120_000 : parsed;
+};
+
 export interface ConnectedClient {
   client: Client;
   cleanup: () => Promise<void>;
@@ -243,7 +259,9 @@ export const connectMetaMcpClient = async (
         };
       }
 
-      await client.connect(transport);
+      await client.connect(transport, {
+        timeout: getStdioConnectTimeoutMs(),
+      });
       metamcpLogStore.addLog(
         serverParams.name,
         "info",
