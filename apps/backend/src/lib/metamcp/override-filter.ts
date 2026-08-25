@@ -1,4 +1,4 @@
-import { Tool } from "@repo/zod-types";
+import { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 import logger from "@/utils/logger";
 

@@ -223,10 +223,13 @@ export const createServer = async (
         const dbToolsWithName = dbTools.map((tool) => {
           const serverName = serverParams[tool.mcp_server_uuid]?.name || "";
           const toolName = `${sanitizeName(serverName)}__${tool.name}`;
+          // Map the DB row (DatabaseTool: toolSchema) to the SDK Tool shape
+          // (inputSchema) and drop DB-only fields so the MCP client sees the
+          // standard { name, description, inputSchema } tool.
           return {
-            ...tool,
             name: toolName,
-            description: tool.description,
+            description: tool.description ?? undefined,
+            inputSchema: tool.toolSchema,
           };
         });
 
