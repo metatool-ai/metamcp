@@ -99,6 +99,21 @@ export class McpServerPool {
   private spawnConcurrency = 0;
   private readonly maxSpawnConcurrency: number;
 
+  // Maximum connections per namespace UUID (prevents a busy namespace from
+  // starving others). 0 = unlimited (default).
+  private readonly maxConnectionsPerNamespace: number;
+
+  // Live connection count per namespace UUID (idle + active + pending).
+  private readonly namespaceConnections: Map<string, number> = new Map();
+
+  // sessionId -> namespaceUuid, so cleanupSession can decrement the per-namespace
+  // count when a connection is destroyed (not recycled).
+  private readonly sessionNamespaces: Map<string, string> = new Map();
+
+  // Last time each server UUID logged an at-cap condition, for the 30s-per-server
+  // throttle on the cap warning.
+  private lastCapLogAt: Record<string, number> = {};
+
   private constructor(
     defaultIdleCount: number = 1,
     maxTotalConnections: number = parseInt(
@@ -107,6 +122,10 @@ export class McpServerPool {
     ),
     maxConnectionsPerServer: number = parseInt(
       process.env.MAX_CONNECTIONS_PER_SERVER || "5",
+      10,
+    ),
+    maxConnectionsPerNamespace: number = parseInt(
+      process.env.MAX_CONNECTIONS_PER_NAMESPACE || "0",
       10,
     ),
   ) {
@@ -121,6 +140,7 @@ export class McpServerPool {
       process.env.MCP_SPAWN_CONCURRENCY || "4",
       10,
     );
+    this.maxConnectionsPerNamespace = maxConnectionsPerNamespace;
     this.startCleanupTimer();
     this.startHealthCheckTimer();
   }
@@ -142,6 +162,7 @@ export class McpServerPool {
         defaultIdleCount,
         maxConn,
         maxConnectionsPerServer,
+        parseInt(process.env.MAX_CONNECTIONS_PER_NAMESPACE || "0", 10),
       );
     }
     return McpServerPool.instance;
@@ -179,9 +200,16 @@ export class McpServerPool {
   private canCreateConnectionForServer(serverUuid: string): boolean {
     const count = this.countConnectionsForServer(serverUuid);
     if (count >= this.maxConnectionsPerServer) {
-      logger.warn(
-        `Per-server connection limit reached for ${serverUuid}: ${count}/${this.maxConnectionsPerServer}`,
-      );
+      // Quiet: throttle the at-cap warning to once per 30s per server so a
+      // busy server doesn't flood the log (the pool reuses the oldest active
+      // connection at cap anyway).
+      const now = Date.now();
+      if ((this.lastCapLogAt[serverUuid] ?? 0) < now - 30_000) {
+        this.lastCapLogAt[serverUuid] = now;
+        logger.warn(
+          `Per-server connection limit reached for ${serverUuid}: ${count}/${this.maxConnectionsPerServer}`,
+        );
+      }
       return false;
     }
     return true;
@@ -485,6 +513,9 @@ export class McpServerPool {
     this.activeSessions[sessionId][serverUuid] = newClient;
     this.sessionToServers[sessionId].add(serverUuid);
     newClient.lastUsedAt = Date.now();
+    if (namespaceUuid) {
+      this.sessionNamespaces.set(sessionId, namespaceUuid);
+    }
 
     logger.info(
       `Created new active session for server ${serverUuid}, session ${sessionId}`,
@@ -515,11 +546,32 @@ export class McpServerPool {
       return undefined;
     }
 
+    // Per-namespace cap: prevent a busy namespace from starving others.
+    if (namespaceUuid && this.maxConnectionsPerNamespace > 0) {
+      const nsCount = this.namespaceConnections.get(namespaceUuid) || 0;
+      if (nsCount >= this.maxConnectionsPerNamespace) {
+        logger.warn(
+          `Skipping connection for server ${params.name} (${params.uuid}) - namespace ${namespaceUuid} at cap ${nsCount}/${this.maxConnectionsPerNamespace}`,
+        );
+        return undefined;
+      }
+    }
+
     // Bound spawn concurrency. A cold start can queue many servers behind
     // this gate instead of firing ~22 simultaneous spawns that each blow
     // past the SDK connect timeout.
     const before = Date.now();
     const release = await this.acquireSpawnSlot(before);
+
+    // Track the connection against its namespace (for the per-namespace cap).
+    // We increment AFTER acquiring a spawn slot but BEFORE the connect, and
+    // decrement on cleanup/failure.
+    if (namespaceUuid) {
+      this.namespaceConnections.set(
+        namespaceUuid,
+        (this.namespaceConnections.get(namespaceUuid) || 0) + 1,
+      );
+    }
 
     try {
       logger.info(
@@ -568,6 +620,14 @@ export class McpServerPool {
         },
       );
       if (!connectedClient) {
+        // Connect failed — roll back the namespace counter.
+        if (namespaceUuid) {
+          const nsCount = this.namespaceConnections.get(namespaceUuid) || 0;
+          this.namespaceConnections.set(
+            namespaceUuid,
+            Math.max(0, nsCount - 1),
+          );
+        }
         return undefined;
       }
 
@@ -791,6 +851,8 @@ export class McpServerPool {
           );
         }
         destroyed++;
+        // Decrement the namespace count for the destroyed connection.
+        this.decrementNamespaceConnection(sessionId);
       }
     }
 
@@ -803,9 +865,23 @@ export class McpServerPool {
     // Clean up session to servers mapping
     delete this.sessionToServers[sessionId];
 
+    // Clean up session namespace tracking
+    this.sessionNamespaces.delete(sessionId);
+
     logger.info(
       `Cleaned up session ${sessionId} (recycled: ${recycled}, destroyed: ${destroyed})`,
     );
+  }
+
+  /**
+   * Decrement the live connection count for a session's namespace (called when a
+   * connection is destroyed, not recycled).
+   */
+  private decrementNamespaceConnection(sessionId: string): void {
+    const ns = this.sessionNamespaces.get(sessionId);
+    if (!ns) return;
+    const count = this.namespaceConnections.get(ns) || 0;
+    this.namespaceConnections.set(ns, Math.max(0, count - 1));
   }
 
   /**
@@ -831,6 +907,8 @@ export class McpServerPool {
     this.sessionToServers = {};
     this.sessionTimestamps = {};
     this.serverParamsCache = {};
+    this.namespaceConnections.clear();
+    this.sessionNamespaces.clear();
 
     // Bump all known generations (never reset to {}) so any in-flight idle
     // creation that started before cleanupAll() resolves with a stale value

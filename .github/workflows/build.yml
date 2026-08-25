@@ -20,11 +20,13 @@ on:
                            # on it (GH uses the branch's own workflow file).
   pull_request:            # PRs opened AGAINST the fork (fork-internal PRs)
   schedule:
-    # Low-cadence re-sync only (no poll). GitHub fires NO event on the fork
-    # when an intarweb->upstream PR is opened, so this is what keeps the fork
-    # main mirrored to upstream, re-arms the seed onto PR branches that a
-    # rebase dropped it from, and folds newly-opened PRs. The instant path is
-    # `push` above.
+    # Frequent fold check: GitHub fires NO event on the fork when an
+    # intarweb->upstream PR is opened (pull_request fires only on the base
+    # repo), so this short interval is what actually catches a newly-posted
+    # upstream PR. No-op when nothing changed (fingerprint gate). The 6-hour
+    # sync keeps fork main mirrored to upstream and re-arms the seed onto PR
+    # branches that a rebase dropped it from.
+    - cron: '*/5 * * * *'    # 5-min minimum (GH docs): fold a newly-opened upstream PR (only poll event the fork gets)
     - cron: '23 */6 * * *'    # upstream re-sync + seed re-arm + fold
   workflow_dispatch:
 

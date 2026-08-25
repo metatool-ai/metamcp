@@ -4,11 +4,12 @@ FROM ghcr.io/astral-sh/uv:debian AS base
 # Install Node.js and pnpm directly. Node 24: the current MCP package catalog
 # declares engines.node >= 24 (nws-weather-mcp-server, paperless-mcp, ...) and
 # npm 10 aborts a whole install batch on one engine violation, so a Node 20
-# runtime makes those packages impossible to prewarm.
-RUN apt-get update && apt-get install -y \
+# runtime makes those packages impossible to prewarm. ForceIPv4 + curl -4 keep
+# the apt/node setup reproducible on IPv6-flaky build runners.
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4 && apt-get update && apt-get install -y \
     curl \
     gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+    && curl -4 -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g pnpm@10.29.3 \
     && apt-get clean \
@@ -39,7 +40,7 @@ COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY packages/zod-types/package.json ./packages/zod-types/
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN CI=true pnpm install --frozen-lockfile
 
 # Builder stage
 FROM base AS builder
@@ -57,11 +58,12 @@ COPY . .
 # Build all packages and apps
 RUN pnpm build
 
-# The pnpm store dir is suffixed with the resolved react peer versions (e.g. _react-dom@19.2.4_react@19.2.4__react@19.2.4),
-# which drift as the lockfile updates. Glob the store dir so this sed survives dependency bumps.
-RUN sed -i -e "s/30000/600000/" \
-    node_modules/.pnpm/next@15.5.12_*/node_modules/next/dist/server/lib/router-utils/proxy-request.js \
-    node_modules/.pnpm/next@15.5.12_*/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js
+# The pnpm store dir is suffixed with the resolved react peer versions (e.g.
+# _react-dom@19.2.4_react@19.2.4__react@19.2.4), which drift as the lockfile
+# updates. `find`-based so the sed survives any dependency bump without a path
+# rewrite, and fail-open so a future store layout change can't break the build.
+RUN find node_modules/.pnpm -path "*next/dist/server/lib/router-utils/proxy-request.js" -exec sed -i "s/30000/600000/" {} + || true && \
+    find node_modules/.pnpm -path "*next/dist/esm/server/lib/router-utils/proxy-request.js" -exec sed -i "s/30000/600000/" {} + || true
 
 # Production runner stage
 FROM base AS runner
@@ -95,6 +97,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/backend/drizzle.config.ts ./
 COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
+COPY --from=builder --chown=nextjs:nodejs /app/pnpm-lock.yaml ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
 
 # pnpm aborts the modules-dir removal when there's no TTY unless CI is set; CI builds are non-TTY.
@@ -133,8 +136,9 @@ ENV MCP_SPAWN_CONCURRENCY=4 \
 
 # Install production dependencies only. drizzle-kit is a production dependency
 # of apps/backend (it runs `pnpm exec drizzle-kit migrate` at startup), so the
-# --prod prune keeps it linked into apps/backend/node_modules/.bin.
-RUN pnpm install --prod
+# --prod prune keeps it linked into apps/backend/node_modules/.bin. --frozen-
+# lockfile pins the runner to the lockfile versions (no drift re-resolve).
+RUN CI=true pnpm install --prod --frozen-lockfile
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
@@ -150,4 +154,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:12008/health || exit 1
 
 # Start both backend and frontend
-CMD ["./docker-entrypoint.sh"] 
+CMD ["./docker-entrypoint.sh"]

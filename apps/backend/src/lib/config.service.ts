@@ -79,6 +79,24 @@ export const configService = {
     return config?.value ? parseInt(config.value, 10) : 60000;
   },
 
+  /**
+   * Resolve the MCP timeout for a namespace, honoring a per-namespace override
+   * (env MCP_TIMEOUT_<NAMESPACE_UPPER>_MS) before falling back to the global
+   * MCP_TIMEOUT. Lets a slow `shared` namespace carry a tighter budget than
+   * `general` so one slow backend can't hold others hostage.
+   */
+  async getMcpTimeoutForNamespace(namespaceName: string): Promise<number> {
+    if (namespaceName) {
+      const envKey = `MCP_TIMEOUT_${namespaceName.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_MS`;
+      const envVal = process.env[envKey];
+      if (envVal) {
+        const parsed = parseInt(envVal, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+    }
+    return this.getMcpTimeout();
+  },
+
   async setMcpTimeout(timeout: number): Promise<void> {
     await configRepo.setConfig(
       ConfigKeyEnum.enum.MCP_TIMEOUT,

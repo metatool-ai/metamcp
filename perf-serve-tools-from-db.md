@@ -125,6 +125,16 @@ Bifrost's 8 MCP clients each `tools/list` and retry on timeout. With serve-from-
 `tools/list` returns in ms → clients go healthy → no reconnect storm. The background sync
 keeps the DB fresh without ever blocking a request.
 
+## New env knobs (Layer 1 + 2)
+
+| Env | Default | Purpose |
+|---|---|---|
+| `MCP_TOOLS_TTL_MS` | 60000 | Staleness TTL for the serve-from-DB cache. |
+| `MAX_CONNECTIONS_PER_NAMESPACE` | 0 (unlimited) | Per-namespace connection cap so a busy `shared` can't starve `general`. |
+| `MCP_TIMEOUT_<NS>_MS` | global `MCP_TIMEOUT` | Per-namespace timeout override (e.g. `MCP_TIMEOUT_SHARED_MS`). |
+| `MCP_BREAKER_FAIL_THRESHOLD` | 3 | Consecutive failures before a backend is tripped. |
+| `MCP_BREAKER_COOLDOWN_MS` | 30000 | Circuit-breaker cooldown before half-open probe. |
+
 ## Notes / non-goals
 
 - Do NOT reimplement the existing backend-fetch fan-out; only keep a bounded one-off path

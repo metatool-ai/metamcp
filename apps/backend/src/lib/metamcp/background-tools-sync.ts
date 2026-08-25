@@ -5,6 +5,7 @@ import logger from "@/utils/logger";
 
 import { toolsRepository } from "../../db/repositories";
 import { configService } from "../config.service";
+import { circuitBreaker } from "./circuit-breaker";
 import { getMcpServers } from "./fetch-metamcp";
 import { filterOutOverrideTools } from "./override-filter";
 import { toolsSyncCache } from "./tools-sync-cache";
@@ -91,6 +92,9 @@ class BackgroundToolsSync {
         await Promise.allSettled(
           entries.map(async ([uuid, params]) => {
             if (this.isFresh(uuid)) return;
+            // Skip tripped servers — don't hammer a backend the circuit
+            // breaker has opened.
+            if (circuitBreaker.isOpen(uuid)) return;
             await this.syncServer(uuid, params, ns);
           }),
         );
@@ -113,28 +117,43 @@ class BackgroundToolsSync {
     if (this.inFlight.has(serverUuid)) return;
     this.inFlight.add(serverUuid);
     try {
-      const timeout = await configService.getMcpTimeout();
+      const timeout = await configService.getMcpTimeoutForNamespace(namespaceUuid);
       const tools = await this.fetchToolsForServer(params, timeout);
+      // Circuit breaker: a clean sync (tools fetched) is evidence the backend
+      // is healthy — clear any prior tripped state so a recovered server is
+      // synced again on the next pass.
+      circuitBreaker.onSuccess(serverUuid);
       const toolNames = tools.map((t) => t.name);
       const hasChanged = toolsSyncCache.hasChanged(serverUuid, toolNames);
-      if (hasChanged) {
-        const toolsToSave = await filterOutOverrideTools(
-          tools,
-          namespaceUuid,
-          params.name,
+      // ALWAYS reap: syncTools runs deleteObsoleteTools every pass (the hash
+      // guard only skips the idempotent upsert when nothing changed) so removed
+      // backend tools converge in the DB instead of lingering as stale rows.
+      const toolsToSave = await filterOutOverrideTools(
+        tools,
+        namespaceUuid,
+        params.name,
+      );
+      if (toolsToSave.length > 0) {
+        toolsSyncCache.update(serverUuid, toolNames);
+        await toolsRepository.syncTools({
+          tools: toolsToSave,
+          mcpServerUuid: serverUuid,
+        });
+        logger.info(
+          `[tools-sync] synced ${toolsToSave.length} tools for ${params.name} (${serverUuid})${hasChanged ? "" : " (reap-only, unchanged)"}`,
         );
-        if (toolsToSave.length > 0) {
-          toolsSyncCache.update(serverUuid, toolNames);
-          await toolsRepository.syncTools({
-            tools: toolsToSave,
-            mcpServerUuid: serverUuid,
-          });
-          logger.info(
-            `[tools-sync] synced ${toolsToSave.length} tools for ${params.name} (${serverUuid})`,
-          );
-        }
       }
       this.lastSyncedAt.set(serverUuid, Date.now());
+    } catch (error) {
+      // Circuit breaker: a failed connect/sync counts toward tripping the
+      // server, so the loop stops hammering a cold/dead backend every pass
+      // and gives it a cooldown window to recover (MCP_BREAKER_*).
+      circuitBreaker.onFailure(serverUuid);
+      logger.warn(
+        `[tools-sync] sync failed for ${params.name} (${serverUuid}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     } finally {
       this.inFlight.delete(serverUuid);
     }
@@ -171,7 +190,11 @@ class BackgroundToolsSync {
     // Pool refused (at cap / error state) — one-off bounded connect.
     const { connectMetaMcpClient } = await import("./client");
     const connected = await connectMetaMcpClient(params);
-    if (!connected) return [];
+    if (!connected) {
+      throw new Error(
+        `[tools-sync] connect failed for ${params.name} (${params.uuid})`,
+      );
+    }
     try {
       const result = await connected.client.request(
         { method: "tools/list", params: {} },

@@ -60,9 +60,27 @@ import {
 import { isBackendSessionLostError } from "./session-error";
 import { parseToolName } from "./tool-name-parser";
 import { backgroundToolsSync } from "./background-tools-sync";
+import { circuitBreaker } from "./circuit-breaker";
 import { filterOutOverrideTools } from "./override-filter";
 import { toolsSyncCache } from "./tools-sync-cache";
 import { sanitizeName } from "./utils";
+
+/**
+ * Rate-limited DEGRADED logger: aggregates per-namespace degradation and emits
+ * at most one log line per window (default 60s) instead of spamming per request.
+ */
+const degradedLogTimestamps: Map<string, number> = new Map();
+const DEGRADED_LOG_WINDOW_MS = 60_000;
+
+function shouldLogDegraded(namespaceUuid: string): boolean {
+  const now = Date.now();
+  const last = degradedLogTimestamps.get(namespaceUuid) || 0;
+  if (now - last >= DEGRADED_LOG_WINDOW_MS) {
+    degradedLogTimestamps.set(namespaceUuid, now);
+    return true;
+  }
+  return false;
+}
 
 /**
  * Bound a getSession() call with a deadline. The pool's getSession can block
@@ -384,6 +402,13 @@ export const createServer = async (
         try {
           const toolFetchStart = performance.now();
 
+          // Bound each backend's tools/list with the namespace-aware MCP timeout
+          // so a single hung backend (OAuth re-auth, cold package install)
+          // can't stall the whole namespace aggregation.
+          const listTimeout = await configService.getMcpTimeoutForNamespace(
+            namespace?.name || "",
+          );
+
           // Paginated tool discovery - load all pages automatically
           const fetchAllToolPages = async (
             active: ConnectedClient,
@@ -402,6 +427,10 @@ export const createServer = async (
                   },
                 },
                 ListToolsResultSchema,
+                {
+                  timeout: listTimeout,
+                  resetTimeoutOnProgress: true,
+                },
               );
 
               if (result.tools && result.tools.length > 0) {
@@ -513,9 +542,13 @@ export const createServer = async (
     // `pending` marker (not a hard failure): a client that checks it can
     // retry, and a client that ignores it still gets the healthy tools.
     if (failedServers.length > 0) {
-      logger.error(
-        `tools/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length}/${allServerEntries.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allTools.length} tools`,
-      );
+      // Quiet DEGRADED: emit at most once per 60s per namespace so a steady
+      // degradation doesn't flood the log; the client still gets _meta.pending.
+      if (shouldLogDegraded(namespaceUuid)) {
+        logger.error(
+          `tools/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length}/${allServerEntries.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allTools.length} tools`,
+        );
+      }
     }
 
     return {
@@ -649,7 +682,10 @@ export const createServer = async (
     // Get configurable timeout values
     const resetTimeoutOnProgress =
       await configService.getMcpResetTimeoutOnProgress();
-    const timeout = await configService.getMcpTimeout();
+    // Per-namespace timeout: honor MCP_TIMEOUT_<NS>_MS override, else global.
+    const timeout = await configService.getMcpTimeoutForNamespace(
+      namespace?.name || "",
+    );
     const maxTotalTimeout = await configService.getMcpMaxTotalTimeout();
 
     const mcpRequestOptions: RequestOptions = {
@@ -674,8 +710,14 @@ export const createServer = async (
       );
 
     try {
-      return (await callOnce(clientForTool)) as CallToolResult;
+      const result = (await callOnce(clientForTool)) as CallToolResult;
+      // Circuit breaker: a successful call resets the backend's failure count.
+      circuitBreaker.onSuccess(serverUuid);
+      return result;
     } catch (error) {
+      // Circuit breaker: a failed/timed-out call counts toward tripping.
+      circuitBreaker.onFailure(serverUuid);
+
       if (!isBackendSessionLostError(error)) {
         logger.error(
           `Error calling tool "${name}" through ${
