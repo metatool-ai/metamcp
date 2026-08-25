@@ -3,6 +3,7 @@ import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import {
   CallToolRequestSchema,
   CallToolResult,
+  CallToolResultSchema,
   CompatibilityCallToolResultSchema,
   GetPromptRequestSchema,
   GetPromptResultSchema,
@@ -22,6 +23,7 @@ import {
   ResourceTemplate,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 
 import logger from "@/utils/logger";
 
@@ -58,6 +60,7 @@ import {
   mapOverrideNameToOriginal,
 } from "./metamcp-middleware/tool-overrides.functional";
 import { isBackendSessionLostError } from "./session-error";
+import { normalizeCallToolResult } from "./call-tool-result";
 import { parseToolName } from "./tool-name-parser";
 import { backgroundToolsSync } from "./background-tools-sync";
 import { circuitBreaker } from "./circuit-breaker";
@@ -190,7 +193,7 @@ export const createServer = async (
     request,
     context,
   ) => {
-    console.log(
+    logger.debug(
       "[DEBUG-TOOLS] 🔍 tools/list called for namespace:",
       namespaceUuid,
     );
@@ -238,6 +241,17 @@ export const createServer = async (
           }
         }
 
+        // Surface circuit-open servers as pending (DEGRADED surfacing): a
+        // tripped backend's tools are still served from DB (last-known) but
+        // the client sees the server needs a retry, not a hang.
+        for (const serverUuid of Object.keys(serverParams)) {
+          if (circuitBreaker.isOpen(serverUuid)) {
+            if (!pendingServers.includes(serverUuid)) {
+              pendingServers.push(serverUuid);
+            }
+          }
+        }
+
         const dbToolsWithName = dbTools.map((tool) => {
           const serverName = serverParams[tool.mcp_server_uuid]?.name || "";
           const toolName = `${sanitizeName(serverName)}__${tool.name}`;
@@ -251,7 +265,7 @@ export const createServer = async (
           };
         });
 
-        console.log(
+        logger.debug(
           `[DEBUG-TOOLS] ✅ tools/list served from DB in ${(performance.now() - startTime).toFixed(2)}ms (${dbToolsWithName.length} tools, ${pendingServers.length} pending)`,
         );
 
@@ -292,39 +306,51 @@ export const createServer = async (
     // We'll filter servers during processing after getting sessions to check actual MCP server names
     const allServerEntries = Object.entries(serverParams);
 
-    console.log(
+    logger.debug(
       `[DEBUG-TOOLS] 📋 Processing ${allServerEntries.length} servers`,
     );
 
     // Cold-start warmup: if pool has 0 idle + 0 active sessions but servers
-    // exist in DB, trigger a blocking warmup before tools/list responds.
-    // This prevents 0-tool responses after idle timeout expires all connections.
+    // exist in DB, trigger a LAZY warmup. This used to block on
+    // ensureIdleSessions() — a synchronous fan-out that spawned every server
+    // at once and blew past the connect timeout (the -32001/-32000 storm).
+    // Instead, clear error states and kick off the bounded, sequential
+    // prewarm in the background; the per-server getSession() calls below
+    // connect on demand and are covered by the extended connect timeout.
     const poolStatus = mcpServerPool.getPoolStatus();
     if (
       poolStatus.idle === 0 &&
       poolStatus.active === 0 &&
       allServerEntries.length > 0
     ) {
-      console.log(
-        `[DEBUG-TOOLS] ⚠️ Cold start: 0 idle, 0 active sessions but ${allServerEntries.length} servers registered. Warming up...`,
+      logger.debug(
+        `[DEBUG-TOOLS] ⚠️ Cold start: 0 idle, 0 active sessions but ${allServerEntries.length} servers registered. Background prewarm started.`,
       );
       for (const [uuid] of allServerEntries) {
         await mcpServerPool.resetServerErrorState(uuid);
       }
-      await mcpServerPool.ensureIdleSessions(serverParams, namespaceUuid);
-      const afterStatus = mcpServerPool.getPoolStatus();
-      console.log(
-        `[DEBUG-TOOLS] ✅ Pool warmup complete: ${afterStatus.idle} idle, ${afterStatus.active} active`,
-      );
+      // Fire-and-forget: the prewarm is bounded (sequential, gated) and the
+      // fan-out below will lazy-connect servers that are still cold.
+      void mcpServerPool
+        .ensureIdleSessions(serverParams, namespaceUuid)
+        .then(() => {
+          const afterStatus = mcpServerPool.getPoolStatus();
+          logger.debug(
+            `[DEBUG-TOOLS] ✅ Pool warmup complete: ${afterStatus.idle} idle, ${afterStatus.active} active`,
+          );
+        })
+        .catch((error) => {
+          logger.error("[DEBUG-TOOLS] ❌ Pool warmup failed:", error);
+        });
     }
 
     await Promise.allSettled(
       allServerEntries.map(async ([mcpServerUuid, params]) => {
-        console.log(`[DEBUG-TOOLS] 🔧 Server: ${params.name || mcpServerUuid}`);
+        logger.debug(`[DEBUG-TOOLS] 🔧 Server: ${params.name || mcpServerUuid}`);
 
         // Skip if we've already visited this server to prevent circular references
         if (visitedServers.has(mcpServerUuid)) {
-          console.log(
+          logger.debug(
             `[DEBUG-TOOLS] ⏭️  Skipping already visited: ${params.name}`,
           );
           return;
@@ -348,13 +374,13 @@ export const createServer = async (
           namespaceUuid,
         );
         if (!session) {
-          console.log(`[DEBUG-TOOLS] ❌ No session for: ${params.name}`);
+          logger.debug(`[DEBUG-TOOLS] ❌ No session for: ${params.name}`);
           // No pooled session and the pool couldn't create one — server is
-          // ERROR-gated, connection-capped, or unreachable. Error level: this
-          // server is silently missing from the namespace's tool surface
-          // until the pool recovers.
+          // ERROR-gated, connection-capped, deadline-exceeded, or unreachable.
+          // Error level: this server is silently missing from the namespace's
+          // tool surface until the pool recovers.
           logger.error(
-            `tools/list: no session available for server ${params.name || mcpServerUuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
+            `tools/list: no session available for server ${params.name || mcpServerUuid} — excluded from namespace response (error state, connection cap, deadline, or backend unreachable)`,
           );
           failedServers.push(params.name || mcpServerUuid);
           return;
@@ -451,7 +477,7 @@ export const createServer = async (
             },
           });
 
-          console.log(
+          logger.debug(
             `[DEBUG-TOOLS] ⏱️  Fetched ${allServerTools.length} tools from ${serverName} in ${(performance.now() - toolFetchStart).toFixed(2)}ms`,
           );
 
@@ -466,7 +492,7 @@ export const createServer = async (
               toolNames,
             );
 
-            console.log(
+            logger.debug(
               `[DEBUG-TOOLS] 🔍 Hash check for ${serverName}: ${hasChanged ? "CHANGED" : "UNCHANGED"}`,
             );
 
@@ -517,7 +543,7 @@ export const createServer = async (
     );
 
     const totalTime = performance.now() - startTime;
-    console.log(
+    logger.debug(
       `[DEBUG-TOOLS] ✅ tools/list completed in ${totalTime.toFixed(2)}ms, returning ${allTools.length} tools`,
     );
 
@@ -525,6 +551,10 @@ export const createServer = async (
     // failed even after the recovery retry (or had no session). The response
     // is still returned (partial truth beats a hard error for the surviving
     // servers) but the failure must be loud enough for log-based monitoring.
+    //
+    // A warming/failed server is surfaced to the client as a `_meta`-style
+    // `pending` marker (not a hard failure): a client that checks it can
+    // retry, and a client that ignores it still gets the healthy tools.
     if (failedServers.length > 0) {
       // Quiet DEGRADED: emit at most once per 60s per namespace so a steady
       // degradation doesn't flood the log; the client still gets _meta.pending.
@@ -535,7 +565,12 @@ export const createServer = async (
       }
     }
 
-    return { tools: allTools };
+    return {
+      tools: allTools,
+      ...(failedServers.length > 0
+        ? { _meta: { pending: failedServers } }
+        : {}),
+    };
   };
 
   // Original Call Tool Handler
@@ -674,8 +709,15 @@ export const createServer = async (
       maxTotalTimeout,
     };
 
-    const callOnce = (session: ConnectedClient) =>
-      session.client.request(
+    // Fetch the backend result with a PERMISSIVE schema (z.unknown) so the SDK
+    // returns the raw payload instead of hard-failing -32602 on a malformed
+    // `content` shape during validation. We normalize to the SDK shape after,
+    // and only then validate — so a backend's malformed output never becomes a
+    // client-facing error.
+    const callOnce = async (
+      session: ConnectedClient,
+    ): Promise<CallToolResult> => {
+      const raw = await session.client.request(
         {
           method: "tools/call",
           params: {
@@ -684,15 +726,33 @@ export const createServer = async (
             _meta: request.params._meta,
           },
         },
-        CompatibilityCallToolResultSchema,
+        z.unknown(),
         mcpRequestOptions,
       );
+      // Normalize the backend's CallToolResult so a non-conforming shape never
+      // becomes a client-facing -32602 (zod hard-fail on the SDK shape). A
+      // backend's malformed output is a reason to degrade, not to break the
+      // call for the client.
+      const result = normalizeCallToolResult(raw as CallToolResult, serverUuid);
+      // Validate the normalized result: if it STILL doesn't conform (e.g. the
+      // backend returned a fundamentally non-result object), surface a clean
+      // retryable error rather than a raw zod dump.
+      const parsed = CallToolResultSchema.safeParse(result);
+      if (!parsed.success) {
+        logger.error(
+          `[call-tool] backend ${serverUuid} returned an unshapable CallToolResult for tool "${name}"; returning clean error`,
+        );
+        throw new Error(
+          `Backend ${serverUuid} returned an invalid tools/call result for "${name}"`,
+        );
+      }
+      return parsed.data;
+    };
 
     try {
-      const result = (await callOnce(clientForTool)) as CallToolResult;
       // Circuit breaker: a successful call resets the backend's failure count.
       circuitBreaker.onSuccess(serverUuid);
-      return result;
+      return await callOnce(clientForTool);
     } catch (error) {
       // Circuit breaker: a failed/timed-out call counts toward tripping.
       circuitBreaker.onFailure(serverUuid);
@@ -705,6 +765,15 @@ export const createServer = async (
           error,
         );
         throw error;
+      }
+
+      // Circuit breaker: a tripped backend must not be spawned into on every
+      // call. Surface a clean retryable error; the breaker's half-open probe
+      // lets a real request through once the cooldown elapses.
+      if (circuitBreaker.isOpen(serverUuid)) {
+        throw new Error(
+          `Backend server ${serverUuid} is circuit-open; skipping re-initialize for tool "${name}"`,
+        );
       }
 
       logger.warn(
@@ -748,6 +817,21 @@ export const createServer = async (
           } after session re-initialize:`,
           retryError,
         );
+        // The retry's fresh spawn is registered in the pool but will never be
+        // recycled or evicted if the caller already gave up (its request timed
+        // out while we awaited the fresh connect). Invalidate + kill it so a
+        // failed recovery does not leak a spawned backend process forever
+        // (the pid-47 orphan pileup that pushed the container to 8.45GB/8GB).
+        // The invalidation cascades across every slot for this serverUuid and
+        // is idempotent — safe if another request already adopted this session.
+        await mcpServerPool
+          .invalidateServerConnection(sessionId, serverUuid)
+          .catch((invalidateError) => {
+            logger.error(
+              `Error cleaning up leaked fresh session for server ${serverUuid} after failed re-initialize:`,
+              invalidateError,
+            );
+          });
         throw retryError;
       }
     }

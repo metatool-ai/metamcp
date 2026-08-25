@@ -94,6 +94,9 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+      drizzle-kit:
+        specifier: ^0.31.1
+        version: 0.31.9
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -125,9 +128,6 @@ importers:
       dotenv-cli:
         specifier: ^8.0.0
         version: 8.0.0
-      drizzle-kit:
-        specifier: ^0.31.1
-        version: 0.31.9
       eslint:
         specifier: ^9.28.0
         version: 9.39.2(jiti@2.6.1)
