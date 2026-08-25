@@ -26,13 +26,27 @@ const sleep = (time: number) =>
  * as a Client option in the installed version, so this wraps the connect in
  * a race. On timeout the transport is closed to release the spawned process,
  * and the thrown error (with a descriptive message) flows into the caller's
- * retry loop. Default 90s; override with MCP_CONNECT_TIMEOUT_MS.
+ * retry loop.
+ *
+ * stdio transports get a longer default (120s, MCP_STDIO_CONNECT_TIMEOUT_MS)
+ * because a cold spawn may have to download its package on first boot; HTTP
+ * transports keep the tighter default (90s, MCP_CONNECT_TIMEOUT_MS).
  */
 async function connectWithTimeout(
   client: Client,
   transport: Transport,
+  serverType: string | undefined,
 ): Promise<void> {
-  const timeoutMs = parseInt(process.env.MCP_CONNECT_TIMEOUT_MS || "90000", 10);
+  const isStdio = !serverType || serverType === "STDIO";
+  const timeoutMs = parseInt(
+    process.env[
+      isStdio ? "MCP_STDIO_CONNECT_TIMEOUT_MS" : "MCP_CONNECT_TIMEOUT_MS"
+    ] || (isStdio ? "120000" : "90000"),
+    10,
+  );
+  const timeoutEnv = isStdio
+    ? "MCP_STDIO_CONNECT_TIMEOUT_MS"
+    : "MCP_CONNECT_TIMEOUT_MS";
 
   let timeoutId: NodeJS.Timeout | undefined;
   let timedOut = false;
@@ -45,7 +59,7 @@ async function connectWithTimeout(
           timedOut = true;
           reject(
             new Error(
-              `MCP connect timed out after ${timeoutMs}ms (MCP_CONNECT_TIMEOUT_MS)`,
+              `MCP connect timed out after ${timeoutMs}ms (${timeoutEnv})`,
             ),
           );
         }, timeoutMs);
@@ -303,10 +317,11 @@ export const connectMetaMcpClient = async (
       // Connect-timeout envelope. The SDK's initialize-handshake timeout is
       // not directly configurable in this version, and cold-start spawns
       // (uvx/npx/bunx boots, especially under the bounded spawn-concurrency
-      // gate) can exceed the 60s default. Race connect() against a generous
-      // timeout (default 90s, MCP_CONNECT_TIMEOUT_MS) so a slow cold server
-      // fails into the outer retry loop instead of hanging the fan-out.
-      await connectWithTimeout(client, transport);
+      // gate) can exceed the 60s default. Race connect() against a generous,
+      // transport-appropriate timeout (stdio: MCP_STDIO_CONNECT_TIMEOUT_MS,
+      // HTTP: MCP_CONNECT_TIMEOUT_MS) so a slow cold server fails into the
+      // outer retry loop instead of hanging the fan-out.
+      await connectWithTimeout(client, transport, serverParams.type);
       metamcpLogStore.addLog(
         serverParams.name,
         "info",

@@ -102,8 +102,29 @@ ENV CI=true
 # slow cold server boots. All are overridable at runtime.
 ENV MCP_SPAWN_CONCURRENCY=4 \
     MCP_CONNECT_TIMEOUT_MS=90000 \
+    MCP_STDIO_CONNECT_TIMEOUT_MS=120000 \
     MCP_IDLE_TIMEOUT_MS=1800000 \
     SESSION_LIFETIME=3600000
+
+# Runtime stdio package prewarm — OPT-IN via env. MCP_PREWARM_NPM / _UVX / _BUN
+# are space-separated package lists pre-installed into the per-user caches at
+# boot (nothing is baked into the image). Mount a volume on the cache dirs
+# (/home/nextjs/.npm, /home/nextjs/.cache/uv, /home/nextjs/.bun) to persist
+# across container recreates. Left unset by default; examples:
+#   MCP_PREWARM_NPM="@modelcontextprotocol/server-github mcp-server-immich"
+#   MCP_PREWARM_UVX="mcpo mcp-server-sqlite"
+#   MCP_PREWARM_BUN="@cyanheads/nws-weather-mcp-server"
+#
+# Cache self-heal — OPT-IN via env. The npx/uvx/bunx caches are per-user and
+# shared by every spawned stdio server; concurrent cold spawns (or two
+# replicas sharing a cache volume) can tear a cache entry → "npx cache
+# corrupted" / EINTEGRITY, and the corruption cascades because every retry is
+# another concurrent writer. MCP_CACHE_HEAL=1 makes the container verify the
+# npm cache before prewarm, purge a cache after a corrupt fast-failing spawn
+# (once per process lifetime), and re-run a failed prewarm install once
+# against the fresh store. Healthy warm caches are never touched. Default off:
+#   MCP_CACHE_HEAL=1
+#   MCP_CACHE_HEAL_FAST_FAIL_MS=8000   # how fast a non-zero exit counts as cache-corrupt
 
 # Install production dependencies only. drizzle-kit is a production dependency
 # of apps/backend (it runs `pnpm exec drizzle-kit migrate` at startup), so the

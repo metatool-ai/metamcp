@@ -5,6 +5,7 @@ import { initializeEnvironmentConfiguration } from "./bootstrap.service";
 import { metaMcpServerPool } from "./metamcp";
 import { serverErrorTracker } from "./metamcp/server-error-tracker";
 import { convertDbServerToParams } from "./metamcp/utils";
+import { startRuntimePrewarm } from "./stdio-transport/prewarm";
 
 /**
  * Startup initialization that must happen before the HTTP server begins listening.
@@ -38,6 +39,11 @@ export async function initializeOnStartup(): Promise<void> {
   } else {
     console.log("Environment bootstrap disabled via BOOTSTRAP_ENABLE=false");
   }
+
+  // Runtime package prewarm (fire-and-forget): MCP_PREWARM_NPM / _UVX / _BUN
+  // pre-install stdio MCP packages into the user-level caches so cold spawns
+  // hit warm caches instead of downloading on first connect. Non-blocking.
+  startRuntimePrewarm();
 }
 
 /**

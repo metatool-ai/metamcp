@@ -437,13 +437,22 @@ export const createServer = async (
     // failed even after the recovery retry (or had no session). The response
     // is still returned (partial truth beats a hard error for the surviving
     // servers) but the failure must be loud enough for log-based monitoring.
+    //
+    // A warming/failed server is surfaced to the client as a `_meta`-style
+    // `pending` marker (not a hard failure): a client that checks it can
+    // retry, and a client that ignores it still gets the healthy tools.
     if (failedServers.length > 0) {
       logger.error(
         `tools/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length}/${allServerEntries.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allTools.length} tools`,
       );
     }
 
-    return { tools: allTools };
+    return {
+      tools: allTools,
+      ...(failedServers.length > 0
+        ? { _meta: { pending: failedServers } }
+        : {}),
+    };
   };
 
   // Original Call Tool Handler
