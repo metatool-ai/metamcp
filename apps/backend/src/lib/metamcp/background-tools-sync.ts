@@ -121,22 +121,23 @@ class BackgroundToolsSync {
       const tools = await this.fetchToolsForServer(params, timeout);
       const toolNames = tools.map((t) => t.name);
       const hasChanged = toolsSyncCache.hasChanged(serverUuid, toolNames);
-      if (hasChanged) {
-        const toolsToSave = await filterOutOverrideTools(
-          tools,
-          namespaceUuid,
-          params.name,
+      // ALWAYS reap: syncTools runs deleteObsoleteTools every pass (the hash
+      // guard only skips the idempotent upsert when nothing changed) so removed
+      // backend tools converge in the DB instead of lingering as stale rows.
+      const toolsToSave = await filterOutOverrideTools(
+        tools,
+        namespaceUuid,
+        params.name,
+      );
+      if (toolsToSave.length > 0) {
+        toolsSyncCache.update(serverUuid, toolNames);
+        await toolsRepository.syncTools({
+          tools: toolsToSave,
+          mcpServerUuid: serverUuid,
+        });
+        logger.info(
+          `[tools-sync] synced ${toolsToSave.length} tools for ${params.name} (${serverUuid})${hasChanged ? "" : " (reap-only, unchanged)"}`,
         );
-        if (toolsToSave.length > 0) {
-          toolsSyncCache.update(serverUuid, toolNames);
-          await toolsRepository.syncTools({
-            tools: toolsToSave,
-            mcpServerUuid: serverUuid,
-          });
-          logger.info(
-            `[tools-sync] synced ${toolsToSave.length} tools for ${params.name} (${serverUuid})`,
-          );
-        }
       }
       this.lastSyncedAt.set(serverUuid, Date.now());
     } finally {
