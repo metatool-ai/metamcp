@@ -2,6 +2,7 @@ import {
   DatabaseMcpServer,
   McpServerCreateInput,
   McpServerErrorStatusEnum,
+  McpServerStatusEnum,
   McpServerUpdateInput,
 } from "@repo/zod-types";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
@@ -11,7 +12,7 @@ import { z } from "zod";
 import logger from "@/utils/logger";
 
 import { db } from "../index";
-import { mcpServersTable } from "../schema";
+import { mcpServersTable, namespaceServerMappingsTable } from "../schema";
 
 // Helper function to handle PostgreSQL errors
 function handleDatabaseError(
@@ -83,6 +84,46 @@ export class McpServersRepository {
       .select()
       .from(mcpServersTable)
       .orderBy(desc(mcpServersTable.created_at));
+  }
+
+  /**
+   * Return only servers that have at least one ACTIVE namespace mapping.
+   * The startup idle-prewarm must not spawn servers the operator has turned
+   * off (status INACTIVE in namespace_server_mappings) — that matches how the
+   * tools/list path filters (getMcpServers includeInactiveServers=false).
+   */
+  async findActiveByMappings(): Promise<DatabaseMcpServer[]> {
+    return await db
+      .selectDistinctOn([mcpServersTable.uuid], {
+        uuid: mcpServersTable.uuid,
+        name: mcpServersTable.name,
+        description: mcpServersTable.description,
+        type: mcpServersTable.type,
+        command: mcpServersTable.command,
+        args: mcpServersTable.args,
+        env: mcpServersTable.env,
+        url: mcpServersTable.url,
+        error_status: mcpServersTable.error_status,
+        created_at: mcpServersTable.created_at,
+        bearerToken: mcpServersTable.bearerToken,
+        headers: mcpServersTable.headers,
+        forward_headers: mcpServersTable.forward_headers,
+        user_id: mcpServersTable.user_id,
+      })
+      .from(mcpServersTable)
+      .innerJoin(
+        namespaceServerMappingsTable,
+        eq(
+          namespaceServerMappingsTable.mcp_server_uuid,
+          mcpServersTable.uuid,
+        ),
+      )
+      .where(
+        eq(
+          namespaceServerMappingsTable.status,
+          McpServerStatusEnum.enum.ACTIVE,
+        ),
+      );
   }
 
   // Find servers accessible to a specific user (public + user's own servers)

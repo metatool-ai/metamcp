@@ -2,8 +2,35 @@ import { ServerParameters } from "@repo/zod-types";
 
 import logger from "@/utils/logger";
 
+import { circuitBreaker } from "./circuit-breaker";
 import { ConnectedClient } from "./client";
 import { isRecoverableBackendError } from "./session-error";
+
+/**
+ * Cooldown between recoveries for the same server. Prevents a backend that
+ * keeps reporting session-lost from being invalidated + re-spawned on every
+ * request in a tight loop — the "hang" where each call spawns a fresh process
+ * that is also unhealthy, until the client's deadline. A server is recovered
+ * at most once per window; a request that hits the cooldown surfaces a clean
+ * retryable error instead of blocking on another spawn.
+ */
+const RECOVERY_COOLDOWN_MS = parseInt(
+  process.env.MCP_RECOVERY_COOLDOWN_MS || "10000",
+  10,
+);
+
+/** Last recovery time per serverUuid (in-memory). */
+const lastRecoveredAt = new Map<string, number>();
+
+function isRecoveryCooldownActive(serverUuid: string): boolean {
+  const last = lastRecoveredAt.get(serverUuid);
+  return last !== undefined && Date.now() - last < RECOVERY_COOLDOWN_MS;
+}
+
+/** Reset the recovery cooldown map (test isolation). */
+export function resetRecoveryCooldowns(): void {
+  lastRecoveredAt.clear();
+}
 
 /**
  * Minimal slice of McpServerPool the recovery wrapper needs. Structural
@@ -73,6 +100,25 @@ export async function requestWithSessionRecovery<T>(
       throw error;
     }
 
+    // Circuit breaker: a tripped server must not be spawned into repeatedly.
+    // Surface a clean recoverable-exit error instead; the caller marks the
+    // server degraded/pending and the breaker's half-open probe lets a real
+    // request through once the cooldown elapses.
+    if (circuitBreaker.isOpen(opts.serverUuid)) {
+      throw new Error(
+        `Server ${opts.serverUuid} (${opts.serverName}) is circuit-open; skipping reconnect during ${opts.operation}`,
+      );
+    }
+
+    // Recovery rate-limit: at most one invalidate+re-spawn per window per
+    // server. Without it a backend that keeps reporting session-lost spawns
+    // a fresh unhealthy process on every request — the endless hang.
+    if (isRecoveryCooldownActive(opts.serverUuid)) {
+      throw new Error(
+        `Server ${opts.serverUuid} (${opts.serverName}) recovered within the last ${RECOVERY_COOLDOWN_MS}ms; skipping reconnect during ${opts.operation}`,
+      );
+    }
+
     logger.warn(
       `Backend connection lost for server ${opts.serverUuid} (${opts.serverName}) on ${opts.operation}; invalidating pool and retrying once. (envelope: ${
         error instanceof Error ? error.message : String(error)
@@ -80,6 +126,7 @@ export async function requestWithSessionRecovery<T>(
     );
 
     await opts.pool.invalidateServerConnection(opts.sessionId, opts.serverUuid);
+    lastRecoveredAt.set(opts.serverUuid, Date.now());
 
     const fresh = await opts.pool.getSession(
       opts.sessionId,

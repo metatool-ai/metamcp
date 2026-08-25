@@ -13,6 +13,7 @@ import logger from "@/utils/logger";
 
 import { buildAdminToolsOptions } from "../../lib/admin-mcp/build-admin-tools-options";
 import { extractClientHeaders } from "../../lib/metamcp/header-forwarding";
+import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
 import { MetaMCPHandlerContext } from "../../lib/metamcp/metamcp-middleware/functional-middleware";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
 import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
@@ -101,9 +102,10 @@ const cleanupSession = async (
 };
 
 // Health check endpoint to monitor sessions
-streamableHttpRouter.get("/health/sessions", (req, res) => {
+streamableHttpRouter.get("/health/sessions", async (req, res) => {
   const sessionIds = sessionManager.getSessionIds();
   const poolStatus = metaMcpServerPool.getPoolStatus();
+  const poolDebug = await mcpServerPool.getDebugInfo();
 
   res.json({
     timestamp: new Date().toISOString(),
@@ -112,6 +114,7 @@ streamableHttpRouter.get("/health/sessions", (req, res) => {
       sessionIds: sessionIds,
     },
     metaMcpPoolStatus: poolStatus,
+    poolDebug,
     totalActiveSessions: sessionIds.length + poolStatus.active,
   });
 });

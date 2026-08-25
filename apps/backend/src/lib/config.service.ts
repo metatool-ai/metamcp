@@ -1,6 +1,17 @@
 import { ConfigKey, ConfigKeyEnum } from "@repo/zod-types";
 
+import logger from "@/utils/logger";
+
 import { configRepo } from "../db/repositories/config.repo";
+
+/**
+ * Default session lifetime in milliseconds (60 minutes).
+ *
+ * Kept finite so the pool's periodic `cleanupExpiredSessions` actually runs
+ * — a `null` default silently disabled cleanup and let active sessions
+ * accumulate until the connection cap was hit (the pool leak).
+ */
+export const DEFAULT_SESSION_LIFETIME_MS = 60 * 60 * 1000;
 
 export const configService = {
   async isSignupDisabled(): Promise<boolean> {
@@ -68,6 +79,24 @@ export const configService = {
     return config?.value ? parseInt(config.value, 10) : 60000;
   },
 
+  /**
+   * Resolve the MCP timeout for a namespace, honoring a per-namespace override
+   * (env MCP_TIMEOUT_<NAMESPACE_UPPER>_MS) before falling back to the global
+   * MCP_TIMEOUT. Lets a slow `shared` namespace carry a tighter budget than
+   * `general` so one slow backend can't hold others hostage.
+   */
+  async getMcpTimeoutForNamespace(namespaceName: string): Promise<number> {
+    if (namespaceName) {
+      const envKey = `MCP_TIMEOUT_${namespaceName.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_MS`;
+      const envVal = process.env[envKey];
+      if (envVal) {
+        const parsed = parseInt(envVal, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+    }
+    return this.getMcpTimeout();
+  },
+
   async setMcpTimeout(timeout: number): Promise<void> {
     await configRepo.setConfig(
       ConfigKeyEnum.enum.MCP_TIMEOUT,
@@ -108,21 +137,44 @@ export const configService = {
     );
   },
 
+  /**
+   * Session lifetime in milliseconds before automatic cleanup, or null when
+   * explicitly configured as "infinite" (only via a database value).
+   *
+   * A null DEFAULT was the source of the pool connection leak: cleanup
+   * never ran, so active sessions accumulated forever and the pool hit the
+   * MAX_TOTAL_CONNECTIONS ceiling with no recovery path. The default is
+   * therefore a finite 60-minute lifetime; operators can still opt out with
+   * an explicit `SESSION_LIFETIME=null` in the database config.
+   */
   async getSessionLifetime(): Promise<number | null> {
     const config = await configRepo.getConfig(
       ConfigKeyEnum.enum.SESSION_LIFETIME,
     );
-    if (!config?.value) {
-      // Fallback to env var (milliseconds), then null (infinite sessions)
-      const envLifetime = process.env.SESSION_LIFETIME;
-      if (envLifetime) {
-        const parsed = parseInt(envLifetime, 10);
-        return isNaN(parsed) ? null : parsed;
+    if (config?.value) {
+      // Explicit database value is authoritative. `null` here is a valid
+      // operator opt-out (infinite sessions), not an accidental empty.
+      if (config.value === "null") {
+        return null;
       }
-      return null;
+      const lifetime = parseInt(config.value, 10);
+      if (isNaN(lifetime)) {
+        logger.warn(
+          `Invalid SESSION_LIFETIME config value "${config.value}" (expected milliseconds or "null"); falling back to default ${DEFAULT_SESSION_LIFETIME_MS}ms`,
+        );
+        return DEFAULT_SESSION_LIFETIME_MS;
+      }
+      return lifetime;
     }
-    const lifetime = parseInt(config.value, 10);
-    return isNaN(lifetime) ? null : lifetime;
+    // No database row: fall back to env var, then the finite default.
+    const envLifetime = process.env.SESSION_LIFETIME;
+    if (envLifetime && envLifetime !== "null") {
+      const parsed = parseInt(envLifetime, 10);
+      if (!isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    return DEFAULT_SESSION_LIFETIME_MS;
   },
 
   async setSessionLifetime(lifetime?: number | null): Promise<void> {

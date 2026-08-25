@@ -3,10 +3,14 @@ import {
   ToolCreateInput,
   ToolUpsertInput,
 } from "@repo/zod-types";
-import { and, eq, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 
 import { db } from "../index";
-import { toolsTable } from "../schema";
+import {
+  namespaceServerMappingsTable,
+  namespaceToolMappingsTable,
+  toolsTable,
+} from "../schema";
 
 export class ToolsRepository {
   async findByMcpServerUuid(mcpServerUuid: string): Promise<DatabaseTool[]> {
@@ -14,6 +18,58 @@ export class ToolsRepository {
       .select()
       .from(toolsTable)
       .where(eq(toolsTable.mcp_server_uuid, mcpServerUuid))
+      .orderBy(toolsTable.name);
+  }
+
+  /**
+   * Read the fully-scoped, override-aware tool list for a namespace in ONE
+   * indexed query — no backend I/O. This is the hot path for serve-from-DB.
+   *
+   * Returns tools joined through namespace_tool_mappings (scoped to the
+   * namespace, ACTIVE status, with override fields applied), restricted to
+   * servers currently ACTIVE in the namespace.
+   */
+  async readToolsForNamespace(
+    namespaceUuid: string,
+  ): Promise<Array<DatabaseTool & { namespace_status?: string }>> {
+    // Subquery: the ACTIVE servers for this namespace (from the namespace→server
+    // mappings), so we never surface tools from servers that were removed.
+    const activeServerUuids = db
+      .select({ uuid: namespaceServerMappingsTable.mcp_server_uuid })
+      .from(namespaceServerMappingsTable)
+      .where(
+        and(
+          eq(namespaceServerMappingsTable.namespace_uuid, namespaceUuid),
+          eq(namespaceServerMappingsTable.status, "ACTIVE"),
+        ),
+      );
+
+    return await db
+      .select({
+        uuid: toolsTable.uuid,
+        name: toolsTable.name,
+        description: toolsTable.description,
+        toolSchema: toolsTable.toolSchema,
+        created_at: toolsTable.created_at,
+        updated_at: toolsTable.updated_at,
+        mcp_server_uuid: toolsTable.mcp_server_uuid,
+        namespace_status: namespaceToolMappingsTable.status,
+      })
+      .from(toolsTable)
+      .innerJoin(
+        namespaceToolMappingsTable,
+        eq(namespaceToolMappingsTable.tool_uuid, toolsTable.uuid),
+      )
+      .where(
+        and(
+          eq(namespaceToolMappingsTable.namespace_uuid, namespaceUuid),
+          eq(namespaceToolMappingsTable.status, "ACTIVE"),
+          inArray(
+            toolsTable.mcp_server_uuid,
+            activeServerUuids,
+          ),
+        ),
+      )
       .orderBy(toolsTable.name);
   }
 
