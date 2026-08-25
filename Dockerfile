@@ -1,11 +1,14 @@
 # Use the official uv image as base
 FROM ghcr.io/astral-sh/uv:debian AS base
 
-# Install Node.js and pnpm directly
+# Install Node.js and pnpm directly. Node 24: the current MCP package catalog
+# declares engines.node >= 24 (nws-weather-mcp-server, paperless-mcp, ...) and
+# npm 10 aborts a whole install batch on one engine violation, so a Node 20
+# runtime makes those packages impossible to prewarm.
 RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g pnpm@10.29.3 \
     && apt-get clean \
@@ -108,9 +111,11 @@ ENV MCP_SPAWN_CONCURRENCY=4 \
 
 # Runtime stdio package prewarm — OPT-IN via env. MCP_PREWARM_NPM / _UVX / _BUN
 # are space-separated package lists pre-installed into the per-user caches at
-# boot (nothing is baked into the image). Mount a volume on the cache dirs
-# (/home/nextjs/.npm, /home/nextjs/.cache/uv, /home/nextjs/.bun) to persist
-# across container recreates. Left unset by default; examples:
+# boot (nothing is baked into the image). Packages are installed ONE AT A TIME
+# so a single incompatible package cannot abort the rest of the list. Mount a
+# volume on the cache dirs (/home/nextjs/.npm, /home/nextjs/.cache/uv,
+# /home/nextjs/.bun) to persist across container recreates. Left unset by
+# default; examples:
 #   MCP_PREWARM_NPM="@modelcontextprotocol/server-github mcp-server-immich"
 #   MCP_PREWARM_UVX="mcpo mcp-server-sqlite"
 #   MCP_PREWARM_BUN="@cyanheads/nws-weather-mcp-server"

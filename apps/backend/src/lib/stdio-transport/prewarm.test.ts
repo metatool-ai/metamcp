@@ -107,16 +107,20 @@ describe("startRuntimePrewarm", () => {
     expect(mockState.spawn).not.toHaveBeenCalled();
   });
 
-  it("installs configured npm packages via `npm install -g`", async () => {
+  it("installs configured npm packages one at a time", async () => {
     process.env.MCP_PREWARM_NPM = "pkg-a pkg-b";
     startRuntimePrewarm();
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const npmSpawn = mockState.__spawned.find((s) => s.args[0] === "install");
-    expect(npmSpawn).toBeDefined();
-    expect(npmSpawn?.cmd).toBe("npm");
-    expect(npmSpawn?.args).toEqual(["install", "-g", "pkg-a", "pkg-b"]);
+    const installs = mockState.__spawned.filter((s) => s.args[0] === "install");
+    // One spawn per package (not a single batch) so one bad package can't
+    // abort the whole list (npm 10 exits 243 on a single engine violation).
+    expect(installs.map((s) => s.args)).toEqual([
+      ["install", "-g", "pkg-a"],
+      ["install", "-g", "pkg-b"],
+    ]);
+    expect(installs.every((s) => s.cmd === "npm")).toBe(true);
   });
 
   it("honors the custom command env (MCP_PREWARM_NPM_CMD)", async () => {
@@ -128,6 +132,38 @@ describe("startRuntimePrewarm", () => {
 
     const npmSpawn = mockState.__spawned.find((s) => s.args[0] === "install");
     expect(npmSpawn?.cmd).toBe("/usr/local/bin/my-npm");
+  });
+
+  it("a failing package does not block the other packages (per-package isolation)", async () => {
+    process.env.MCP_PREWARM_NPM = "pkg-a pkg-b pkg-c";
+
+    // pkg-b fails (close 1); the real impl closes 0 for the others.
+    let failNext = false;
+    const originalImpl = mockState.spawn.getMockImplementation();
+    mockState.spawn.mockImplementation((cmd, args, opts) => {
+      if (!originalImpl) {
+        throw new Error("expected the real spawn implementation");
+      }
+      const proc = originalImpl(cmd, args, opts);
+      if (args[2] === "pkg-b") {
+        failNext = true;
+      }
+      if (failNext) {
+        failNext = false;
+        process.nextTick(() => proc.emit("close", 1));
+      }
+      return proc;
+    });
+
+    startRuntimePrewarm();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // All three packages were attempted despite pkg-b failing.
+    const installs = mockState.__spawned.filter((s) => s.args[0] === "install");
+    expect(installs.map((s) => s.args[2])).toEqual(["pkg-a", "pkg-b", "pkg-c"]);
+    // The failing pkg-b was attempted exactly once (no whole-group retry
+    // without MCP_CACHE_HEAL).
+    expect(installs.filter((s) => s.args[2] === "pkg-b").length).toBe(1);
   });
 
   it("does not exceed MCP_PREWARM_CONCURRENCY concurrent spawns", async () => {
@@ -199,8 +235,8 @@ describe("startRuntimePrewarm", () => {
     process.env.MCP_CACHE_HEAL = "1";
 
     // Spawn sequence: (1) `npm cache verify` clean → no preemptive purge;
-    // (2) `npm install -g pkg-a` FAILS → heal purges the cache; (3) retry
-    // install SUCCEEDS against the fresh store.
+    // (2) `npm install -g pkg-a` FAILS → group retry heals the cache;
+    // (3) retry install SUCCEEDS against the fresh store (default impl).
     mockState.spawn.mockImplementationOnce(() => {
       const proc = mockState.__defaultImpl("npm", ["cache", "verify"], {});
       return proc;

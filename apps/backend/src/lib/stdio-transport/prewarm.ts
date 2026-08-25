@@ -70,6 +70,17 @@ function run(
   });
 }
 
+/**
+ * Prewarm packages ONE AT A TIME. A single package that fails (engine
+ * mismatch — npm 10 aborts a whole batch install with exit 243 on one
+ * `engines.node` violation — a bad build, a transient registry error) must
+ * not block the rest of the list. Each package installs or logs its own
+ * warning; the pool still falls back to on-demand spawn for the failures.
+ *
+ * Cache self-heal still applies at the GROUP level: the npm cache is verified
+ * before the group starts, and if the whole group comes back failing (a
+ * corrupt store), the cache is purged once and the group retried once.
+ */
 async function prewarmWith(
   label: string,
   defaultCommand: string,
@@ -85,15 +96,17 @@ async function prewarmWith(
   // real binary name (npm / uvx / bun) when it isn't set.
   const cmd = process.env[commandEnv] || defaultCommand;
 
-  const attempt = async (): Promise<number> => {
-    const result = await run(cmd, args, { npm_config_yes: "true" });
+  const installOne = async (pkg: string): Promise<number> => {
+    // args is the "shape" of the install command per package manager, e.g.
+    // ["install", "-g"] for npm — the package name is appended per install.
+    const result = await run(cmd, [...args, pkg], { npm_config_yes: "true" });
     if (result.code === 0) {
       logger.info(
-        `[prewarm] ${label}: pre-installed ${packages.join(", ")} (${result.output.trim().slice(0, 200) || "ok"})`,
+        `[prewarm] ${label}: pre-installed ${pkg} (${result.output.trim().slice(0, 200) || "ok"})`,
       );
     } else {
       logger.warn(
-        `[prewarm] ${label}: failed to pre-install (${result.code}) — ${result.output.trim().slice(0, 300) || "no output"}. Spawns will fall back to on-demand install.`,
+        `[prewarm] ${label}: failed to pre-install ${pkg} (${result.code}) — ${result.output.trim().slice(0, 300) || "no output"}. Spawns will fall back to on-demand install.`,
       );
     }
     return result.code;
@@ -101,20 +114,29 @@ async function prewarmWith(
 
   if (kind === "npm" && cacheHealingEnabled()) {
     // npm's cache verify is the corruption detector; purge when it fails so
-    // the install below starts from a clean store (avoids re-installing on
+    // the installs below start from a clean store (avoids re-installing on
     // top of a corrupt entry).
     await verifyAndHealNpmCache();
   }
 
-  const code = await attempt();
-  if (code !== 0 && cacheHealingEnabled() && healCacheKind(kind)) {
-    // The install failed AND we could clear the corrupt cache — retry once
-    // against the fresh store. If it fails again the prewarm logs a warning
-    // and live spawns fall back to on-demand install with their own heal.
+  // Pass 1 — install each package individually.
+  const results = [];
+  for (const pkg of packages) {
+    results.push(await installOne(pkg));
+  }
+
+  // Pass 2 — if EVERY package failed AND the cache could be corrupt, purge it
+  // once and retry the whole group once against the fresh store. Per-package
+  // transient failures (one bad engine, one bad build) already logged their
+  // warning in pass 1 and are NOT retried here.
+  const allFailed = results.length > 0 && results.every((c) => c !== 0);
+  if (allFailed && cacheHealingEnabled() && healCacheKind(kind)) {
     logger.warn(
-      `[prewarm] ${label}: pre-install failed; purged ${kind} cache, retrying once.`,
+      `[prewarm] ${label}: all ${packages.length} pre-installs failed; purged ${kind} cache, retrying group once.`,
     );
-    await attempt();
+    for (const pkg of packages) {
+      await installOne(pkg);
+    }
   }
 }
 
@@ -150,7 +172,7 @@ export function startRuntimePrewarm(): void {
         "npm",
         "MCP_PREWARM_NPM_CMD",
         "npm",
-        ["install", "-g", ...npmPackages],
+        ["install", "-g"],
         npmPackages,
       ),
     );
@@ -162,7 +184,7 @@ export function startRuntimePrewarm(): void {
         "uvx",
         "MCP_PREWARM_UVX_CMD",
         "uv",
-        ["tool", "install", ...uvxPackages],
+        ["tool", "install"],
         uvxPackages,
       ),
     );
@@ -174,7 +196,7 @@ export function startRuntimePrewarm(): void {
         "bun",
         "MCP_PREWARM_BUN_CMD",
         "bun",
-        ["add", "-g", ...bunPackages],
+        ["add", "-g"],
         bunPackages,
       ),
     );
