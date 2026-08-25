@@ -208,8 +208,12 @@ export const createServer = async (
     );
 
     // Cold-start warmup: if pool has 0 idle + 0 active sessions but servers
-    // exist in DB, trigger a blocking warmup before tools/list responds.
-    // This prevents 0-tool responses after idle timeout expires all connections.
+    // exist in DB, trigger a LAZY warmup. This used to block on
+    // ensureIdleSessions() — a synchronous fan-out that spawned every server
+    // at once and blew past the connect timeout (the -32001/-32000 storm).
+    // Instead, clear error states and kick off the bounded, sequential
+    // prewarm in the background; the per-server getSession() calls below
+    // connect on demand and are covered by the extended connect timeout.
     const poolStatus = mcpServerPool.getPoolStatus();
     if (
       poolStatus.idle === 0 &&
@@ -217,16 +221,24 @@ export const createServer = async (
       allServerEntries.length > 0
     ) {
       console.log(
-        `[DEBUG-TOOLS] ⚠️ Cold start: 0 idle, 0 active sessions but ${allServerEntries.length} servers registered. Warming up...`,
+        `[DEBUG-TOOLS] ⚠️ Cold start: 0 idle, 0 active sessions but ${allServerEntries.length} servers registered. Background prewarm started.`,
       );
       for (const [uuid] of allServerEntries) {
         await mcpServerPool.resetServerErrorState(uuid);
       }
-      await mcpServerPool.ensureIdleSessions(serverParams, namespaceUuid);
-      const afterStatus = mcpServerPool.getPoolStatus();
-      console.log(
-        `[DEBUG-TOOLS] ✅ Pool warmup complete: ${afterStatus.idle} idle, ${afterStatus.active} active`,
-      );
+      // Fire-and-forget: the prewarm is bounded (sequential, gated) and the
+      // fan-out below will lazy-connect servers that are still cold.
+      void mcpServerPool
+        .ensureIdleSessions(serverParams, namespaceUuid)
+        .then(() => {
+          const afterStatus = mcpServerPool.getPoolStatus();
+          console.log(
+            `[DEBUG-TOOLS] ✅ Pool warmup complete: ${afterStatus.idle} idle, ${afterStatus.active} active`,
+          );
+        })
+        .catch((error) => {
+          console.error("[DEBUG-TOOLS] ❌ Pool warmup failed:", error);
+        });
     }
 
     await Promise.allSettled(

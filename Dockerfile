@@ -97,6 +97,14 @@ COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
 # pnpm aborts the modules-dir removal when there's no TTY unless CI is set; CI builds are non-TTY.
 ENV CI=true
 
+# MCP server-pool tuning. Bounded spawn concurrency + finite session lifetime
+# prevent cold-start storms and connection leaks; the connect timeout covers
+# slow cold server boots. All are overridable at runtime.
+ENV MCP_SPAWN_CONCURRENCY=4 \
+    MCP_CONNECT_TIMEOUT_MS=90000 \
+    MCP_IDLE_TIMEOUT_MS=1800000 \
+    SESSION_LIFETIME=3600000
+
 # Install production dependencies only. drizzle-kit is a production dependency
 # of apps/backend (it runs `pnpm exec drizzle-kit migrate` at startup), so the
 # --prod prune keeps it linked into apps/backend/node_modules/.bin.

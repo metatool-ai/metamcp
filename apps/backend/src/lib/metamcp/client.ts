@@ -19,10 +19,69 @@ import { resolveEnvVariables } from "./utils";
 const sleep = (time: number) =>
   new Promise<void>((resolve) => setTimeout(() => resolve(), time));
 
+/**
+ * Run `client.connect(transport)` under a timeout.
+ *
+ * The MCP SDK's request-timeout for the initialize handshake is not exposed
+ * as a Client option in the installed version, so this wraps the connect in
+ * a race. On timeout the transport is closed to release the spawned process,
+ * and the thrown error (with a descriptive message) flows into the caller's
+ * retry loop. Default 90s; override with MCP_CONNECT_TIMEOUT_MS.
+ */
+async function connectWithTimeout(
+  client: Client,
+  transport: Transport,
+): Promise<void> {
+  const timeoutMs = parseInt(process.env.MCP_CONNECT_TIMEOUT_MS || "90000", 10);
+
+  let timeoutId: NodeJS.Timeout | undefined;
+  let timedOut = false;
+
+  try {
+    await Promise.race([
+      client.connect(transport),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          reject(
+            new Error(
+              `MCP connect timed out after ${timeoutMs}ms (MCP_CONNECT_TIMEOUT_MS)`,
+            ),
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    if (timedOut) {
+      // Release the child process so a timed-out cold spawn does not linger.
+      try {
+        await transport.close();
+      } catch (cleanupError) {
+        logger.error(
+          "Error closing transport after connect timeout:",
+          cleanupError,
+        );
+      }
+    }
+    throw error;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 export interface ConnectedClient {
   client: Client;
   cleanup: () => Promise<void>;
   onProcessCrash?: (exitCode: number | null, signal: string | null) => void;
+  /**
+   * Last-touch timestamp (ms epoch), maintained by the server pool. Drives
+   * the LRU idle/active eviction (capacity recovery) and the per-server
+   * idle timeout. The pool sets it on creation, on idle→active reuse, on
+   * getSession access, and on recycle; callers must not rely on it.
+   */
+  lastUsedAt?: number;
 }
 
 /**
@@ -166,8 +225,6 @@ export const connectMetaMcpClient = async (
   serverParams: ServerParameters,
   onProcessCrash?: (exitCode: number | null, signal: string | null) => void,
 ): Promise<ConnectedClient | undefined> => {
-  const waitFor = 5000;
-
   // Get max attempts from server error tracker instead of hardcoding
   const maxAttempts = await serverErrorTracker.getServerMaxAttempts(
     serverParams.uuid,
@@ -243,7 +300,13 @@ export const connectMetaMcpClient = async (
         };
       }
 
-      await client.connect(transport);
+      // Connect-timeout envelope. The SDK's initialize-handshake timeout is
+      // not directly configurable in this version, and cold-start spawns
+      // (uvx/npx/bunx boots, especially under the bounded spawn-concurrency
+      // gate) can exceed the 60s default. Race connect() against a generous
+      // timeout (default 90s, MCP_CONNECT_TIMEOUT_MS) so a slow cold server
+      // fails into the outer retry loop instead of hanging the fan-out.
+      await connectWithTimeout(client, transport);
       metamcpLogStore.addLog(
         serverParams.name,
         "info",
@@ -456,7 +519,16 @@ export const connectMetaMcpClient = async (
       count++;
       retry = count < maxAttempts;
       if (retry) {
-        await sleep(waitFor);
+        // Exponential backoff with jitter: base 5s, doubling to a 60s cap,
+        // ±20% jitter so concurrent retries don't line up in lockstep (the
+        // old fixed 5s sleep hammered a recovering backend in a tight loop).
+        const base = Math.min(5000 * 2 ** (count - 1), 60000);
+        const jitter = 0.8 + Math.random() * 0.4; // 0.8x – 1.2x
+        const delay = Math.round(base * jitter);
+        logger.info(
+          `Retrying connection to ${serverParams.name} (${serverParams.uuid}) in ${delay}ms (attempt ${count}/${maxAttempts})`,
+        );
+        await sleep(delay);
       }
     }
   }

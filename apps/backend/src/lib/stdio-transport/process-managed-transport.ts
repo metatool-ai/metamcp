@@ -110,6 +110,19 @@ export function getDefaultEnvironment(): Record<string, string> {
     env[key] = value;
   }
 
+  // Always append the runtime's own bin dirs to PATH so tools installed at
+  // the system level (bun/bunx, global npx packages) resolve for spawned
+  // servers. In the Docker image the runtime runs as `USER nextjs`, whose
+  // non-login shells do not read ~/.bashrc, so a $HOME-based install would
+  // be unreachable by spawned processes — the image installs bun under
+  // /usr/local precisely so this appending finds it.
+  const inheritedPath = env["PATH"] ?? process.env.PATH ?? "";
+  const ownBinDir = process.execPath.replace(/\/[^/]+$/, "");
+  const extraDirs = ["/usr/local/bin", "/usr/bin", "/bin", ownBinDir];
+  env["PATH"] = [...new Set([...extraDirs, ...inheritedPath.split(":")])]
+    .filter(Boolean)
+    .join(":");
+
   return env;
 }
 
