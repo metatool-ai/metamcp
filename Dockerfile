@@ -97,8 +97,11 @@ ENV CI=true
 # Install production dependencies only
 RUN pnpm install --prod
 
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+# Install drizzle-kit locally in backend for migrations. Must be a PROD dep:
+# the modules dir above was installed with --prod (dependencies only), so a
+# devDependency add would trip ERR_PNPM_INCLUDED_DEPS_CONFLICT (different
+# included-deps set). --prod keeps both operations targeting dependencies.
+RUN cd apps/backend && pnpm add --prod drizzle-kit@0.31.1
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
