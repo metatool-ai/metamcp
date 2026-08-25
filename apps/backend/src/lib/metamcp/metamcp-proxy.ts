@@ -62,6 +62,51 @@ import { toolsSyncCache } from "./tools-sync-cache";
 import { sanitizeName } from "./utils";
 
 /**
+ * Bound a getSession() call with a deadline. The pool's getSession can block
+ * for a cold spawn (createNewConnection up to MCP_STDIO_CONNECT_TIMEOUT_MS),
+ * and when that happens inside a fan-out (tools/list, prompts/list, ...) it
+ * stalls the WHOLE aggregate HTTP response past the client's deadline — the
+ * "tools/list never returns" symptom. On timeout we return undefined; the
+ * caller surfaces the server via _meta.pending / failedServers instead of
+ * stalling. Default 10s; override MCP_TOOLS_LIST_TIMEOUT_MS. The pool still
+ * spawns the server in the background (the deadline only abandons THIS
+ * request's wait, not the connection).
+ */
+async function getSessionWithDeadline(
+  sessionId: string,
+  serverUuid: string,
+  params: Parameters<typeof mcpServerPool.getSession>[2],
+  namespaceUuid?: string,
+): Promise<ConnectedClient | undefined> {
+  const timeoutMs = parseInt(
+    process.env.MCP_TOOLS_LIST_TIMEOUT_MS || "10000",
+    10,
+  );
+  const sessionPromise = mcpServerPool.getSession(
+    sessionId,
+    serverUuid,
+    params,
+    namespaceUuid,
+  );
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<ConnectedClient | undefined>((resolve) => {
+    timer = setTimeout(() => {
+      logger.warn(
+        `[fan-out] getSession deadline exceeded for server ${serverUuid} after ${timeoutMs}ms — returning as pending; spawn continues in background`,
+      );
+      resolve(undefined);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([sessionPromise, timeout]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/**
  * Filter out tools that are overrides of existing tools to prevent duplicates in database
  * Uses the existing tool overrides cache for optimal performance
  */
@@ -264,7 +309,7 @@ export const createServer = async (
             }
           : params;
 
-        const session = await mcpServerPool.getSession(
+        const session = await getSessionWithDeadline(
           context.sessionId,
           mcpServerUuid,
           effectiveParams,
@@ -273,11 +318,11 @@ export const createServer = async (
         if (!session) {
           console.log(`[DEBUG-TOOLS] ❌ No session for: ${params.name}`);
           // No pooled session and the pool couldn't create one — server is
-          // ERROR-gated, connection-capped, or unreachable. Error level: this
-          // server is silently missing from the namespace's tool surface
-          // until the pool recovers.
+          // ERROR-gated, connection-capped, deadline-exceeded, or unreachable.
+          // Error level: this server is silently missing from the namespace's
+          // tool surface until the pool recovers.
           logger.error(
-            `tools/list: no session available for server ${params.name || mcpServerUuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
+            `tools/list: no session available for server ${params.name || mcpServerUuid} — excluded from namespace response (error state, connection cap, deadline, or backend unreachable)`,
           );
           failedServers.push(params.name || mcpServerUuid);
           return;
