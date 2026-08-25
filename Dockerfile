@@ -51,9 +51,8 @@ RUN pnpm build
 # The pnpm store dir is suffixed with the resolved react peer versions (e.g.
 # _react-dom@19.2.4_react@19.2.4__react@19.2.4), which drift as the lockfile
 # updates. Glob the store dir so this sed survives dependency bumps.
-RUN sed -i -e "s/30000/600000/" \
-    node_modules/.pnpm/next@15.5.12_*/node_modules/next/dist/server/lib/router-utils/proxy-request.js \
-    node_modules/.pnpm/next@15.5.12_*/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js
+RUN find node_modules/.pnpm -path "*next/dist/server/lib/router-utils/proxy-request.js" -exec sed -i "s/30000/600000/" {} + || true && \
+    find node_modules/.pnpm -path "*next/dist/esm/server/lib/router-utils/proxy-request.js" -exec sed -i "s/30000/600000/" {} + || true
 
 # Production runner stage
 FROM base AS runner
