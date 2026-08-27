@@ -301,7 +301,7 @@ For more details and alternative approaches, see [issue #76](https://github.com/
 
 ## 🧾 Log Levels
 
-MetaMCP’s backend writes logs to files and optionally mirrors selected levels to the console. Control console mirroring with the `LOG_LEVEL` environment variable.
+MetaMCP's backend writes logs to files and optionally mirrors selected levels to the console. Control console mirroring with the `LOG_LEVEL` environment variable.
 
 - Files
   - `app.log`: receives `DEBUG`, `INFO`, and `WARN`
@@ -354,7 +354,7 @@ The client or user rate limit applies one counter to each individual user and en
 #### **User rate-limiting options**
  * `Client Max Rate`: Number of tokens you add to the Token Bucket for each individual user (user quota) in the time interval you want (Client Max Rate Seconds). The remaining tokens in the bucket are the requests a specific user can do.
  * `Client Max Rate Seconds`: Time period in which the maximum rates operate in seconds. For instance, if you set an every of 60s and a rate of 5, you are allowing 5 requests every sixty seconds.
- * `Client Max Rate Strategy`: Sets the strategy you will use to set client counters. Choose ip when the restrictions apply to the client’s IP address, or set it to header when there is a header that identifies a user uniquely. That header must be defined with the key entry.
+ * `Client Max Rate Strategy`: Sets the strategy you will use to set client counters. Choose ip when the restrictions apply to the client's IP address, or set it to header when there is a header that identifies a user uniquely. That header must be defined with the key entry.
  * `Client Max Rate Strategy Key`: It is the header name containing the user identification (e.g., Authorization on tokens, or X-Original-Forwarded-For for IPs).
 
 ## 🔗 OpenID Connect (OIDC) Provider Support
@@ -483,6 +483,10 @@ sequenceDiagram
 See [README-i18n.md](README-i18n.md)
 
 Currently en and zh locale are supported, but welcome contributions.
+
+## ☁️ One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/metamcp/)
 
 ## 🤝 Contributing
 
