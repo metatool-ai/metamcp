@@ -35,8 +35,13 @@ const defaultEnvironment = {
   ...getDefaultEnvironment(),
 };
 
-// Cooldown mechanism for failed STDIO commands
+// Cooldown mechanism for failed STDIO commands.
+// Bounded so a long-running gateway can't grow without limit from one-off /
+// mistyped command keys (rule: no unbounded memory growth as the server count
+// scales to 100+). Prune the map when it exceeds the cap (oldest first) and
+// eagerly drop any entry found expired.
 const STDIO_COOLDOWN_DURATION = 10000; // 10 seconds
+const STDIO_COOLDOWN_MAX_ENTRIES = 256; // hard cap, LRU-style eviction
 const stdioCommandCooldowns = new Map<string, number>();
 
 // Function to create a key for STDIO commands
@@ -65,7 +70,9 @@ const isStdioInCooldown = (
   return false;
 };
 
-// Function to set a STDIO command in cooldown
+// Function to set a STDIO command in cooldown.
+// Bounded: evict the oldest entries when over the cap so a burst of distinct
+// failing commands can't grow the map without limit.
 const setStdioCooldown = (
   command: string,
   args: string[],
@@ -73,6 +80,13 @@ const setStdioCooldown = (
 ) => {
   const key = createStdioKey(command, args, env);
   stdioCommandCooldowns.set(key, Date.now() + STDIO_COOLDOWN_DURATION);
+  if (stdioCommandCooldowns.size > STDIO_COOLDOWN_MAX_ENTRIES) {
+    // Map preserves insertion order; dropping from the front evicts oldest.
+    const oldest = stdioCommandCooldowns.keys().next().value;
+    if (oldest !== undefined) {
+      stdioCommandCooldowns.delete(oldest);
+    }
+  }
 };
 
 // Function to extract server UUID from STDIO command

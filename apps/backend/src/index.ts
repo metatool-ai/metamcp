@@ -2,6 +2,7 @@ import express from "express";
 
 import { auth } from "./auth";
 import { initializeIdleServers, initializeOnStartup } from "./lib/startup";
+import { installRequiredPackages } from "./lib/stdio-transport/required-packages";
 import mcpProxyRouter from "./routers/mcp-proxy";
 import oauthRouter from "./routers/oauth";
 import publicEndpointsRouter from "./routers/public-metamcp";
@@ -84,10 +85,17 @@ app.use("/mcp-proxy", mcpProxyRouter);
 app.use("/trpc", trpcRouter);
 
 async function start(): Promise<void> {
+  // Required-package install phase FIRST — nothing runs before it (this is a
+  // bootstrap: packages land before any other startup work, including the env
+  // bootstrap, so cold spawns always hit warm caches). Blocking; the HTTP
+  // server does not begin listening until this completes.
+  await installRequiredPackages();
+
   // Startup initialization (must run after DB is reachable/migrations are applied, and before listening)
   await initializeOnStartup();
 
   app.listen(12009, async () => {
+    console.log("[startup] backend serving on port 12009");
     console.log(`Server is running on port 12009`);
     console.log(`Auth routes available at: http://localhost:12009/api/auth`);
     console.log(

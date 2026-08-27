@@ -3,6 +3,7 @@ import { ServerParameters } from "@repo/zod-types";
 import { mcpServersRepository, namespacesRepository } from "../db/repositories";
 import { initializeEnvironmentConfiguration } from "./bootstrap.service";
 import { metaMcpServerPool } from "./metamcp";
+import { backgroundToolsSync } from "./metamcp/background-tools-sync";
 import { serverErrorTracker } from "./metamcp/server-error-tracker";
 import { convertDbServerToParams } from "./metamcp/utils";
 
@@ -71,10 +72,16 @@ export async function initializeIdleServers() {
       );
     }
 
-    // Fetch ALL MCP servers from the database (not just namespace-associated ones)
-    console.log("Fetching all MCP servers from database...");
-    const allDbServers = await mcpServersRepository.findAll();
-    console.log(`Found ${allDbServers.length} total MCP servers in database`);
+    // Fetch MCP servers that have at least one ACTIVE namespace mapping. A
+    // server the operator turned off (status INACTIVE in namespace_server_mappings)
+    // must NOT be prewarmed at startup — otherwise the startup idle-prewarm
+    // keeps booting servers the UI says are off (and the tools/list path
+    // correctly filters them out via includeInactiveServers=false).
+    console.log("Fetching ACTIVE MCP servers from database...");
+    const allDbServers = await mcpServersRepository.findActiveByMappings();
+    console.log(
+      `Found ${allDbServers.length} active MCP servers in database (${allDbServers.length} with an ACTIVE namespace mapping)`,
+    );
 
     // Convert all database servers to ServerParameters format
     const allServerParams: Record<string, ServerParameters> = {};
@@ -89,12 +96,15 @@ export async function initializeIdleServers() {
       `Successfully converted ${Object.keys(allServerParams).length} MCP servers to ServerParameters format`,
     );
 
-    // Initialize idle sessions for the underlying MCP server pool with ALL servers
-    if (Object.keys(allServerParams).length > 0) {
+    // No boot prewarm. Servers are spawned lazily on the first real request
+    // (tools/call or a genuine tools-cache miss) so a server that is never
+    // called never holds a process. Set MCP_PREWARM_ON_BOOT=1 to restore the
+    // old prewarm-everything behavior.
+    if (process.env.MCP_PREWARM_ON_BOOT === "1") {
       const { mcpServerPool } = await import("./metamcp");
       await mcpServerPool.ensureIdleSessions(allServerParams);
       console.log(
-        "✅ Successfully initialized idle MCP server pool sessions for ALL servers",
+        "✅ Successfully initialized idle MCP server pool sessions for ALL servers (MCP_PREWARM_ON_BOOT=1)",
       );
     }
 
@@ -109,6 +119,11 @@ export async function initializeIdleServers() {
     console.log(
       "✅ Successfully initialized idle servers for all namespaces and all MCP servers",
     );
+
+    // Start the background tools-sync loop (keeps the `tools` table fresh so
+    // tools/list can be served from the DB). Non-blocking; runs off the request
+    // path entirely.
+    backgroundToolsSync.start();
   } catch (error) {
     console.log("❌ Error initializing idle servers:", error);
     // Don't exit the process, just log the error

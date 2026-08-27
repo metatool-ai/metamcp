@@ -15,6 +15,25 @@ export interface McpServerPoolStatus {
   idleServerUuids: string[];
   perServerCounts?: Record<string, number>;
   maxConnectionsPerServer?: number;
+  lastEvictedAt?: number | null;
+  evictionCount?: number;
+}
+
+export interface McpServerPoolDebugInfo {
+  idle: number;
+  active: number;
+  pending: number;
+  evicted: number;
+  lastEvictedAt: number | null;
+  total: number;
+  maxTotalConnections: number;
+  maxConnectionsPerServer: number;
+  spawnConcurrency: number;
+  idleTimeoutMs: number;
+  sessionLifetimeMs: number | null;
+  activeSessionIds: string[];
+  idleServerUuids: string[];
+  perServerCounts: Record<string, number>;
 }
 
 export class McpServerPool {
@@ -32,6 +51,12 @@ export class McpServerPool {
 
   // Session creation timestamps: sessionId -> timestamp
   private sessionTimestamps: Record<string, number> = {};
+
+  // Namespace each pooled ConnectedClient was created against (for per-namespace
+  // cap accounting). A WeakMap so entries are GC'd with the client and there is
+  // no leak vector; populated in createNewConnection, consumed exactly-once in
+  // invalidateServerConnection / the discard paths to balance the counter.
+  private clientNamespaces: WeakMap<ConnectedClient, string> = new WeakMap();
 
   // Server parameters cache: serverUuid -> ServerParameters
   private serverParamsCache: Record<string, ServerParameters> = {};
@@ -63,17 +88,102 @@ export class McpServerPool {
   // Maximum connections per individual server UUID (prevents per-server process explosion)
   private readonly maxConnectionsPerServer: number;
 
+  // Connection eviction accounting (drives the diagnostics log + status).
+  private lastEvictedAt: number | null = null;
+  private evictionCount = 0;
+
+  // Per-server idle timeout (ms). Idle sessions idle for longer than this are
+  // cleaned up by checkIdleSessionHealth (the 60s health loop), preventing a
+  // parked session from holding a process forever.
+  private readonly idleTimeoutMs: number;
+
+  // Health-loop recreate guard (see constructor). A failed health ping only
+  // recreates the idle session if the session hasn't served a request within
+  // the cooldown window AND has failed the ping this many consecutive times.
+  private readonly healthCheckRecreateCooldownMs: number;
+  private readonly healthCheckRecreateThreshold: number;
+  private readonly healthCheckFailures: Map<string, number>;
+  private readonly healthCheckTimeoutMs: number;
+  private readonly idleHealthPingEnabled: boolean;
+
+  // Spawn concurrency gate for cold-start: cap how many cold server processes
+  // may be connecting at once. Without it ensureIdleSessions() fires ~22
+  // simultaneous spawns that blow past the SDK connect timeout (the
+  // -32001/-32000 storm). Bounded spawns let each process get a fair share of
+  // CPU while it boots.
+  private spawnConcurrency = 0;
+  private readonly maxSpawnConcurrency: number;
+
+  // Maximum connections per namespace UUID (prevents a busy namespace from
+  // starving others). 0 = unlimited (default).
+  private readonly maxConnectionsPerNamespace: number;
+
+  // Live connection count per namespace UUID (idle + active + pending).
+  private readonly namespaceConnections: Map<string, number> = new Map();
+
+  // sessionId -> namespaceUuid, so cleanupSession can decrement the per-namespace
+  // count when a connection is destroyed (not recycled).
+  private readonly sessionNamespaces: Map<string, string> = new Map();
+
+  // Last time each server UUID logged an at-cap condition, for the 30s-per-server
+  // throttle on the cap warning.
+  private lastCapLogAt: Record<string, number> = {};
+
   private constructor(
     defaultIdleCount: number = 1,
     maxTotalConnections: number = parseInt(
       process.env.MAX_TOTAL_CONNECTIONS || "100",
       10,
     ),
-    maxConnectionsPerServer: number = 5,
+    maxConnectionsPerServer: number = parseInt(
+      process.env.MAX_CONNECTIONS_PER_SERVER || "5",
+      10,
+    ),
+    maxConnectionsPerNamespace: number = parseInt(
+      process.env.MAX_CONNECTIONS_PER_NAMESPACE || "0",
+      10,
+    ),
   ) {
     this.defaultIdleCount = defaultIdleCount;
     this.maxTotalConnections = maxTotalConnections;
     this.maxConnectionsPerServer = maxConnectionsPerServer;
+    this.idleTimeoutMs = parseInt(
+      process.env.MCP_IDLE_TIMEOUT_MS || `${10 * 60 * 1000}`,
+      10,
+    );
+    this.maxSpawnConcurrency = parseInt(
+      process.env.MCP_SPAWN_CONCURRENCY || "4",
+      10,
+    );
+    // Recreate cooldown for the idle health loop: a session must be untouched
+    // for this long before a failed ping justifies replacing it. Prevents the
+    // health check from recreating a session mid-flight / false-negatively.
+    this.healthCheckRecreateCooldownMs = parseInt(
+      process.env.MCP_HEALTH_RECREATE_COOLDOWN_MS || `${30 * 1000}`,
+      10,
+    );
+    // Consecutive recreate guard: a server must fail the health ping this many
+    // consecutive times before we recreate its idle session. A single flaky
+    // ping (slow backend boot, gc pause) must not trigger a spawn.
+    this.healthCheckRecreateThreshold = parseInt(
+      process.env.MCP_HEALTH_RECREATE_THRESHOLD || "2",
+      10,
+    );
+    // Eager idle-health ping. Default OFF — with lazy spawn-on-demand the
+    // health loop's job is recycling idle-past-timeout sessions, not keeping
+    // the pool warm; a dead session is caught by the recovery retry on the
+    // next real call, not by a 60s timer. Set MCP_IDLE_HEALTH_PING=1 to keep
+    // the old behavior.
+    this.idleHealthPingEnabled =
+      (process.env.MCP_IDLE_HEALTH_PING || "0").trim().toLowerCase() === "1";
+    this.healthCheckTimeoutMs = parseInt(
+      process.env.MCP_HEALTH_CHECK_TIMEOUT_MS || "5000",
+      10,
+    );
+    // Consecutive ping failures per server (reset on a successful ping or a
+    // recreate). Drives the threshold above.
+    this.healthCheckFailures = new Map();
+    this.maxConnectionsPerNamespace = maxConnectionsPerNamespace;
     this.startCleanupTimer();
     this.startHealthCheckTimer();
   }
@@ -83,7 +193,10 @@ export class McpServerPool {
    */
   static getInstance(
     defaultIdleCount: number = 1,
-    maxConnectionsPerServer: number = 5,
+    maxConnectionsPerServer: number = parseInt(
+      process.env.MAX_CONNECTIONS_PER_SERVER || "5",
+      10,
+    ),
   ): McpServerPool {
     if (!McpServerPool.instance) {
       const envMax = parseInt(process.env.MAX_TOTAL_CONNECTIONS || "", 10);
@@ -92,6 +205,7 @@ export class McpServerPool {
         defaultIdleCount,
         maxConn,
         maxConnectionsPerServer,
+        parseInt(process.env.MAX_CONNECTIONS_PER_NAMESPACE || "0", 10),
       );
     }
     return McpServerPool.instance;
@@ -124,17 +238,200 @@ export class McpServerPool {
   }
 
   /**
+   * True when the pooled client's transport has been torn down underneath us.
+   *
+   * The SDK's Protocol clears its transport reference on close (backend
+   * container restart, process death, half-closed stream) and then rejects
+   * every request with the bare "Not connected" envelope. A pooled
+   * ConnectedClient whose `client.transport` is undefined can never serve
+   * another request — the pool must drop it and re-spawn rather than hand it
+   * back. The check is read-only and O(1); the SDK exposes the transport via
+   * a public getter.
+   */
+  private isTransportLostClient(client: ConnectedClient): boolean {
+    return client.client.transport === undefined;
+  }
+
+  /**
    * Check if we can create another connection for a specific server
    */
   private canCreateConnectionForServer(serverUuid: string): boolean {
     const count = this.countConnectionsForServer(serverUuid);
     if (count >= this.maxConnectionsPerServer) {
-      logger.warn(
-        `Per-server connection limit reached for ${serverUuid}: ${count}/${this.maxConnectionsPerServer}`,
-      );
+      // Quiet: throttle the at-cap warning to once per 30s per server so a
+      // busy server doesn't flood the log (the pool reuses the oldest active
+      // connection at cap anyway).
+      const now = Date.now();
+      if ((this.lastCapLogAt[serverUuid] ?? 0) < now - 30_000) {
+        this.lastCapLogAt[serverUuid] = now;
+        logger.warn(
+          `Per-server connection limit reached for ${serverUuid}: ${count}/${this.maxConnectionsPerServer}`,
+        );
+      }
       return false;
     }
     return true;
+  }
+
+  /**
+   * Record a connection eviction for the diagnostics log / status.
+   */
+  private recordEviction(): void {
+    this.lastEvictedAt = Date.now();
+    this.evictionCount += 1;
+  }
+
+  /**
+   * Find the idle session with the oldest last-touch timestamp. Only returns
+   * one that actually predates `before` — a freshly-created idle session is
+   * not a valid eviction victim.
+   */
+  private findIdleEvictionVictim(before: number): ConnectedClient | undefined {
+    let victim: ConnectedClient | undefined;
+    let oldest: number | null = null;
+
+    for (const client of Object.values(this.idleSessions)) {
+      if (!client.lastUsedAt || client.lastUsedAt >= before) {
+        continue;
+      }
+      if (oldest === null || client.lastUsedAt < oldest) {
+        oldest = client.lastUsedAt;
+        victim = client;
+      }
+    }
+    return victim;
+  }
+
+  /**
+   * Evict an idle connection for a server UUID, freeing one connection slot.
+   *
+   * Idle sessions are capped at ONE per server UUID (see getSession idle
+   * reuse + cleanupSession recycling), so a per-server eviction must be able
+   * to drop a *different* server's idle session. Called with the timestamp
+   * captured when the eviction decision was made so a concurrently-created
+   * idle session (which has no lastUsedAt yet) is never picked as a victim.
+   */
+  private async evictOldestIdle(before: number): Promise<boolean> {
+    const victim = this.findIdleEvictionVictim(before);
+    if (!victim) {
+      return false;
+    }
+
+    // Remove from the idle map regardless of cleanup success.
+    for (const [serverUuid, client] of Object.entries(this.idleSessions)) {
+      if (client === victim) {
+        delete this.idleSessions[serverUuid];
+        break;
+      }
+    }
+    this.recordEviction();
+    logger.warn(
+      `Evicted oldest idle MCP connection (concurrency slot exhausted; connection count ${this.getTotalConnectionCount()}/${this.maxTotalConnections})`,
+    );
+
+    try {
+      await victim.cleanup();
+    } catch (error) {
+      logger.error("Error cleaning up evicted idle connection:", error);
+    }
+    return true;
+  }
+
+  /**
+   * Evict the LRU active connection for a server UUID (the session slot with
+   * the oldest last-touch), freeing one connection slot so a mid-flight
+   * server gets one. The evicted server's remaining active slots are removed
+   * from the request session; a subsequent getSession for that server
+   * re-establishes a connection on demand.
+   */
+  private async evictOldestActiveConnectionForServer(
+    serverUuid: string,
+  ): Promise<boolean> {
+    let oldestSessionId: string | undefined;
+    let oldestTimestamp = Infinity;
+
+    for (const [sessionId, sessionServers] of Object.entries(
+      this.activeSessions,
+    )) {
+      const cached = sessionServers[serverUuid];
+      if (!cached) {
+        continue;
+      }
+      const timestamp =
+        cached.lastUsedAt || this.sessionTimestamps[sessionId] || 0;
+      if (timestamp < oldestTimestamp) {
+        oldestTimestamp = timestamp;
+        oldestSessionId = sessionId;
+      }
+    }
+
+    if (!oldestSessionId) {
+      return false;
+    }
+
+    const victim = this.activeSessions[oldestSessionId]?.[serverUuid];
+    if (!victim) {
+      return false;
+    }
+    delete this.activeSessions[oldestSessionId][serverUuid];
+    this.sessionToServers[oldestSessionId]?.delete(serverUuid);
+
+    // Clean up empty session slots so they stop counting toward the active
+    // total (the leak) and get dropped from the session map.
+    if (Object.keys(this.activeSessions[oldestSessionId]).length === 0) {
+      delete this.activeSessions[oldestSessionId];
+      delete this.sessionToServers[oldestSessionId];
+      delete this.sessionTimestamps[oldestSessionId];
+    }
+
+    this.recordEviction();
+    logger.warn(
+      `Evicted LRU active MCP connection for server ${serverUuid} (session ${oldestSessionId}); slot freed for a mid-flight server`,
+    );
+
+    try {
+      await victim.cleanup();
+    } catch (error) {
+      logger.error(
+        `Error cleaning up evicted active connection for ${serverUuid}:`,
+        error,
+      );
+    }
+    return true;
+  }
+
+  /**
+   * Acquire a spawn-concurrency slot. Bounds how many cold server processes
+   * may be connecting at once so a cold start doesn't blow past the SDK
+   * connect timeout with ~22 simultaneous spawns.
+   */
+  private acquireSpawnSlot(before: number): Promise<() => void> {
+    return new Promise((resolve) => {
+      const attempt = (): void => {
+        if (this.spawnConcurrency < this.maxSpawnConcurrency) {
+          this.spawnConcurrency += 1;
+          resolve(() => {
+            this.spawnConcurrency -= 1;
+          });
+          return;
+        }
+        // Slot full. If the pool is at the hard cap, evict the oldest idle
+        // connection to make room for the cold start (a cold start must not
+        // be able to strand the pool at the cap forever). Either way, defer
+        // the retry through setTimeout so the event loop stays responsive —
+        // a synchronous .then(attempt) recursion would starve macrotasks
+        // (timers/I/O) and prevent in-flight connects from releasing their
+        // slots.
+        if (this.getTotalConnectionCount() >= this.maxTotalConnections) {
+          this.evictOldestIdle(before).then((evicted) => {
+            setTimeout(attempt, evicted ? 0 : 250);
+          });
+          return;
+        }
+        setTimeout(attempt, 250);
+      };
+      attempt();
+    });
   }
 
   /**
@@ -178,9 +475,36 @@ export class McpServerPool {
 
     // Check if we already have an active session for this sessionId and server
     if (this.activeSessions[sessionId]?.[serverUuid]) {
-      // Touch timestamp on every access so SESSION_LIFETIME acts as idle timeout, not hard TTL
+      const cached = this.activeSessions[sessionId][serverUuid];
+      if (this.isTransportLostClient(cached)) {
+        // The pooled client's transport is gone (backend restart, process
+        // death, torn-down stream). Return a live connection instead of the
+        // zombie — without this the caller gets the SDK's bare "Not connected"
+        // on every request and the stale slot is never repaired for the
+        // tools-sync path.
+        logger.warn(
+          `[pool] detected dead pooled connection for server ${serverUuid} (session ${sessionId}); repairing`,
+        );
+        const repaired = await this.recoverBackendConnect(
+          cached,
+          sessionId,
+          serverUuid,
+          params,
+          namespaceUuid,
+        );
+        if (repaired && repaired !== cached) {
+          this.activeSessions[sessionId][serverUuid] = repaired;
+          this.sessionToServers[sessionId].add(serverUuid);
+          repaired.lastUsedAt = Date.now();
+          this.sessionTimestamps[sessionId] = Date.now();
+        }
+        return repaired;
+      }
+      // Touch lastUsedAt on every access so SESSION_LIFETIME acts as idle
+      // timeout (not a hard TTL) and the LRU eviction sees recent activity.
+      cached.lastUsedAt = Date.now();
       this.sessionTimestamps[sessionId] = Date.now();
-      return this.activeSessions[sessionId][serverUuid];
+      return cached;
     }
 
     // Initialize session if it doesn't exist
@@ -196,33 +520,118 @@ export class McpServerPool {
     if (!serverRequiresForwardedHeaders(params)) {
       const idleClient = this.idleSessions[serverUuid];
       if (idleClient) {
-        // Convert idle session to active session
-        delete this.idleSessions[serverUuid];
-        this.activeSessions[sessionId][serverUuid] = idleClient;
-        this.sessionToServers[sessionId].add(serverUuid);
+        if (this.isTransportLostClient(idleClient)) {
+          // The parked idle session's backend is gone (container restart,
+          // process death, torn-down stream). Drop it and fall through to a
+          // fresh spawn instead of handing back a client that will reject
+          // with "Not connected".
+          logger.warn(
+            `[pool] detected dead idle connection for server ${serverUuid}; discarding and re-spawning`,
+          );
+          delete this.idleSessions[serverUuid];
+          await idleClient.cleanup().catch(() => {
+            // Already dead — ignore cleanup errors.
+          });
+        } else {
+          // Convert idle session to active session
+          delete this.idleSessions[serverUuid];
+          this.activeSessions[sessionId][serverUuid] = idleClient;
+          this.sessionToServers[sessionId].add(serverUuid);
+          idleClient.lastUsedAt = Date.now();
 
-        logger.info(
-          `Converted idle session to active for server ${serverUuid}, session ${sessionId}`,
-        );
+          logger.info(
+            `Converted idle session to active for server ${serverUuid}, session ${sessionId}`,
+          );
 
-        // Create a new idle session to replace the one we just used (ASYNC - NON-BLOCKING)
-        this.createIdleSessionAsync(serverUuid, params, namespaceUuid);
+          // No replacement idle backfill — the next request recycles this
+          // session to idle via cleanupSession or spawns on demand.
 
-        return idleClient;
+          return idleClient;
+        }
       }
     }
 
-    // No idle session available — check per-server cap before spawning
+    // No idle session available — before spawning a fresh process, reuse a live
+    // connection for this server held under ANY other session. The tools-sync /
+    // health re-list path uses its own sessionId (e.g. `tools-sync-<uuid>`), so
+    // the exact-sessionId check above misses a server that is already live under
+    // the client's real session — and the old code spawned a SECOND process for
+    // that server on every re-list (the pid-47-class duplicate: two spawn groups
+    // per server, memory bloat, no leak since the LRU eventually reaps the stale
+    // one). Reusing the live process (instead of spawning) keeps one process per
+    // server regardless of which path asks for it.
+    const liveElsewhere = this.findOldestActiveConnectionForServer(serverUuid);
+    if (liveElsewhere) {
+      if (this.isTransportLostClient(liveElsewhere)) {
+        logger.warn(
+          `[pool] detected dead live connection for server ${serverUuid}; repairing`,
+        );
+        const repaired = await this.recoverBackendConnect(
+          liveElsewhere,
+          sessionId,
+          serverUuid,
+          params,
+          namespaceUuid,
+        );
+        if (repaired && repaired !== liveElsewhere) {
+          this.activeSessions[sessionId][serverUuid] = repaired;
+          this.sessionToServers[sessionId].add(serverUuid);
+          repaired.lastUsedAt = Date.now();
+          this.sessionTimestamps[sessionId] = Date.now();
+        }
+        return repaired;
+      }
+      logger.debug(
+        `Reusing live connection for server ${serverUuid} from another session (re-list dedup)`,
+      );
+      this.activeSessions[sessionId][serverUuid] = liveElsewhere;
+      this.sessionToServers[sessionId].add(serverUuid);
+      liveElsewhere.lastUsedAt = Date.now();
+      this.sessionTimestamps[sessionId] = Date.now();
+      return liveElsewhere;
+    }
+
+    // No idle session available — check per-server cap before spawning. If at
+    // the cap, try to reuse the oldest active connection for this server; if
+    // none is reusable, evict its LRU active slot to make room (a mid-flight
+    // server must always be able to obtain a slot rather than be refused).
     if (!this.canCreateConnectionForServer(serverUuid)) {
-      // At cap: reuse the oldest active connection instead of spawning
       const reusable = this.findOldestActiveConnectionForServer(serverUuid);
       if (reusable) {
-        logger.info(
-          `Reusing existing connection for server ${serverUuid} (at per-server cap ${this.maxConnectionsPerServer})`,
+        if (this.isTransportLostClient(reusable)) {
+          const repaired = await this.recoverBackendConnect(
+            reusable,
+            sessionId,
+            serverUuid,
+            params,
+            namespaceUuid,
+          );
+          if (repaired && repaired !== reusable) {
+            this.activeSessions[sessionId][serverUuid] = repaired;
+            this.sessionToServers[sessionId].add(serverUuid);
+            repaired.lastUsedAt = Date.now();
+            return repaired;
+          }
+        } else {
+          logger.info(
+            `Reusing existing connection for server ${serverUuid} (at per-server cap ${this.maxConnectionsPerServer})`,
+          );
+          this.activeSessions[sessionId][serverUuid] = reusable;
+          this.sessionToServers[sessionId].add(serverUuid);
+          reusable.lastUsedAt = Date.now();
+          return reusable;
+        }
+      }
+      // Not reusable — free a slot by evicting this server's LRU active
+      // connection, then fall through to spawn a fresh one.
+      await this.evictOldestActiveConnectionForServer(serverUuid);
+      // Re-evaluate per-server count after eviction (it may have made room,
+      // and the count must be re-checked before we spawn).
+      if (!this.canCreateConnectionForServer(serverUuid)) {
+        logger.error(
+          `Per-server cap still exceeded for ${serverUuid} after LRU eviction; refusing to spawn`,
         );
-        this.activeSessions[sessionId][serverUuid] = reusable;
-        this.sessionToServers[sessionId].add(serverUuid);
-        return reusable;
+        return undefined;
       }
     }
 
@@ -241,22 +650,44 @@ export class McpServerPool {
           error,
         );
       });
+      // This discarded spawn was counted in createNewConnection's namespace
+      // accounting (it is not the one stored, and no sessionNamespaces entry
+      // exists for the kept one to decrement on) — balance the counter so a
+      // discarded connection can't deflate a namespace's free headroom.
+      this.decrementNamespaceCount(namespaceUuid);
       return this.activeSessions[sessionId][serverUuid];
     }
 
+    // Guard a race with cleanupSession(): the session's map entry may have
+    // been deleted while we were awaiting the connect. The caller's session is
+    // gone — there is nobody to serve this connection, so DISCARD it (clean up
+    // the spawned process) instead of resurrecting the deleted session entry.
+    // Resurrecting it was the leak: the recreated entry had no live user and no
+    // timer would ever reap it, so the process piled up under the backend's
+    // parent until the container OOMed (the pid-47 incident).
+    if (!this.activeSessions[sessionId]) {
+      newClient.cleanup().catch((error) => {
+        logger.error(
+          `Error cleaning up orphaned connection for server ${params.uuid} after session ${sessionId} closed mid-connect:`,
+          error,
+        );
+      });
+      // The spawned process never entered the pool and no session namespace was
+      // ever recorded for it — the increment in createNewConnection would
+      // otherwise leak into the per-namespace cap and starve the namespace.
+      this.decrementNamespaceCount(namespaceUuid);
+      return undefined;
+    }
     this.activeSessions[sessionId][serverUuid] = newClient;
     this.sessionToServers[sessionId].add(serverUuid);
+    newClient.lastUsedAt = Date.now();
+    if (namespaceUuid) {
+      this.sessionNamespaces.set(sessionId, namespaceUuid);
+    }
 
     logger.info(
       `Created new active session for server ${serverUuid}, session ${sessionId}`,
     );
-
-    // Only pre-warm idle pool for servers that don't require forwarded headers.
-    // Idle sessions are created without per-client headers, so they can't be
-    // reused when per-client header forwarding is configured.
-    if (!serverRequiresForwardedHeaders(params)) {
-      this.createIdleSessionAsync(serverUuid, params, namespaceUuid);
-    }
 
     return newClient;
   }
@@ -276,56 +707,146 @@ export class McpServerPool {
       return undefined;
     }
 
-    logger.info(
-      `Creating new connection for server ${params.name} (${params.uuid}) with namespace: ${namespaceUuid || "none"}`,
-    );
-    metamcpLogStore.addLog(
-      params.name,
-      "info",
-      `Creating new connection for namespace ${namespaceUuid || "none"}`,
-    );
-
-    const connectedClient = await connectMetaMcpClient(
-      params,
-      (exitCode, signal) => {
-        logger.info(
-          `Crash handler callback called for server ${params.name} (${params.uuid}) with namespace: ${namespaceUuid || "none"}`,
+    // Per-namespace cap: prevent a busy namespace from starving others.
+    if (namespaceUuid && this.maxConnectionsPerNamespace > 0) {
+      const nsCount = this.namespaceConnections.get(namespaceUuid) || 0;
+      if (nsCount >= this.maxConnectionsPerNamespace) {
+        logger.warn(
+          `Skipping connection for server ${params.name} (${params.uuid}) - namespace ${namespaceUuid} at cap ${nsCount}/${this.maxConnectionsPerNamespace}`,
         );
-
-        // Handle process crash - always set up crash handler
-        if (namespaceUuid) {
-          // If we have a namespace context, use it
-          this.handleServerCrash(
-            params.uuid,
-            namespaceUuid,
-            exitCode,
-            signal,
-          ).catch((error) => {
-            logger.error(
-              `Error handling server crash for ${params.uuid} in ${namespaceUuid}:`,
-              error,
-            );
-          });
-        } else {
-          // If no namespace context, still track the crash globally
-          this.handleServerCrashWithoutNamespace(
-            params.uuid,
-            exitCode,
-            signal,
-          ).catch((error) => {
-            logger.error(
-              `Error handling server crash for ${params.uuid} (no namespace):`,
-              error,
-            );
-          });
-        }
-      },
-    );
-    if (!connectedClient) {
-      return undefined;
+        return undefined;
+      }
     }
 
-    return connectedClient;
+    // Bound spawn concurrency. A cold start can queue many servers behind
+    // this gate instead of firing ~22 simultaneous spawns that each blow
+    // past the SDK connect timeout.
+    const before = Date.now();
+    const release = await this.acquireSpawnSlot(before);
+
+    // Track the connection against its namespace (for the per-namespace cap).
+    // We increment AFTER acquiring a spawn slot but BEFORE the connect, and
+    // decrement on cleanup/failure.
+    if (namespaceUuid) {
+      this.namespaceConnections.set(
+        namespaceUuid,
+        (this.namespaceConnections.get(namespaceUuid) || 0) + 1,
+      );
+    }
+
+    try {
+      logger.info(
+        `Creating new connection for server ${params.name} (${params.uuid}) with namespace: ${namespaceUuid || "none"}`,
+      );
+      metamcpLogStore.addLog(
+        params.name,
+        "info",
+        `Creating new connection for namespace ${namespaceUuid || "none"}`,
+      );
+
+      const connectedClient = await connectMetaMcpClient(
+        params,
+        (exitCode, signal) => {
+          logger.info(
+            `Crash handler callback called for server ${params.name} (${params.uuid}) with namespace: ${namespaceUuid || "none"}`,
+          );
+
+          // Handle process crash - always set up crash handler
+          if (namespaceUuid) {
+            // If we have a namespace context, use it
+            this.handleServerCrash(
+              params.uuid,
+              namespaceUuid,
+              exitCode,
+              signal,
+            ).catch((error) => {
+              logger.error(
+                `Error handling server crash for ${params.uuid} in ${namespaceUuid}:`,
+                error,
+              );
+            });
+          } else {
+            // If no namespace context, still track the crash globally
+            this.handleServerCrashWithoutNamespace(
+              params.uuid,
+              exitCode,
+              signal,
+            ).catch((error) => {
+              logger.error(
+                `Error handling server crash for ${params.uuid} (no namespace):`,
+                error,
+              );
+            });
+          }
+        },
+      );
+      if (!connectedClient) {
+        // Connect failed — roll back the namespace counter.
+        this.decrementNamespaceCount(namespaceUuid);
+        return undefined;
+      }
+
+      // Remember which namespace this connection counts against so every
+      // destroy path (invalidate / cleanup / discard) can balance the per-
+      // namespace cap exactly once. Without this, the recovery path's
+      // invalidate→re-spawn cycle leaks +1 into the namespace counter per
+      // repair and eventually starves the namespace at maxConnectionsPerNamespace.
+      if (namespaceUuid) {
+        this.clientNamespaces.set(connectedClient, namespaceUuid);
+      }
+
+      // Initialize the LRU touch used by idle/LRU eviction and the per-server
+      // idle timeout. Created connections count as freshly-used.
+      connectedClient.lastUsedAt = Date.now();
+
+      return connectedClient;
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Repair the pool after a backend transport went dead.
+   *
+   * A pooled ConnectedClient reports "Not connected" (the SDK's transport-lost
+   * marker) when the backend container restarted, the process exited, or the
+   * stream was torn down underneath the cached client. The request-path
+   * recovery (`requestWithSessionRecovery`) invalidates and re-spawns per
+   * session when it sees that envelope — but the tools-sync background loop
+   * and any other getSession user do NOT route through that recovery. For them
+   * the stale slot was re-delivered on every call, so a backend restart made
+   * every server report "Not connected" on the next 60s pass (the 2026-08-27
+   * wall of `[tools-sync] sync failed … Not connected`).
+   *
+   * When a getSession hands back a dead client, drop the stale slot and
+   * re-spawn ONCE so the session gets a live process instead of the zombie.
+   * No retry loop here: a still-cold backend fails the fresh connect and the
+   * caller counts the failure (syncServer's circuit breaker, fan-out's
+   * pending marker), so a broken backend is surfaced as degraded rather than
+   * silently re-hammered.
+   */
+  private async recoverBackendConnect(
+    stale: ConnectedClient,
+    sessionId: string,
+    serverUuid: string,
+    params: ServerParameters,
+    namespaceUuid?: string,
+  ): Promise<ConnectedClient | undefined> {
+    // Drop the stale slot(s) FIRST so the spawn below isn't blocked by the
+    // per-server cap (the dead client still counts toward it). Cascades
+    // across every active + idle slot for this serverUuid, which is what we
+    // want — they are all equally dead.
+    await this.invalidateServerConnection(sessionId, serverUuid);
+
+    // Guard against a concurrent recovery: if another caller already
+    // invalidated the slot, invalidateServerConnection above would have left
+    // the new (healthy) client intact. Detect that case and reuse it.
+    const healthy = await this.findOldestActiveConnectionForServer(serverUuid);
+    if (healthy && healthy !== stale) {
+      return healthy;
+    }
+
+    return this.createNewConnection(params, namespaceUuid);
   }
 
   /**
@@ -470,21 +991,33 @@ export class McpServerPool {
   }
 
   /**
-   * Ensure idle sessions exist for all servers
+   * Ensure idle sessions exist for all servers.
+   *
+   * Prewarms sequentially (each spawn still passes through the bounded
+   * spawn-concurrency gate in createNewConnection). The old implementation
+   * fired Promise.allSettled over every server at once, so a cold start
+   * spawned ~22 simultaneous processes and blew past the SDK connect
+   * timeout (-32001 / -32000). Sequential prewarm trades wall time for
+   * connect success; the lazy on-first-use path in getSession covers the
+   * gap until warm.
    */
   async ensureIdleSessions(
     serverParams: Record<string, ServerParameters>,
     namespaceUuid?: string,
   ): Promise<void> {
-    const promises = Object.entries(serverParams).map(
-      async ([uuid, params]) => {
-        if (!this.idleSessions[uuid]) {
+    for (const [uuid, params] of Object.entries(serverParams)) {
+      if (!this.idleSessions[uuid]) {
+        try {
           await this.createIdleSession(uuid, params, namespaceUuid);
+        } catch (error) {
+          // One bad server must not stall the rest of the prewarm.
+          logger.error(
+            `Error prewarming idle session for server ${uuid}:`,
+            error,
+          );
         }
-      },
-    );
-
-    await Promise.allSettled(promises);
+      }
+    }
   }
 
   /**
@@ -500,17 +1033,25 @@ export class McpServerPool {
     let recycled = 0;
     let destroyed = 0;
 
-    // Try to recycle each connection back to idle pool
+    // Try to recycle each connection back to idle pool. The idle pool is
+    // capped at ONE healthy session per server UUID, so a second connection
+    // for the same server is destroyed rather than stacked (the old behavior
+    // let recycling + backfill grow the active map unboundedly — the leak).
     for (const [serverUuid, client] of Object.entries(activeSession)) {
       if (!this.idleSessions[serverUuid]) {
         // No idle session for this server — recycle the connection
         this.idleSessions[serverUuid] = client;
+        // Touch so the LRU idle eviction sees it as freshly-used, and the
+        // per-server idle timeout starts counting from the recycle moment.
+        client.lastUsedAt = Date.now();
         recycled++;
         logger.info(
           `Recycled active connection for server ${serverUuid} to idle pool (session ${sessionId})`,
         );
       } else {
-        // Already have an idle session — destroy the extra
+        // Already have an idle session — destroy the extra. No replacement
+        // backfill: an extra active connection for a server we already hold
+        // idle is not a reason to spawn another process.
         try {
           await client.cleanup();
         } catch (error) {
@@ -520,6 +1061,11 @@ export class McpServerPool {
           );
         }
         destroyed++;
+        // Decrement the namespace count for the destroyed connection. Prefer the
+        // exact per-client WeakMap accounting over the session-derived lookup
+        // (a session may map to a different namespace than a given client was
+        // created against).
+        this.releaseClientNamespace(client);
       }
     }
 
@@ -532,9 +1078,37 @@ export class McpServerPool {
     // Clean up session to servers mapping
     delete this.sessionToServers[sessionId];
 
+    // Clean up session namespace tracking
+    this.sessionNamespaces.delete(sessionId);
+
     logger.info(
       `Cleaned up session ${sessionId} (recycled: ${recycled}, destroyed: ${destroyed})`,
     );
+  }
+
+  /**
+   * Release the per-namespace accounting for one pooled client — the inverse of
+   * createNewConnection's increment. Uses the WeakMap recorded at create time so
+   * the decrement is exact and idempotent (a client created with no namespace,
+   * or one already released, is a no-op). Called by every destroy path:
+   * invalidateServerConnection and cleanupSession's destroy branch.
+   */
+  private releaseClientNamespace(client: ConnectedClient): void {
+    const ns = this.clientNamespaces.get(client);
+    if (!ns) return;
+    this.clientNamespaces.delete(client);
+    this.decrementNamespaceCount(ns);
+  }
+
+  /**
+   * Decrement a namespace's live connection count by one (floor at 0). The
+   * inverse of createNewConnection's increment; a no-op for an unknown/absent
+   * namespace so callers can pass an optional namespaceUuid directly.
+   */
+  private decrementNamespaceCount(namespaceUuid: string | undefined): void {
+    if (!namespaceUuid) return;
+    const count = this.namespaceConnections.get(namespaceUuid) || 0;
+    this.namespaceConnections.set(namespaceUuid, Math.max(0, count - 1));
   }
 
   /**
@@ -560,6 +1134,8 @@ export class McpServerPool {
     this.sessionToServers = {};
     this.sessionTimestamps = {};
     this.serverParamsCache = {};
+    this.namespaceConnections.clear();
+    this.sessionNamespaces.clear();
 
     // Bump all known generations (never reset to {}) so any in-flight idle
     // creation that started before cleanupAll() resolves with a stale value
@@ -613,6 +1189,8 @@ export class McpServerPool {
       idleServerUuids: Object.keys(this.idleSessions),
       perServerCounts,
       maxConnectionsPerServer: this.maxConnectionsPerServer,
+      lastEvictedAt: this.lastEvictedAt,
+      evictionCount: this.evictionCount,
     };
   }
 
@@ -642,6 +1220,49 @@ export class McpServerPool {
       return false;
     }
     return true;
+  }
+
+  /**
+   * Structured diagnostics for the pool (health endpoints / debug UI).
+   * Exposes the idle/active/pending/evicted accounting the health loop logs.
+   */
+  async getDebugInfo(): Promise<McpServerPoolDebugInfo> {
+    const idle = Object.keys(this.idleSessions).length;
+    const active = Object.keys(this.activeSessions).reduce(
+      (total, sessionId) =>
+        total + Object.keys(this.activeSessions[sessionId]).length,
+      0,
+    );
+    const pending = this.creatingIdleSessions.size;
+
+    let sessionLifetimeMs: number | null;
+    try {
+      sessionLifetimeMs = await configService.getSessionLifetime();
+    } catch {
+      sessionLifetimeMs = null;
+    }
+
+    const perServerCounts: Record<string, number> = {};
+    for (const serverUuid of Object.keys(this.serverParamsCache)) {
+      perServerCounts[serverUuid] = this.countConnectionsForServer(serverUuid);
+    }
+
+    return {
+      idle,
+      active,
+      pending,
+      evicted: this.evictionCount,
+      lastEvictedAt: this.lastEvictedAt,
+      total: idle + active + pending,
+      maxTotalConnections: this.maxTotalConnections,
+      maxConnectionsPerServer: this.maxConnectionsPerServer,
+      spawnConcurrency: this.maxSpawnConcurrency,
+      idleTimeoutMs: this.idleTimeoutMs,
+      sessionLifetimeMs,
+      activeSessionIds: Object.keys(this.activeSessions),
+      idleServerUuids: Object.keys(this.idleSessions),
+      perServerCounts,
+    };
   }
 
   /**
@@ -723,6 +1344,12 @@ export class McpServerPool {
           }
         })(),
       );
+      // Balance the per-namespace cap: the destroyed connection was counted in
+      // createNewConnection; the recovery path re-spawns a fresh one that
+      // increments again, so every destroyed slot must decrement exactly once or
+      // the counter creeps toward maxConnectionsPerNamespace and starves the
+      // namespace. clientNamespaces is authoritative (populated at create).
+      this.releaseClientNamespace(cachedClient);
       delete sessionServers[serverUuid];
       this.sessionToServers[sid]?.delete(serverUuid);
     }
@@ -741,6 +1368,7 @@ export class McpServerPool {
           }
         })(),
       );
+      this.releaseClientNamespace(idleClient);
       delete this.idleSessions[serverUuid];
     }
 
@@ -1046,27 +1674,91 @@ export class McpServerPool {
   }
 
   /**
-   * Check health of idle sessions by pinging them.
-   * Dead sessions are cleaned up and recreated.
-   * Servers in ERROR state whose crash counters have been reset are retried.
+   * Check health of idle sessions.
+   *
+   * With lazy spawn-on-demand the health loop's job is NO LONGER to keep the
+   * pool warm — a dead session is caught by the recovery retry on the next
+   * real call, not by a 60s timer. So by default this loop only:
+   *   1. recycles idle sessions that have been untouched past idleTimeoutMs
+   *      (a parked process must not be held forever), and
+   *   2. runs the diagnostics accounting.
+   *
+   * The eager ping + recreate-on-false-negative that used to respawn a
+   * healthy-but-idle server every 60s is opt-in via MCP_IDLE_HEALTH_PING=1,
+   * and even then a session is only recreated if it hasn't served a request
+   * within the recreate cooldown AND has failed the ping the configured
+   * number of consecutive times — so a healthy session is never spawned
+   * "because a timer fired".
    */
   private async checkIdleSessionHealth(): Promise<void> {
     const serverUuids = Object.keys(this.idleSessions);
-    if (serverUuids.length === 0) {
-      return;
-    }
 
     for (const serverUuid of serverUuids) {
       const client = this.idleSessions[serverUuid];
       if (!client) continue;
 
-      try {
-        // Ping with a 5-second timeout
-        await client.client.ping({ timeout: 5000 });
-      } catch {
-        logger.warn(
-          `Idle session health check failed for server ${serverUuid}, recreating...`,
+      // Per-server idle timeout: a parked idle session must not hold a
+      // process forever. Recycle if untouched past idleTimeoutMs.
+      if (
+        client.lastUsedAt &&
+        Date.now() - client.lastUsedAt > this.idleTimeoutMs
+      ) {
+        logger.info(
+          `Idle session for server ${serverUuid} idle past ${this.idleTimeoutMs}ms, closing...`,
         );
+        await client.cleanup();
+        delete this.idleSessions[serverUuid];
+        // No recreate — the next real call spawns on demand.
+        this.healthCheckFailures.delete(serverUuid);
+        continue;
+      }
+
+      // Eager ping is opt-in and guarded: skip sessions that recently served
+      // a request (the caller just used it — it's alive), and only recreate
+      // after the cooldown + consecutive-failure threshold.
+      if (!this.idleHealthPingEnabled) continue;
+
+      if (
+        client.lastUsedAt &&
+        Date.now() - client.lastUsedAt < this.healthCheckRecreateCooldownMs
+      ) {
+        // Recently used — leave it alone.
+        continue;
+      }
+
+      try {
+        await client.client.ping({ timeout: this.healthCheckTimeoutMs });
+        this.healthCheckFailures.delete(serverUuid);
+      } catch (error) {
+        // `ping` is OPTIONAL in the MCP spec, so a backend may legitimately not
+        // implement it and answer `-32601 Method not found`. That is a RESPONSE:
+        // it proves the connection is alive. Only silence (a timeout) or a
+        // transport failure means the session is dead. Without this guard the
+        // pool destroys and recreates a healthy idle connection repeatedly for
+        // every server that lacks `ping` (folded from upstream PR #337).
+        const pingError =
+          error instanceof Error ? error.message : String(error);
+        const pingCode = (error as { code?: unknown })?.code;
+        if (
+          pingCode === -32601 ||
+          pingCode === "-32601" ||
+          pingError.includes("Method not found")
+        ) {
+          this.healthCheckFailures.delete(serverUuid);
+          continue;
+        }
+
+        const failures = (this.healthCheckFailures.get(serverUuid) || 0) + 1;
+        this.healthCheckFailures.set(serverUuid, failures);
+        logger.warn(
+          `Idle session health check failed for server ${serverUuid} (failure ${failures}/${this.healthCheckRecreateThreshold}); ` +
+            (failures >= this.healthCheckRecreateThreshold
+              ? `recreating after ${failures} consecutive failures`
+              : `not recreating yet — threshold not reached`),
+        );
+        if (failures < this.healthCheckRecreateThreshold) {
+          continue;
+        }
 
         // Clean up the dead session
         try {
@@ -1075,33 +1767,30 @@ export class McpServerPool {
           // Already dead, ignore cleanup errors
         }
         delete this.idleSessions[serverUuid];
+        this.healthCheckFailures.delete(serverUuid);
 
-        // Reset error state so we can retry
+        // Reset error state so a real request can retry. No background
+        // recreate here — the next real call spawns on demand.
         await serverErrorTracker.resetServerErrorState(serverUuid);
-
-        // Recreate if we have cached params
-        const params = this.serverParamsCache[serverUuid];
-        if (params) {
-          this.createIdleSessionAsync(serverUuid, params);
-        }
       }
     }
 
-    // Also check for servers in ERROR state that have cached params but no idle session.
-    // If they were reset (e.g., on startup), we should try to recreate them.
-    for (const [serverUuid, params] of Object.entries(this.serverParamsCache)) {
-      if (
-        !this.idleSessions[serverUuid] &&
-        !this.creatingIdleSessions.has(serverUuid)
-      ) {
-        const isError =
-          await serverErrorTracker.isServerInErrorState(serverUuid);
-        if (!isError) {
-          // Not in error and no idle session - try to create one
-          this.createIdleSessionAsync(serverUuid, params);
-        }
-      }
-    }
+    // No background backfill. A server with cached params but no idle slot is
+    // not spawned here — a session is created only when a real request needs
+    // it (lazy spawn-on-demand).
+
+    // Diagnostics: periodic pool accounting so the leak/storm footprint is
+    // visible in the logs without needing a health probe.
+    const active = Object.keys(this.activeSessions).reduce(
+      (total, sessionId) =>
+        total + Object.keys(this.activeSessions[sessionId]).length,
+      0,
+    );
+    const idle = Object.keys(this.idleSessions).length;
+    const pending = this.creatingIdleSessions.size;
+    logger.info(
+      `MCP pool diagnostics: idle=${idle} active(${Object.keys(this.activeSessions).length})=${active} pending=${pending} evicted=${this.evictionCount} lastEvictedAt=${this.lastEvictedAt ?? "never"} total=${idle + active + pending}/${this.maxTotalConnections}`,
+    );
   }
 
   /**

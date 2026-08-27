@@ -4,6 +4,7 @@ import express from "express";
 import logger from "@/utils/logger";
 
 import { endpointsRepository } from "../db/repositories/endpoints.repo";
+import { mcpServerPool } from "../lib/metamcp/mcp-server-pool";
 import adminRouter from "./public-metamcp/admin";
 import { openApiRouter } from "./public-metamcp/openapi";
 import sseRouter from "./public-metamcp/sse";
@@ -48,10 +49,12 @@ publicEndpointsRouter.use(openApiRouter);
 publicEndpointsRouter.use(adminRouter);
 
 // Health check endpoint
-publicEndpointsRouter.get("/health", (req, res) => {
+publicEndpointsRouter.get("/health", async (req, res) => {
+  const poolDebug = await mcpServerPool.getDebugInfo();
   res.json({
     status: "ok",
     service: "public-endpoints",
+    pool: poolDebug,
   });
 });
 

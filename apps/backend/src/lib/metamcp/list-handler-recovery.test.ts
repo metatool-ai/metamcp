@@ -1,10 +1,12 @@
 import { ServerParameters } from "@repo/zod-types";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { circuitBreaker } from "./circuit-breaker";
 import { ConnectedClient } from "./client";
 import {
   RecoverySessionPool,
   requestWithSessionRecovery,
+  resetRecoveryCooldowns,
 } from "./list-handler-recovery";
 
 // The exact envelope shape the backend produces when its session died
@@ -42,6 +44,12 @@ const baseOpts = (pool: RecoverySessionPool, session: ConnectedClient) => ({
 });
 
 describe("requestWithSessionRecovery", () => {
+  afterEach(() => {
+    circuitBreaker.reset("server-1");
+    resetRecoveryCooldowns();
+    vi.useRealTimers();
+  });
+
   it("returns the first attempt's result without touching the pool", async () => {
     const session = makeSession("stale");
     const pool = makePool(undefined);
@@ -146,5 +154,48 @@ describe("requestWithSessionRecovery", () => {
       requestWithSessionRecovery({ ...baseOpts(pool, stale), attempt }),
     ).rejects.toBe(secondFailure);
     expect(attempt).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips the reconnect entirely when the circuit breaker is open", async () => {
+    const stale = makeSession("stale");
+    const pool = makePool(undefined);
+    const attempt = vi.fn().mockRejectedValue(sessionLostError());
+    circuitBreaker.onFailure("server-1");
+    circuitBreaker.onFailure("server-1");
+    circuitBreaker.onFailure("server-1"); // tripped (threshold 3)
+
+    await expect(
+      requestWithSessionRecovery({ ...baseOpts(pool, stale), attempt }),
+    ).rejects.toThrow(/circuit-open/);
+    expect(attempt).toHaveBeenCalledTimes(1);
+    expect(pool.invalidateServerConnection).not.toHaveBeenCalled();
+    expect(pool.getSession).not.toHaveBeenCalled();
+  });
+
+  it("rate-limits repeated recoveries for the same server within the cooldown window", async () => {
+    const stale = makeSession("stale");
+    const fresh = makeSession("fresh");
+    const pool = makePool(fresh);
+    const attempt = vi
+      .fn()
+      .mockRejectedValueOnce(sessionLostError())
+      .mockResolvedValueOnce("ok");
+
+    // First recovery succeeds.
+    await expect(
+      requestWithSessionRecovery({ ...baseOpts(pool, stale), attempt }),
+    ).resolves.toBe("ok");
+
+    // A second recovery for the same server within the cooldown is refused —
+    // the retry-able backend must not be invalidated + re-spawned repeatedly.
+    const secondAttempt = vi.fn().mockRejectedValue(sessionLostError());
+    await expect(
+      requestWithSessionRecovery({
+        ...baseOpts(pool, stale),
+        attempt: secondAttempt,
+      }),
+    ).rejects.toThrow(/recovered within the last/);
+    expect(pool.getSession).toHaveBeenCalledTimes(1);
+    expect(secondAttempt).toHaveBeenCalledTimes(1);
   });
 });

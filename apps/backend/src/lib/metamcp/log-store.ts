@@ -9,6 +9,22 @@ export interface MetaMcpLogEntry {
   error?: string;
 }
 
+/**
+ * Render an arbitrary thrown value for the log entry. Error instances carry the
+ * most useful detail; a numeric/string `.code` (e.g. ENOENT, -32603) is the
+ * discriminator that tells an operator a spawn/connect failed for a structural
+ * reason rather than a transient one, so append it when present.
+ */
+function formatError(error: unknown): string {
+  if (error instanceof Error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code !== undefined
+      ? `${error.message} (code: ${code})`
+      : error.message;
+  }
+  return String(error);
+}
+
 class MetaMcpLogStore {
   private logs: MetaMcpLogEntry[] = [];
   private readonly maxLogs = 1000; // Keep only the last 1000 logs
@@ -26,11 +42,7 @@ class MetaMcpLogStore {
       serverName,
       level,
       message,
-      error: error
-        ? error instanceof Error
-          ? error.message
-          : String(error)
-        : undefined,
+      error: error ? formatError(error) : undefined,
     };
 
     // Add to logs array

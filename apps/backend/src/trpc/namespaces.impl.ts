@@ -28,6 +28,7 @@ import {
   toolsRepository,
 } from "../db/repositories";
 import { NamespacesSerializer } from "../db/serializers";
+import { clearFilterCache } from "../lib/metamcp/metamcp-middleware/filter-tools.functional";
 import {
   clearOverrideCache,
   mapOverrideNameToOriginal,
@@ -570,6 +571,11 @@ export const namespacesImplementations = {
         };
       }
 
+      // Invalidate the in-memory tool-status filter cache for this namespace so
+      // the disable/enable takes effect immediately instead of serving a stale
+      // status from the 1s TTL cache (or until the next DB read).
+      clearFilterCache(input.namespaceUuid);
+
       return {
         success: true as const,
         message: "Tool status updated successfully",
@@ -849,11 +855,25 @@ export const namespacesImplementations = {
 
         totalToolsCreated += upsertedTools.length;
 
+        // Preserve operator-set mapping status across the refresh: a tool the
+        // operator disabled (INACTIVE) must STAY disabled. New tools (absent
+        // from the existing mappings) default to ACTIVE. Without this, a manual
+        // refresh re-enables every disabled tool (same clobber class as the
+        // background tools-sync bug).
+        const existingMappings =
+          await namespaceMappingsRepository.findToolMappingsByNamespace(
+            input.namespaceUuid,
+          );
+        const existingStatusByToolUuid = new Map(
+          existingMappings.map((m) => [m.tool_uuid, m.status]),
+        );
+
         // Create namespace tool mappings
         const toolMappings = upsertedTools.map((tool) => ({
           toolUuid: tool.uuid,
           serverUuid: serverUuid,
-          status: "ACTIVE" as const,
+          status:
+            existingStatusByToolUuid.get(tool.uuid) ?? ("ACTIVE" as const),
         }));
 
         const createdMappings =

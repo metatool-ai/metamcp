@@ -21,6 +21,14 @@ services:
       # Application URL configuration
       APP_URL: ${APP_URL:-http://localhost:12008}
       NEXT_PUBLIC_APP_URL: ${APP_URL:-http://localhost:12008}
+
+      # Console mirroring for the backend logger. The backend default is
+      # "errors-only", which DROPS the install phase's logger.info progress
+      # lines ("Starting package pre-install: …" / "Pre-installed …"). The
+      # entrypoint's `tail -F` copier streams backend output to docker logs, but
+      # the INFO lines still need this to be mirrored at all. info mirrors
+      # INFO + WARN + ERROR; all mirrors DEBUG too.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       
       # Auth configuration
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-your-super-secret-key-change-this-in-production}

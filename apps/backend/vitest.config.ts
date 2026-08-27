@@ -14,6 +14,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    // The metamcp pool module graph transitively imports the DB, which throws
+    // at import time without DATABASE_URL. A dummy URL lets the pg Pool
+    // construct without connecting (no query is made by unit tests).
+    env: {
+      DATABASE_URL: "postgres://dummy:dummy@localhost:5432/dummy",
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

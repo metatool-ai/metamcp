@@ -256,10 +256,12 @@ metamcpRouter.post("/:uuid/message", async (req, res) => {
   }
 });
 
-metamcpRouter.get("/health", (req, res) => {
+metamcpRouter.get("/health", async (req, res) => {
+  const poolDebug = await mcpServerPool.getDebugInfo();
   res.json({
     status: "ok",
     service: "metamcp",
+    pool: poolDebug,
   });
 });
 
