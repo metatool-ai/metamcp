@@ -74,27 +74,40 @@ export function validateRedirectUri(
       return false;
     }
 
-    // For production, only allow HTTPS
+    // URL.hostname keeps the brackets around an IPv6 literal ("[::1]"), so
+    // strip them before comparing against loopback addresses.
+    const hostname = parsedUri.hostname
+      .toLowerCase()
+      .replace("[", "")
+      .replace("]", "");
+
+    // Native/public clients redirect to a loopback listener on a port they
+    // pick at runtime. RFC 8252 section 7.3 and OAuth 2.1 require that these
+    // be accepted over plain http, and the MCP spec relies on it — every MCP
+    // client registers something like http://127.0.0.1:PORT/callback.
+    const isLoopback =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1";
+
+    // Outside of loopback, production only allows HTTPS
     if (
       process.env.NODE_ENV === "production" &&
-      parsedUri.protocol !== "https:"
+      parsedUri.protocol !== "https:" &&
+      !isLoopback
     ) {
       return false;
     }
 
-    // Prevent localhost/private IPs in production
-    if (process.env.NODE_ENV === "production") {
-      const hostname = parsedUri.hostname.toLowerCase();
-      if (
-        hostname === "localhost" ||
-        hostname === "127.0.0.1" ||
-        hostname === "::1" ||
-        hostname.startsWith("192.168.") ||
+    // Prevent private IPs in production
+    if (
+      process.env.NODE_ENV === "production" &&
+      !isLoopback &&
+      (hostname.startsWith("192.168.") ||
         hostname.startsWith("10.") ||
-        hostname.startsWith("172.")
-      ) {
-        return false;
-      }
+        hostname.startsWith("172."))
+    ) {
+      return false;
     }
 
     // Check against allowed hosts if provided
