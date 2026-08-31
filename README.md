@@ -434,6 +434,10 @@ If you want to deploy it to a online service or a VPS, a instance of at least 2G
 
 Since MCP leverages SSE for long connection, if you are using reverse proxy like nginx, please refer to an example setup [nginx.conf.example](nginx.conf.example)
 
+## Optional: Tool Outcome Attestation (TOA) before enable
+
+MetaMCP aggregates and authorizes MCP servers. [TOA](https://github.com/Carmel-Labs-Inc/toa) (`toa/0.1`) is optional offline delivery evidence before enabling a server in a namespace. It is not per-call signing. Docs: [Optional TOA verify gate](docs/en/deployment/toa-optional-gate.mdx) · example: [`examples/toa-after-aggregate.yml`](examples/toa-after-aggregate.yml).
+
 ## 🏗️ Architecture
 
 - **Frontend**: Next.js
