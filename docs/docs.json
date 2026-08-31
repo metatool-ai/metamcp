@@ -10,7 +10,7 @@
     "light": "/favicon.png",
     "dark": "/favicon.png"
   },
-  "icons":{
+  "icons": {
     "library": "lucide"
   },
   "colors": {
@@ -58,7 +58,8 @@
           {
             "group": "Deployment",
             "pages": [
-              "en/deployment/custom-deployment"
+              "en/deployment/custom-deployment",
+              "en/deployment/toa-optional-gate"
             ]
           },
           {
@@ -91,14 +92,14 @@
         "language": "cn",
         "groups": [
           {
-            "group": "快速开始",
+            "group": "\u5feb\u901f\u5f00\u59cb",
             "pages": [
               "cn/index",
               "cn/quickstart"
             ]
           },
           {
-            "group": "核心概念",
+            "group": "\u6838\u5fc3\u6982\u5ff5",
             "pages": [
               "cn/concepts/mcp-servers",
               "cn/concepts/namespaces",
@@ -109,13 +110,13 @@
             ]
           },
           {
-            "group": "部署",
+            "group": "\u90e8\u7f72",
             "pages": [
               "cn/deployment/custom-deployment"
             ]
           },
           {
-            "group": "集成",
+            "group": "\u96c6\u6210",
             "pages": [
               "cn/integrations/cursor",
               "cn/integrations/claude-desktop",
@@ -125,7 +126,7 @@
             ]
           },
           {
-            "group": "开发",
+            "group": "\u5f00\u53d1",
             "pages": [
               "cn/development/contributing",
               "cn/development/i18n",
@@ -133,7 +134,7 @@
             ]
           },
           {
-            "group": "故障排除",
+            "group": "\u6545\u969c\u6392\u9664",
             "pages": [
               "cn/troubleshooting/oauth-troubleshooting"
             ]

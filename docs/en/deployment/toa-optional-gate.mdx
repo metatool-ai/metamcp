@@ -1,0 +1,37 @@
+---
+title: "Optional TOA verify gate"
+description: "Offline Tool Outcome Attestation before enabling an aggregated MCP server"
+---
+
+MetaMCP aggregates MCP servers into namespaces and endpoints, with middleware for filtering and policy. That answers federation and access. It does not prove that a tool recently delivered a real result under an outside probe.
+
+[TOA](https://github.com/Carmel-Labs-Inc/toa) (`toa/0.1`) is an Apache-2.0 signed JSON evidence format for MCP tool delivery (reach, invoke, functional, shape, and related layers). It is not a wire protocol. It is not meant to run on every live `tools/call`.
+
+## Suggested fit
+
+Optional, off by default. Before enabling a new MCP server in a namespace (or promoting an endpoint to production), require an attestation and verify it offline with `--require-emitter` and optional `--max-age`.
+
+- Any party can emit if they sign the schema.
+- AgentStatus is one optional emitter.
+- No AgentStatus account is required to verify.
+
+```yaml
+      # After your MetaMCP config / smoke checks for a new server.
+      - name: Verify tool delivery attestation
+        if: hashFiles('toa.json') != ''
+        run: |
+          pip install "git+https://github.com/Carmel-Labs-Inc/toa.git@99e2690fec24a5290d9542e58383a8bf753e8b74#subdirectory=python"
+          toa-verify toa.json --require-emitter agentstatus --require-layer functional=pass --max-age 7d
+```
+
+Copy-paste workflow: `examples/toa-after-aggregate.yml` in this repository.
+
+## Out of scope
+
+- Replacing MetaMCP middleware, auth, or rate limits
+- Signing every production `tools/call`
+- Changing the aggregator hot path
+
+<Card title="MCP Servers" icon="server" href="/en/concepts/mcp-servers">
+  How to configure servers that you might gate with TOA
+</Card>
