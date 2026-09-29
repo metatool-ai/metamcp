@@ -49,7 +49,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -81,15 +80,10 @@ export default function ApiKeysPage() {
     name: string;
   } | null>(null);
   const [apiKeyToEdit, setApiKeyToEdit] = useState<ApiKeyRow | null>(null);
-  // Administrators: also the keys of every user (to revoke a leaked one)
-  const [showAllUsers, setShowAllUsers] = useState(false);
   const { t, locale } = useTranslations();
   const { isAdmin, can } = useAccess();
-  const allUsers = isAdmin && showAllUsers;
 
-  const { data: apiKeys, refetch } = trpc.frontend.apiKeys.list.useQuery({
-    allUsers,
-  });
+  const { data: apiKeys, refetch } = trpc.frontend.apiKeys.list.useQuery();
   const createMutation = trpc.frontend.apiKeys.create.useMutation({
     onSuccess: (data) => {
       setNewApiKey(data.key);
@@ -335,19 +329,6 @@ export default function ApiKeysPage() {
 
       <Separator />
 
-      {isAdmin && (
-        <div className="flex items-center justify-end gap-2">
-          <Switch
-            id="api-keys-all-users"
-            checked={showAllUsers}
-            onCheckedChange={setShowAllUsers}
-          />
-          <Label htmlFor="api-keys-all-users" className="text-sm">
-            {t("api-keys:allUsersKeys")}
-          </Label>
-        </div>
-      )}
-
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -357,9 +338,7 @@ export default function ApiKeysPage() {
               <TableHead>{t("api-keys:created")}</TableHead>
               <TableHead>{t("common:status")}</TableHead>
               <TableHead>{t("api-keys:scopeColumn")}</TableHead>
-              <TableHead>
-                {allUsers ? t("api-keys:owner") : t("api-keys:ownership")}
-              </TableHead>
+              <TableHead>{t("api-keys:ownership")}</TableHead>
               <TableHead className="w-[100px]">{t("common:actions")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -413,27 +392,18 @@ export default function ApiKeysPage() {
                     <ScopeBadge apiKey={apiKey} />
                   </TableCell>
                   <TableCell>
-                    {allUsers && apiKey.owner ? (
-                      <span className="block max-w-[14rem] truncate text-sm">
-                        <span className="font-medium">{apiKey.owner.name}</span>{" "}
-                        <span className="text-muted-foreground">
-                          {apiKey.owner.email}
-                        </span>
-                      </span>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className={
-                          apiKey.user_id === null
-                            ? "bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
-                            : "bg-gray-50 dark:bg-gray-950/20 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-800"
-                        }
-                      >
-                        {apiKey.user_id === null
-                          ? t("api-keys:ownerOrganization")
-                          : t("api-keys:ownerPersonal")}
-                      </Badge>
-                    )}
+                    <Badge
+                      variant="outline"
+                      className={
+                        apiKey.user_id === null
+                          ? "bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+                          : "bg-gray-50 dark:bg-gray-950/20 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-800"
+                      }
+                    >
+                      {apiKey.user_id === null
+                        ? t("api-keys:ownerOrganization")
+                        : t("api-keys:ownerPersonal")}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">

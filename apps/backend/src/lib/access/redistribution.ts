@@ -21,7 +21,6 @@ export async function checkNamespaceRedistribution(
   principal: AccessPrincipal,
   namespaceUuid: string,
 ): Promise<string | null> {
-  if (principal.isAdmin) return null;
   const namespace =
     await namespacesRepository.findByUuidWithServers(namespaceUuid);
   const servers = namespace?.servers ?? [];
@@ -118,7 +117,6 @@ export async function checkEmbeddedCredentialRedistribution(
   principal: AccessPrincipal,
   server: ServerCredentials,
 ): Promise<string | null> {
-  if (principal.isAdmin) return null;
   const credentials = await findEmbeddedCredentials(server);
   if (credentials.fullAccess) {
     return `MCP server "${server.name}" contains a personal MetaMCP API key or token: sharing it would share that account's whole access. Use an API key limited to specific endpoints.`;

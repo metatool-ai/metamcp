@@ -34,19 +34,18 @@ export function storedApiKeyFields(key: string) {
 
 /**
  * Which keys a caller may manage: their own, plus organisation keys
- * (administrators), plus every user's keys (administrators, to revoke them).
+ * (administrators). Never the personal keys of other users.
  */
 export type ApiKeyManagementScope = {
   userId: string;
   organization?: boolean;
-  anyUser?: boolean;
 };
 
-function manageableBy(scope: ApiKeyManagementScope): SQL | undefined {
-  if (scope.anyUser) return undefined;
+function manageableBy(scope: ApiKeyManagementScope): SQL {
+  const own = eq(apiKeysTable.user_id, scope.userId);
   return scope.organization
-    ? or(eq(apiKeysTable.user_id, scope.userId), isNull(apiKeysTable.user_id))
-    : eq(apiKeysTable.user_id, scope.userId);
+    ? (or(own, isNull(apiKeysTable.user_id)) ?? own)
+    : own;
 }
 
 const keyColumns = {

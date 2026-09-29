@@ -128,13 +128,6 @@ export const DeleteApiKeyResponseSchema = z.object({
   message: z.string(),
 });
 
-export const ListApiKeysRequestSchema = z
-  .object({
-    // Administrators only: the keys of every user (to revoke a leaked one)
-    allUsers: z.boolean().optional(),
-  })
-  .optional();
-
 export const ApiKeyOwnerSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -195,7 +188,6 @@ export type UpdateApiKeyRequest = z.infer<typeof UpdateApiKeyRequestSchema>;
 export type UpdateApiKeyResponse = z.infer<typeof UpdateApiKeyResponseSchema>;
 export type DeleteApiKeyRequest = z.infer<typeof DeleteApiKeyRequestSchema>;
 export type DeleteApiKeyResponse = z.infer<typeof DeleteApiKeyResponseSchema>;
-export type ListApiKeysRequest = z.infer<typeof ListApiKeysRequestSchema>;
 export type ListApiKeysResponse = z.infer<typeof ListApiKeysResponseSchema>;
 export type ValidateApiKeyRequest = z.infer<typeof ValidateApiKeyRequestSchema>;
 export type ValidateApiKeyResponse = z.infer<

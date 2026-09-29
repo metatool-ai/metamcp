@@ -96,7 +96,12 @@ export async function serializeNamespacesForPrincipal(
 async function validateNamespaceServers(
   principal: AccessPrincipal,
   serverUuids: string[],
-  options: { namespaceIsShared: boolean; previousServerUuids?: string[] },
+  options: {
+    namespaceIsShared: boolean;
+    // Organisation namespace (no owner)
+    organisation?: boolean;
+    previousServerUuids?: string[];
+  },
 ): Promise<
   { ok: true; servers: DatabaseMcpServer[] } | { ok: false; message: string }
 > {
@@ -123,7 +128,41 @@ async function validateNamespaceServers(
     };
   }
 
-  if (options.namespaceIsShared && !principal.isAdmin) {
+  // An organisation namespace serves the whole organisation: only
+  // organisation servers and servers their owner shared with everyone.
+  if (options.organisation) {
+    const personal = servers.filter(
+      (server) => !previous.has(server.uuid) && server.user_id !== null,
+    );
+    if (personal.length > 0) {
+      const [everyone, grants] = await Promise.all([
+        accessService.getEveryoneGroup(),
+        resourceSharesRepository.findGrantsForResources(
+          "mcp_server",
+          personal.map((server) => server.uuid),
+        ),
+      ]);
+      const notShared = personal.filter(
+        (server) =>
+          !grants.some(
+            (grant) =>
+              grant.resourceUuid === server.uuid &&
+              grant.groupUuid !== null &&
+              grant.groupUuid === everyone?.uuid,
+          ),
+      );
+      if (notShared.length > 0) {
+        return {
+          ok: false,
+          message: `An organisation namespace can only contain organisation MCP servers or servers shared with everyone: ${notShared
+            .map((server) => `"${server.name}"`)
+            .join(", ")}.`,
+        };
+      }
+    }
+  }
+
+  if (options.namespaceIsShared) {
     const added = servers.filter((server) => !previous.has(server.uuid));
     const everyone = await accessService.getEveryoneGroup();
     const grants = await resourceSharesRepository.findGrantsForResources(
@@ -212,7 +251,7 @@ export const namespacesImplementations = {
         const validation = await validateNamespaceServers(
           principal,
           input.mcpServerUuids,
-          { namespaceIsShared: false },
+          { namespaceIsShared: false, organisation: effectiveUserId === null },
         );
         if (!validation.ok) {
           return { success: false as const, message: validation.message };
@@ -507,6 +546,7 @@ export const namespacesImplementations = {
           {
             namespaceIsShared:
               (shareCounts.get(input.uuid) ?? 0) > 0 || hasOpenEndpoint,
+            organisation: ownerDecision.ownerId === null,
             previousServerUuids:
               existingWithServers?.servers.map((server) => server.uuid) ?? [],
           },

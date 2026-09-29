@@ -5,7 +5,7 @@
     "viewer": "Lecteur"
   },
   "roleDescriptions": {
-    "admin": "Contrôle total : utilisateurs, groupes, paramètres, journaux et toutes les ressources.",
+    "admin": "Contrôle total de l'instance : utilisateurs, groupes, paramètres, journaux et ressources de l'organisation. Les ressources personnelles des autres restent les leurs.",
     "editor": "Crée et partage ses propres serveurs MCP, namespaces et endpoints.",
     "viewer": "Utilise ce qui est partagé avec lui. Peut créer des clés API personnelles."
   },

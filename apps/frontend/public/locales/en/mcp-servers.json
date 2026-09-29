@@ -192,7 +192,10 @@
     "streamableHttp": "STREAMABLE_HTTP",
     "errorStatus": "Error Status",
     "error": "Error",
-    "noError": "No Error"
+    "noError": "No Error",
+    "showOthers": "Show other users' servers",
+    "readOnlyOther": "Read only",
+    "readOnlyOtherHint": "Personal server of another user: administrators can see it, not use or change it."
   },
   "detail": {
     "backToServers": "Back to MCP Servers",

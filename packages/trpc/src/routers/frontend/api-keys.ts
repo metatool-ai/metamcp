@@ -4,8 +4,6 @@ import {
   CreateApiKeyResponseSchema,
   DeleteApiKeyRequestSchema,
   DeleteApiKeyResponseSchema,
-  type ListApiKeysRequest,
-  ListApiKeysRequestSchema,
   ListApiKeysResponseSchema,
   UpdateApiKeyRequestSchema,
   UpdateApiKeyResponseSchema,
@@ -23,7 +21,6 @@ export const createApiKeysRouter = (implementations: {
   ) => Promise<z.infer<typeof CreateApiKeyResponseSchema>>;
   list: (
     principal: AccessPrincipal,
-    input?: ListApiKeysRequest,
   ) => Promise<z.infer<typeof ListApiKeysResponseSchema>>;
   update: (
     input: z.infer<typeof UpdateApiKeyRequestSchema>,
@@ -46,10 +43,9 @@ export const createApiKeysRouter = (implementations: {
       }),
 
     list: protectedProcedure
-      .input(ListApiKeysRequestSchema)
       .output(ListApiKeysResponseSchema)
-      .query(async ({ ctx, input }) => {
-        return implementations.list(ctx.principal, input);
+      .query(async ({ ctx }) => {
+        return implementations.list(ctx.principal);
       }),
 
     update: protectedProcedure

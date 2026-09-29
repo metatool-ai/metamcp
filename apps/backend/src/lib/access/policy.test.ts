@@ -153,15 +153,34 @@ describe("resolveResourceAccess", () => {
     ...overrides,
   });
 
-  it("gives admins manage access on anything, even without shares", () => {
+  it("gives admins manage access on organisation resources only", () => {
+    const admin = principal({ isAdmin: true, role: "admin" });
     expect(
       resolveResourceAccess({
-        principal: principal({ isAdmin: true, role: "admin" }),
-        ownerId: "someone-else",
+        principal: admin,
+        ownerId: null,
         shares: [],
         everyoneGroupUuid: EVERYONE,
       }),
     ).toEqual({ level: "manage", reason: "admin" });
+    // The personal resources of others: nothing without a share...
+    expect(
+      resolveResourceAccess({
+        principal: admin,
+        ownerId: "someone-else",
+        shares: [],
+        everyoneGroupUuid: EVERYONE,
+      }),
+    ).toBeNull();
+    // ...and only what a share grants, like anyone else
+    expect(
+      resolveResourceAccess({
+        principal: admin,
+        ownerId: "someone-else",
+        shares: [share({ groupUuid: EVERYONE })],
+        everyoneGroupUuid: EVERYONE,
+      }),
+    ).toEqual({ level: "use", reason: "share" });
   });
 
   it("gives owners manage access", () => {

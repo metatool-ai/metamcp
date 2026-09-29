@@ -7,6 +7,7 @@ import {
   type DatabaseMcpServer,
   DeleteMcpServerResponseSchema,
   GetMcpServerResponseSchema,
+  type ListMcpServersRequest,
   ListMcpServersResponseSchema,
   type McpServer,
   McpServerTypeEnum,
@@ -272,18 +273,41 @@ export const mcpServersImplementations = {
 
   list: async (
     principal: AccessPrincipal,
+    input?: ListMcpServersRequest,
   ): Promise<z.infer<typeof ListMcpServersResponseSchema>> => {
     try {
-      // Servers the caller owns or that are shared with them (all for admins)
+      // Servers the caller owns, that are shared with them, and the
+      // organisation's for admins
       const filter = await accessService.accessibleFilter(
         principal,
         "mcp_server",
       );
       const servers = await mcpServersRepository.findAllByAccess(filter);
+      const data = await serializeServersForPrincipal(principal, servers);
+
+      // Administrators may look at the personal servers of other users,
+      // without any access to them: no use, no change, secrets hidden.
+      if (principal.isAdmin && input?.includeOthers) {
+        const listed = new Set(data.map((server) => server.uuid));
+        const others = (
+          await mcpServersRepository.findPersonalOfOtherUsers(principal.userId)
+        ).filter((server) => !listed.has(server.uuid));
+        const owners = await loadOwners(others.map((server) => server.user_id));
+        for (const server of others) {
+          data.push(
+            redactServerSecrets({
+              ...McpServersSerializer.serializeMcpServer(server),
+              owner: server.user_id
+                ? (owners.get(server.user_id) ?? null)
+                : null,
+            }),
+          );
+        }
+      }
 
       return {
         success: true as const,
-        data: await serializeServersForPrincipal(principal, servers),
+        data,
         message: "MCP servers retrieved successfully",
       };
     } catch (error) {

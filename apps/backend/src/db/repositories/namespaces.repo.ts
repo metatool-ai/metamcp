@@ -5,7 +5,7 @@ import {
   NamespaceCreateInput,
   NamespaceUpdateInput,
 } from "@repo/zod-types";
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../index";
 import {
@@ -15,7 +15,7 @@ import {
   namespaceToolMappingsTable,
   toolsTable,
 } from "../schema";
-import type { AccessibleFilter } from "./access-filter";
+import { type AccessibleFilter, accessibleWhere } from "./access-filter";
 import { namespaceMappingsRepository } from "./namespace-mappings.repo";
 
 export class NamespacesRepository {
@@ -84,7 +84,7 @@ export class NamespacesRepository {
       .orderBy(desc(namespacesTable.created_at));
   }
 
-  // Find namespaces a principal can see (owned + shared, or all for admins)
+  // Find namespaces a principal can see (owned, shared, organisation for admins)
   async findAllByAccess(
     filter: AccessibleFilter,
   ): Promise<DatabaseNamespace[]> {
@@ -99,14 +99,7 @@ export class NamespacesRepository {
       })
       .from(namespacesTable)
       .where(
-        filter.all
-          ? undefined
-          : filter.sharedUuids.length > 0
-            ? or(
-                eq(namespacesTable.user_id, filter.ownerId),
-                inArray(namespacesTable.uuid, filter.sharedUuids),
-              )
-            : eq(namespacesTable.user_id, filter.ownerId),
+        accessibleWhere(filter, namespacesTable.user_id, namespacesTable.uuid),
       )
       .orderBy(desc(namespacesTable.created_at));
   }

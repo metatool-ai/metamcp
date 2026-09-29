@@ -101,8 +101,9 @@ export type ShareGrant = {
 /**
  * Computes the current user's access to a resource.
  *
- * - admins get `manage` on everything;
  * - the owner (user_id) gets `manage`;
+ * - admins get `manage` on organisation resources (no owner), and nothing
+ *   more than anyone else on the personal resources of other users;
  * - otherwise the highest level among the shares targeting the user directly,
  *   one of their groups, or the implicit "Everyone" group.
  *
@@ -117,11 +118,11 @@ export function resolveResourceAccess(input: {
 }): ResourceAccess | null {
   const { principal, ownerId, shares, everyoneGroupUuid } = input;
 
-  if (principal.isAdmin) {
-    return { level: "manage", reason: "admin" };
-  }
   if (ownerId !== null && ownerId === principal.userId) {
     return { level: "manage", reason: "owner" };
+  }
+  if (ownerId === null && principal.isAdmin) {
+    return { level: "manage", reason: "admin" };
   }
 
   const memberOf = new Set(principal.groupUuids);

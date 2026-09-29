@@ -49,16 +49,19 @@ const ADMIN_TOOLS_MESSAGE =
 /**
  * Access to an endpoint derives from its namespace: whoever can use the
  * namespace can use (and see) its endpoints, and managing an endpoint requires
- * owning it or managing its namespace.
+ * owning it or managing its namespace. Administrators manage the
+ * organisation's endpoints.
  */
 function endpointAccess(
   principal: AccessPrincipal,
   endpoint: Pick<DatabaseEndpoint, "user_id">,
   namespaceAccess: ResourceAccess | null,
 ): ResourceAccess | null {
-  if (principal.isAdmin) return { level: "manage", reason: "admin" };
   if (endpoint.user_id !== null && endpoint.user_id === principal.userId) {
     return { level: "manage", reason: "owner" };
+  }
+  if (endpoint.user_id === null && principal.isAdmin) {
+    return { level: "manage", reason: "admin" };
   }
   if (!namespaceAccess) return null;
   return {

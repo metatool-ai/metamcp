@@ -4,7 +4,7 @@ import {
   McpServerErrorStatusEnum,
   McpServerUpdateInput,
 } from "@repo/zod-types";
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { DatabaseError } from "pg";
 import { z } from "zod";
 
@@ -12,7 +12,7 @@ import logger from "@/utils/logger";
 
 import { db } from "../index";
 import { mcpServersTable } from "../schema";
-import type { AccessibleFilter } from "./access-filter";
+import { type AccessibleFilter, accessibleWhere } from "./access-filter";
 
 // Helper function to handle PostgreSQL errors
 function handleDatabaseError(
@@ -86,23 +86,29 @@ export class McpServersRepository {
       .orderBy(desc(mcpServersTable.created_at));
   }
 
-  // Find servers a principal can see (owned + shared, or all for admins)
+  // Find servers a principal can see (owned, shared, organisation for admins)
   async findAllByAccess(
     filter: AccessibleFilter,
   ): Promise<DatabaseMcpServer[]> {
-    if (filter.all) {
-      return await this.findAll();
-    }
     return await db
       .select()
       .from(mcpServersTable)
       .where(
-        filter.sharedUuids.length > 0
-          ? or(
-              eq(mcpServersTable.user_id, filter.ownerId),
-              inArray(mcpServersTable.uuid, filter.sharedUuids),
-            )
-          : eq(mcpServersTable.user_id, filter.ownerId),
+        accessibleWhere(filter, mcpServersTable.user_id, mcpServersTable.uuid),
+      )
+      .orderBy(desc(mcpServersTable.created_at));
+  }
+
+  // Personal servers of every user but `userId` (listed for administrators)
+  async findPersonalOfOtherUsers(userId: string): Promise<DatabaseMcpServer[]> {
+    return await db
+      .select()
+      .from(mcpServersTable)
+      .where(
+        and(
+          isNotNull(mcpServersTable.user_id),
+          ne(mcpServersTable.user_id, userId),
+        ),
       )
       .orderBy(desc(mcpServersTable.created_at));
   }

@@ -15,7 +15,7 @@ Every rule is enforced by the backend (tRPC API, MCP endpoints, inspector proxy 
 
 | Role | Intended for | What it can do |
 |------|--------------|----------------|
-| **Admin** | Platform owners | Everything: users, groups, roles, single sign-on, settings, live logs, organisation-owned resources. Admins can open and manage every resource. |
+| **Admin** | Platform owners | Everything: users, groups, roles, single sign-on, settings, live logs, organisation-owned resources. The personal resources of other users stay theirs (see [below](#administrators-and-personal-resources)). |
 | **Editor** | Teams publishing MCP servers | Adds MCP servers, builds namespaces, publishes endpoints and shares what they manage (configurable). |
 | **Viewer** | Consumers | Uses what is shared with them, through endpoints and API keys (configurable). |
 
@@ -68,7 +68,18 @@ Every MCP server, namespace and endpoint has an owner:
 - **A user**. The resource is private until its owner shares it.
 - **The organisation**. The resource is managed by administrators, and non-admins only see it once it is shared with them.
 
-Only administrators can create organisation resources, create resources on behalf of someone else, or transfer ownership.
+Only administrators can create organisation resources, create resources on behalf of someone else, or transfer ownership (of resources they manage).
+
+An **organisation namespace** serves the whole organisation: it only contains organisation MCP servers and servers their owner shared with Everyone. A personal server shared with Everyone leaves the organisation namespaces when that share is removed.
+
+### Administrators and personal resources
+
+Administrators manage the organisation, not the personal resources of its users. On an MCP server, namespace or endpoint owned by another user, an administrator has the access that user shared with them, like anyone else:
+
+- they cannot use it (endpoints, inspector, API keys), put it in a namespace, change it, share it or delete it;
+- in **MCP servers**, the *Show other users' servers* switch (off by default) lists the personal servers of other users, read only and without their secrets.
+
+To take over the resources of someone who leaves, delete the user and transfer their resources (see [Managing users](#managing-users)).
 
 ## Sharing
 
@@ -80,13 +91,13 @@ MCP servers and namespaces can be shared with a **user**, a **group** or **Every
 | **Can edit** | Also change the configuration, tools and credentials. |
 | **Can manage** | Also delete it and choose who has access. |
 
-The owner and administrators always have *manage* access. When several grants apply (direct, groups, Everyone), the highest level wins.
+The owner always has *manage* access, and administrators have it on organisation resources. When several grants apply (direct, groups, Everyone), the highest level wins.
 
 Rules worth knowing:
 
 - **Endpoints follow their namespace.** Anyone who can use a namespace can connect to its endpoints. Publishing a namespace through an endpoint requires managing that namespace. Owning an endpoint grants nothing more: its owner loses it with the access to its namespace.
 - **Namespaces grant their tools, not their servers.** Using a namespace does not give access to the pages or configuration of its servers.
-- **No redistribution.** You cannot share a namespace, or add servers to a shared namespace, if it contains servers you do not manage, unless those servers are shared with Everyone. Administrators are exempt. An endpoint without authentication counts as sharing its namespace, and a server whose configuration holds a MetaMCP credential (such as the server generated for an endpoint) counts as the namespaces that credential reaches; one holding a *full* personal key or OAuth token cannot be shared at all.
+- **No redistribution.** You cannot share a namespace, or add servers to a shared namespace, if it contains servers you do not manage, unless those servers are shared with Everyone. Administrators follow the same rule. An endpoint without authentication counts as sharing its namespace, and a server whose configuration holds a MetaMCP credential (such as the server generated for an endpoint) counts as the namespaces that credential reaches; one holding a *full* personal key or OAuth token cannot be shared at all.
 - **Access is checked continuously.** When a share, a group membership or a role is removed, the servers concerned leave the namespaces built on them, and the next request of an open MCP session is refused.
 - **Everyone is use-only for non-admins.** Only administrators can give edit or manage access to the whole organisation.
 
@@ -101,13 +112,13 @@ Each key also has a **scope**, chosen when it is created and editable afterwards
 | Scope | The key can |
 |-------|-------------|
 | **Full account access** | Do everything its owner can do: use every endpoint of the namespaces the owner can use, and the MetaMCP admin tools on endpoints where an administrator enabled them. An organisation key with this scope reaches the namespaces shared with Everyone. |
-| **Specific endpoints** | Only **use the MCP servers** of the endpoints listed: MCP (Streamable HTTP and SSE) and REST tool calls. It never gets the MetaMCP admin tools nor the endpoint administration routes. A personal key can only list endpoints its owner can use, and stops working on an endpoint as soon as the owner loses access to it. An organisation key can be dedicated to any endpoint by an administrator (a service account for that endpoint). |
+| **Specific endpoints** | Only **use the MCP servers** of the endpoints listed: MCP (Streamable HTTP and SSE) and REST tool calls. It never gets the MetaMCP admin tools nor the endpoint administration routes. A personal key can only list endpoints its owner can use, and stops working on an endpoint as soon as the owner loses access to it. An organisation key can be dedicated by an administrator to endpoints of organisation namespaces or of namespaces shared with Everyone (a service account for those endpoints). |
 
 Prefer endpoint-scoped keys for MCP clients and integrations: a leaked key then exposes the tools of a few endpoints, not the whole account.
 
 The MCP server that MetaMCP can generate with a new endpoint ("*&lt;endpoint&gt;-endpoint*") receives such a key, limited to that endpoint and owned by the endpoint's owner.
 
-In **API keys**, administrators can also display **the keys of all users**, to disable or delete a leaked one.
+API keys are personal: nobody, administrators included, sees or changes the keys of another user. To cut off the keys of someone, disable the user: their keys are then rejected.
 
 ## Managing users
 
@@ -185,3 +196,12 @@ The database migration keeps existing deployments working:
 <Note>
 After upgrading, review **Administration → Users** and the shares of your organisation resources: former public resources could be edited by anyone, and are now read-only for non-admins.
 </Note>
+
+When you upgrade from version 3.0.0, administrators lose access to the personal resources of other users:
+
+- a personal namespace of an administrator stops exposing the personal servers of others that are not shared with them;
+- an organisation namespace stops exposing personal servers that are not shared with Everyone;
+- an organisation API key limited to endpoints stops working on the endpoints of personal namespaces;
+- administrators no longer list nor change the API keys of other users.
+
+Ask the owners to share what administrators must keep using. When someone leaves, deleting their account can transfer their resources to the organisation.

@@ -20,6 +20,7 @@ import {
   Edit,
   Eye,
   FileText,
+  Lock,
   MoreHorizontal,
   Search,
   SearchCode,
@@ -53,6 +54,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -72,8 +75,11 @@ interface McpServersListProps {
 export function McpServersList({ onRefresh }: McpServersListProps) {
   const { t } = useTranslations();
   const router = useRouter();
-  const { me, can } = useAccess();
+  const { me, can, isAdmin } = useAccess();
   const [serverToShare, setServerToShare] = useState<McpServer | null>(null);
+  // Administrators: also look at the personal servers of other users
+  const [showOthers, setShowOthers] = useState(false);
+  const includeOthers = isAdmin && showOthers;
   const [sorting, setSorting] = useState<SortingState>([
     {
       id: "created_at",
@@ -96,7 +102,9 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
     error,
     isLoading,
     refetch,
-  } = trpc.frontend.mcpServers.list.useQuery();
+  } = trpc.frontend.mcpServers.list.useQuery(
+    includeOthers ? { includeOthers: true } : undefined,
+  );
 
   // tRPC mutation for deleting server
   const deleteServerMutation = trpc.frontend.mcpServers.delete.useMutation({
@@ -164,6 +172,22 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
       },
       cell: ({ row }) => {
         const server = row.original;
+        // Listed for an administrator without any access to it
+        if (!server.access) {
+          return (
+            <div className="space-y-1 px-3 py-2">
+              <div className="font-medium">{server.name}</div>
+              <Badge
+                variant="outline"
+                className="gap-1 text-muted-foreground"
+                title={t("mcp-servers:list.readOnlyOtherHint")}
+              >
+                <Lock className="size-3" aria-hidden />
+                {t("mcp-servers:list.readOnlyOther")}
+              </Badge>
+            </div>
+          );
+        }
         return (
           <div className="space-y-1 px-3 py-2">
             <div
@@ -335,6 +359,9 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
       header: t("mcp-servers:list.actions"),
       cell: ({ row }) => {
         const server = row.original;
+        if (!server.access) {
+          return null;
+        }
 
         const copyServerJson = () => {
           const config: Record<string, unknown> = {
@@ -503,17 +530,33 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
     return <McpServersListSkeleton />;
   }
 
+  const othersSwitch = isAdmin && (
+    <div className="flex items-center gap-2">
+      <Switch
+        id="mcp-servers-show-others"
+        checked={showOthers}
+        onCheckedChange={setShowOthers}
+      />
+      <Label htmlFor="mcp-servers-show-others" className="text-sm">
+        {t("mcp-servers:list.showOthers")}
+      </Label>
+    </div>
+  );
+
   if (servers.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-12 text-center">
-        <div className="flex flex-col items-center justify-center mx-auto max-w-md">
-          <Server className="size-12 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-semibold">
-            {t("mcp-servers:list.noServersTitle")}
-          </h3>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {t("mcp-servers:list.noServersDescription")}
-          </p>
+      <div className="space-y-4">
+        {othersSwitch && <div className="flex justify-end">{othersSwitch}</div>}
+        <div className="rounded-lg border border-dashed p-12 text-center">
+          <div className="flex flex-col items-center justify-center mx-auto max-w-md">
+            <Server className="size-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold">
+              {t("mcp-servers:list.noServersTitle")}
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {t("mcp-servers:list.noServersDescription")}
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -592,6 +635,7 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
               className="pl-8"
             />
           </div>
+          {othersSwitch && <div className="ml-auto">{othersSwitch}</div>}
         </div>
         <div className="rounded-md border">
           <Table>

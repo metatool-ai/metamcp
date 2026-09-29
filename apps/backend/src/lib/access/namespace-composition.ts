@@ -18,8 +18,9 @@ import { canRedistributeServer } from "./sharing-rules";
  * forever through the namespaces built on it. A server stays in a namespace
  * while the namespace owner can use it; when the namespace is shared or
  * published without authentication, the owner must also be allowed to
- * redistribute it (see sharing-rules.ts). Organisation namespaces are
- * managed by administrators and not filtered.
+ * redistribute it (see sharing-rules.ts). Organisation namespaces serve the
+ * whole organisation: they expose organisation servers, and personal servers
+ * only while their owner shares them with everyone.
  */
 
 const TTL_MS = 5_000;
@@ -34,8 +35,6 @@ endpointAccessCache.onClear(() => cache.clear());
 async function computeAllowedServers(namespaceUuid: string): Promise<Allowed> {
   const namespace = await namespacesRepository.findByUuid(namespaceUuid);
   if (!namespace) return new Set();
-  if (namespace.user_id === null) return null;
-  const ownerId = namespace.user_id;
 
   const servers = await db
     .select({
@@ -49,6 +48,34 @@ async function computeAllowedServers(namespaceUuid: string): Promise<Allowed> {
     )
     .where(eq(namespaceServerMappingsTable.namespace_uuid, namespaceUuid));
 
+  if (namespace.user_id === null) {
+    const personal = servers.filter((server) => server.user_id !== null);
+    if (personal.length === 0) return null;
+    const [grants, everyone] = await Promise.all([
+      resourceSharesRepository.findGrantsForResources(
+        "mcp_server",
+        personal.map((server) => server.uuid),
+      ),
+      accessService.getEveryoneGroup(),
+    ]);
+    const allowed = new Set(
+      servers
+        .filter(
+          (server) =>
+            server.user_id === null ||
+            grants.some(
+              (grant) =>
+                grant.resourceUuid === server.uuid &&
+                grant.groupUuid !== null &&
+                grant.groupUuid === everyone?.uuid,
+            ),
+        )
+        .map((server) => server.uuid),
+    );
+    return allowed;
+  }
+  const ownerId = namespace.user_id;
+
   // The owner's own servers always stay.
   const allowed = new Set(
     servers.filter((server) => server.user_id === ownerId).map((s) => s.uuid),
@@ -59,7 +86,6 @@ async function computeAllowedServers(namespaceUuid: string): Promise<Allowed> {
   // A disabled owner can no longer use what was shared with them.
   const principal = await accessService.getPrincipal(ownerId);
   if (!principal) return allowed;
-  if (principal.isAdmin) return null;
 
   const [access, namespaceGrants, endpoints, serverGrants, everyone] =
     await Promise.all([

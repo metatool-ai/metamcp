@@ -6,6 +6,8 @@ import {
   CreateMcpServerResponseSchema,
   DeleteMcpServerResponseSchema,
   GetMcpServerResponseSchema,
+  type ListMcpServersRequest,
+  ListMcpServersRequestSchema,
   ListMcpServersResponseSchema,
   UpdateMcpServerRequestSchema,
   UpdateMcpServerResponseSchema,
@@ -25,6 +27,7 @@ export const createMcpServersRouter = (
     ) => Promise<z.infer<typeof CreateMcpServerResponseSchema>>;
     list: (
       principal: AccessPrincipal,
+      input?: ListMcpServersRequest,
     ) => Promise<z.infer<typeof ListMcpServersResponseSchema>>;
     bulkImport: (
       input: z.infer<typeof BulkImportMcpServersRequestSchema>,
@@ -51,9 +54,10 @@ export const createMcpServersRouter = (
   return router({
     // Protected: List all MCP servers
     list: protectedProcedure
+      .input(ListMcpServersRequestSchema)
       .output(ListMcpServersResponseSchema)
-      .query(async ({ ctx }) => {
-        return await implementations.list(ctx.principal);
+      .query(async ({ ctx, input }) => {
+        return await implementations.list(ctx.principal, input);
       }),
 
     // Protected: Get single MCP server by UUID

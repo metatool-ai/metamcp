@@ -274,16 +274,61 @@ describe.skipIf(!hasDatabase)("RBAC (integration)", async () => {
       ).toBe(false);
     });
 
-    it("lets admins see everything", async () => {
+    it("lets admins manage organisation servers and only look at personal ones", async () => {
       const admin = await createUser("admin");
       const user = await createUser("editor");
-      await createServer(user);
-      await createServer(null);
-      const list = await mcpServersImplementations.list(await principal(admin));
-      expect(list.data).toHaveLength(2);
+      const personal = await createServer(user);
+      const organisation = await createServer(null);
+      const adminPrincipal = await principal(admin);
+
+      const list = await mcpServersImplementations.list(adminPrincipal);
+      const listed = list.data.map((server) => server.uuid);
+      expect(listed).toContain(organisation.uuid);
+      expect(listed).not.toContain(personal.uuid);
       expect(
-        list.data.every((server) => server.access?.reason === "admin"),
-      ).toBe(true);
+        list.data.find((server) => server.uuid === organisation.uuid)?.access,
+      ).toEqual({ level: "manage", reason: "admin" });
+
+      // Asked for, the personal servers of others are listed: no access,
+      // secrets hidden
+      const all = await mcpServersImplementations.list(adminPrincipal, {
+        includeOthers: true,
+      });
+      const other = all.data.find((server) => server.uuid === personal.uuid);
+      expect(other).toMatchObject({
+        owner: { id: user },
+        secretsRedacted: true,
+        bearerToken: null,
+      });
+      expect(other?.access).toBeUndefined();
+      const serialized = JSON.stringify(other);
+      for (const secret of [
+        "super-secret",
+        "bearer-secret",
+        "header-secret",
+        "token=secret",
+      ]) {
+        expect(serialized).not.toContain(secret);
+      }
+
+      // A non-admin asking for them gets nothing more
+      const own = await mcpServersImplementations.list(await principal(user), {
+        includeOthers: true,
+      });
+      expect(own.data.map((server) => server.uuid)).toContain(personal.uuid);
+      expect(own.data.every((server) => server.access)).toBe(true);
+
+      // Not usable: no details, no namespace, no inspection
+      const details = await mcpServersImplementations.get(
+        { uuid: personal.uuid },
+        adminPrincipal,
+      );
+      expect(details.success).toBe(false);
+      const namespace = await namespacesImplementations.create(
+        { name: `admin-ns${++seq}`, mcpServerUuids: [personal.uuid] },
+        adminPrincipal,
+      );
+      expect(namespace.success).toBe(false);
     });
 
     it("enforces capabilities and ownership on create", async () => {

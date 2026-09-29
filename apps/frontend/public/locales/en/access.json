@@ -5,7 +5,7 @@
     "viewer": "Viewer"
   },
   "roleDescriptions": {
-    "admin": "Full control: users, groups, settings, logs and every resource.",
+    "admin": "Full control of the instance: users, groups, settings, logs and organisation resources. The personal resources of other users stay theirs.",
     "editor": "Creates and shares their own MCP servers, namespaces and endpoints.",
     "viewer": "Uses what is shared with them. Can create personal API keys."
   },

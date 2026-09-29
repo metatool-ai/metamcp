@@ -138,10 +138,12 @@ class AccessService {
     const result = new Map<string, ResourceAccess | null>();
     if (resources.length === 0) return result;
 
+    // Own resources, and organisation ones for admins, need no share lookup
     const needShares = resources
       .filter(
         (resource) =>
-          !principal.isAdmin && resource.user_id !== principal.userId,
+          resource.user_id !== principal.userId &&
+          !(resource.user_id === null && principal.isAdmin),
       )
       .map((resource) => resource.uuid);
 
@@ -196,18 +198,25 @@ class AccessService {
     return grant ? { level: grant.level, reason: "share" } : null;
   }
 
-  /** SQL-friendly description of the resources a principal can see. */
+  /**
+   * SQL-friendly description of the resources a principal can see: own ones,
+   * shared ones and, for administrators, the organisation's. Never the
+   * personal resources of other users (see resolveResourceAccess).
+   */
   async accessibleFilter(
     principal: AccessPrincipal,
     type: ShareResourceType,
   ): Promise<AccessibleFilter> {
-    if (principal.isAdmin) return { all: true };
     const sharedUuids = await resourceSharesRepository.findSharedResourceUuids(
       type,
       principal.userId,
       principal.groupUuids,
     );
-    return { all: false, ownerId: principal.userId, sharedUuids };
+    return {
+      ownerId: principal.userId,
+      sharedUuids,
+      organisation: principal.isAdmin,
+    };
   }
 }
 

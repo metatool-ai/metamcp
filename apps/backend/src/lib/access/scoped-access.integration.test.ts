@@ -60,6 +60,8 @@ describe.skipIf(!hasDatabase)("scoped access (integration)", async () => {
   const { endpointsImplementations } =
     await import("../../trpc/endpoints.impl");
   const { sharesImplementations } = await import("../../trpc/shares.impl");
+  const { namespacesImplementations } =
+    await import("../../trpc/namespaces.impl");
   const { oauthConsentImplementations } =
     await import("../../trpc/oauth-consent.impl");
   const { authenticateApiKey } =
@@ -340,7 +342,7 @@ describe.skipIf(!hasDatabase)("scoped access (integration)", async () => {
       expect((await authenticate(plain.key, endpoint)).passed).toBe(false);
     });
 
-    it("lets administrators list and revoke the keys of every user", async () => {
+    it("keeps the personal keys of users out of administrators' reach", async () => {
       const admin = await createUser("admin");
       const bob = await createUser("editor");
       const namespace = await createNamespace(bob, []);
@@ -350,34 +352,28 @@ describe.skipIf(!hasDatabase)("scoped access (integration)", async () => {
         await principal(bob),
       );
 
-      const own = await apiKeysImplementations.list(await principal(admin));
-      expect(own.apiKeys.some((row) => row.uuid === key.uuid)).toBe(false);
-
-      const all = await apiKeysImplementations.list(await principal(admin), {
-        allUsers: true,
-      });
-      const row = all.apiKeys.find((item) => item.uuid === key.uuid);
-      expect(row).toMatchObject({
-        scope: "endpoints",
-        endpoints: [{ uuid: endpoint.uuid, name: endpoint.name }],
-        owner: { id: bob },
-      });
-
-      // A non-admin asking for everything only gets their own keys
-      const bobList = await apiKeysImplementations.list(await principal(bob), {
-        allUsers: true,
-      });
-      expect(bobList.apiKeys.map((item) => item.uuid)).toEqual([key.uuid]);
-
-      await apiKeysImplementations.update(
-        { uuid: key.uuid, is_active: false },
+      const adminList = await apiKeysImplementations.list(
         await principal(admin),
       );
-      expect((await apiKeysRepository.validateApiKey(key.key)).valid).toBe(
+      expect(adminList.apiKeys.some((row) => row.uuid === key.uuid)).toBe(
         false,
       );
+      await expect(
+        apiKeysImplementations.update(
+          { uuid: key.uuid, is_active: false },
+          await principal(admin),
+        ),
+      ).rejects.toThrow(/not found/);
+      const deletion = await apiKeysImplementations.delete(
+        { uuid: key.uuid },
+        await principal(admin),
+      );
+      expect(deletion.success).toBe(false);
+      expect((await apiKeysRepository.validateApiKey(key.key)).valid).toBe(
+        true,
+      );
 
-      // Back to a full key: the endpoint list goes away
+      // Its owner still manages it; back to a full key, the endpoint list goes
       await apiKeysImplementations.update(
         { uuid: key.uuid, is_active: true, scope: "user" },
         await principal(bob),
@@ -504,20 +500,27 @@ describe.skipIf(!hasDatabase)("scoped access (integration)", async () => {
       const admin = await createUser("admin");
       const bob = await createUser("editor");
       const namespace = await createNamespace(bob, []);
-      const created = await endpointsImplementations.create(
-        {
-          name: `generated${++seq}`,
-          namespaceUuid: namespace.uuid,
-          enableApiKeyAuth: true,
-          enableClientMaxRate: false,
-          enableMaxRate: false,
-          enableOauth: false,
-          useQueryParamAuth: false,
-          enableMetamcpAdminTools: false,
-          createMcpServer: true,
-          user_id: bob,
-        },
+      const input = {
+        namespaceUuid: namespace.uuid,
+        enableApiKeyAuth: true,
+        enableClientMaxRate: false,
+        enableMaxRate: false,
+        enableOauth: false,
+        useQueryParamAuth: false,
+        enableMetamcpAdminTools: false,
+        createMcpServer: true,
+      };
+
+      // An administrator cannot build on the personal namespace of a user
+      const byAdmin = await endpointsImplementations.create(
+        { ...input, name: `generated${++seq}`, user_id: bob },
         await principal(admin),
+      );
+      expect(byAdmin.success).toBe(false);
+
+      const created = await endpointsImplementations.create(
+        { ...input, name: `generated${++seq}` },
+        await principal(bob),
       );
       expect(created.success).toBe(true);
 
@@ -620,6 +623,132 @@ describe.skipIf(!hasDatabase)("scoped access (integration)", async () => {
       const result = await secretsService.sweep();
       expect(result.failed).toBe(1);
       expect(result.updated).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("administrators and personal resources", () => {
+    const allowed = async (namespaceUuid: string) => {
+      endpointAccessCache.clear();
+      return [...((await allowedNamespaceServers(namespaceUuid)) ?? [])].sort();
+    };
+
+    it("drops the personal servers of others from an admin's namespaces", async () => {
+      const admin = await createUser("admin");
+      const bob = await createUser("editor");
+      const bobsServer = await createServer(bob);
+      const adminsServer = await createServer(admin);
+      // Composed while administrators could still do it
+      const namespace = await createNamespace(admin, [
+        bobsServer.uuid,
+        adminsServer.uuid,
+      ]);
+
+      expect(await allowed(namespace.uuid)).toEqual([adminsServer.uuid]);
+    });
+
+    it("keeps organisation namespaces to organisation servers and servers shared with everyone", async () => {
+      const admin = await createUser("admin");
+      const bob = await createUser("editor");
+      const orgServer = await createServer(null);
+      const bobsServer = await createServer(bob);
+      const namespace = await createNamespace(null, [
+        orgServer.uuid,
+        bobsServer.uuid,
+      ]);
+      expect(await allowed(namespace.uuid)).toEqual([orgServer.uuid]);
+
+      const everyone = must(await accessService.getEveryoneGroup());
+      await share(
+        "mcp_server",
+        bobsServer.uuid,
+        { groupUuid: everyone.uuid },
+        "use",
+      );
+      expect(await allowed(namespace.uuid)).toEqual(
+        [orgServer.uuid, bobsServer.uuid].sort(),
+      );
+
+      // Shared with the admin alone, a server cannot join it
+      const another = await createServer(bob);
+      await share("mcp_server", another.uuid, { userId: admin }, "manage");
+      const update = await namespacesImplementations.update(
+        {
+          uuid: namespace.uuid,
+          name: namespace.name,
+          mcpServerUuids: [orgServer.uuid, bobsServer.uuid, another.uuid],
+        },
+        await principal(admin),
+      );
+      expect(update.success).toBe(false);
+      expect(update.message).toMatch(/organisation namespace/);
+    });
+
+    it("never lets organisation keys reach the personal endpoints of users", async () => {
+      const admin = await createUser("admin");
+      const bob = await createUser("editor");
+      const namespace = await createNamespace(bob, []);
+      const endpoint = await createEndpoint(namespace.uuid, bob);
+
+      await expect(
+        apiKeysImplementations.create(
+          {
+            name: "org",
+            user_id: null,
+            scope: "endpoints",
+            endpoint_uuids: [endpoint.uuid],
+          },
+          await principal(admin),
+        ),
+      ).rejects.toThrow(/Organisation keys only reach/);
+
+      // Nor a key dedicated to it before this rule
+      const earlier = await apiKeysRepository.create({
+        name: "earlier",
+        user_id: null,
+        is_active: true,
+        scope: "endpoints",
+        endpoint_uuids: [endpoint.uuid],
+      });
+      endpointAccessCache.clear();
+      expect((await authenticate(earlier.key, endpoint)).passed).toBe(false);
+    });
+
+    it("gives an administrator's own keys no access to the personal endpoints of others", async () => {
+      const admin = await createUser("admin");
+      const bob = await createUser("editor");
+      const namespace = await createNamespace(bob, []);
+      const endpoint = await createEndpoint(namespace.uuid, bob);
+      const key = await apiKeysImplementations.create(
+        { name: "admin" },
+        await principal(admin),
+      );
+
+      endpointAccessCache.clear();
+      expect((await authenticate(key.key, endpoint)).passed).toBe(false);
+
+      // What its owner shares, the admin can use like anyone
+      await share("namespace", namespace.uuid, { userId: admin }, "use");
+      endpointAccessCache.clear();
+      expect((await authenticate(key.key, endpoint)).passed).toBe(true);
+    });
+
+    it("does not let administrators share the personal servers of others", async () => {
+      const admin = await createUser("admin");
+      const bob = await createUser("editor");
+      const alice = await createUser("editor");
+      const server = await createServer(bob);
+
+      const result = await sharesImplementations.upsert(
+        {
+          resourceType: "mcp_server",
+          resourceUuid: server.uuid,
+          subjectType: "user",
+          subjectId: alice,
+          level: "use",
+        },
+        await principal(admin),
+      );
+      expect(result.success).toBe(false);
     });
   });
 });

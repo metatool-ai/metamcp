@@ -317,12 +317,20 @@ export const authenticateApiKey = async (
 
 type AccessCheckResult = { allowed: boolean; message?: string };
 
+async function isOrganisationNamespace(
+  namespaceUuid: string,
+): Promise<boolean> {
+  const namespace = await namespacesRepository.findByUuid(namespaceUuid);
+  return namespace !== undefined && namespace.user_id === null;
+}
+
 /**
  * RBAC check for a caller identified by an API key or OAuth token. Access to
- * an endpoint is the access to its namespace: admins, the namespace owner and
- * anyone the namespace is shared with (directly, via a group or "Everyone").
- * Owning the endpoint itself grants nothing more. Disabled users are always
- * denied. Decisions are cached for a few seconds.
+ * an endpoint is the access to its namespace: the namespace owner, anyone the
+ * namespace is shared with (directly, via a group or "Everyone") and, for an
+ * organisation namespace, administrators. Owning the endpoint itself grants
+ * nothing more. Disabled users are always denied. Decisions are cached for a
+ * few seconds.
  */
 async function checkUserEndpointAccess(
   userId: string,
@@ -346,16 +354,13 @@ async function checkUserEndpointAccess(
 
   // Owning the endpoint is not enough: the namespace behind it must still be
   // reachable (a revoked share or group membership must cut the access).
-  let allowed = principal.isAdmin;
-  if (!allowed) {
-    const namespace = await namespacesRepository.findByUuid(
-      endpoint.namespace_uuid,
-    );
-    allowed = Boolean(
-      namespace &&
-      (await accessService.resolveAccessOne(principal, "namespace", namespace)),
-    );
-  }
+  const namespace = await namespacesRepository.findByUuid(
+    endpoint.namespace_uuid,
+  );
+  const allowed = Boolean(
+    namespace &&
+    (await accessService.resolveAccessOne(principal, "namespace", namespace)),
+  );
 
   endpointAccessCache.set(cacheKey, allowed);
   return allowed
@@ -371,9 +376,10 @@ async function checkUserEndpointAccess(
  *
  * An endpoint-scoped key only works on its endpoints; a personal one must
  * also still be allowed there by its owner's access, re-checked on every
- * request (shares, groups and roles change). An organisation key dedicated
- * to endpoints by an administrator works on them; other organisation keys
- * (not tied to a user) only reach namespaces shared with everyone.
+ * request (shares, groups and roles change). An organisation key (not tied
+ * to a user) reaches the namespaces shared with everyone and, when an
+ * administrator dedicated it to endpoints, those of organisation namespaces:
+ * never the personal namespaces of users.
  */
 async function checkApiKeyAccess(
   validation: {
@@ -397,27 +403,27 @@ async function checkApiKeyAccess(
     return checkUserEndpointAccess(validation.user_id, endpoint);
   }
 
-  if (validation.scope === "endpoints") {
-    return { allowed: true };
-  }
-
-  const cacheKey = `org-key:${endpoint.namespace_uuid}`;
+  const scoped = validation.scope === "endpoints";
+  const cacheKey = `org-key:${scoped ? "scoped" : "all"}:${endpoint.namespace_uuid}`;
   let allowed = endpointAccessCache.get(cacheKey);
   if (allowed === undefined) {
-    allowed = Boolean(
-      await accessService.resolveEveryoneAccess(
-        "namespace",
-        endpoint.namespace_uuid,
-      ),
-    );
+    allowed =
+      (scoped && (await isOrganisationNamespace(endpoint.namespace_uuid))) ||
+      Boolean(
+        await accessService.resolveEveryoneAccess(
+          "namespace",
+          endpoint.namespace_uuid,
+        ),
+      );
     endpointAccessCache.set(cacheKey, allowed);
   }
   return allowed
     ? { allowed: true }
     : {
         allowed: false,
-        message:
-          "Organisation API keys can only access namespaces shared with everyone. Use a personal API key.",
+        message: scoped
+          ? "Organisation API keys only reach organisation namespaces and namespaces shared with everyone. Use a personal API key."
+          : "Organisation API keys can only access namespaces shared with everyone. Use a personal API key.",
       };
 }
 

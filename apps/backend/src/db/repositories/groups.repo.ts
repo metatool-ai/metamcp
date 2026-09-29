@@ -149,7 +149,7 @@ export class GroupsRepository {
         {
           name: "Administrators",
           description:
-            "Members are MetaMCP administrators: they manage users, groups, settings and every resource.",
+            "Members are MetaMCP administrators: they manage users, groups, settings and the organisation's resources.",
           role: "admin",
           system_key: "admins",
         },

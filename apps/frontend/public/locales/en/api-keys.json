@@ -62,8 +62,6 @@
     "other": "{{count}} endpoints"
   },
   "scopeNoEndpoint": "No endpoint left",
-  "owner": "Owner",
-  "allUsersKeys": "Keys of all users",
   "edit": "Edit",
   "editApiKey": "Edit API key",
   "editApiKeyDescription": "Change the name, the status or what this key can be used for. The key itself stays the same.",

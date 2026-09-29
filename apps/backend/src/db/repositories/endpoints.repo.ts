@@ -8,7 +8,7 @@ import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 
 import { db } from "../index";
 import { endpointsTable, namespacesTable } from "../schema";
-import type { AccessibleFilter } from "./access-filter";
+import { type AccessibleFilter, accessibleWhere } from "./access-filter";
 
 export class EndpointsRepository {
   async create(input: EndpointCreateInput): Promise<DatabaseEndpoint> {
@@ -71,26 +71,22 @@ export class EndpointsRepository {
 
   /**
    * Endpoints a principal can see: their own endpoints and every endpoint of a
-   * namespace they can access (owned or shared). `namespaceFilter` is the
-   * principal's namespace access filter.
+   * namespace they can access (owned, shared, organisation for admins, with
+   * the organisation's endpoints). `namespaceFilter` is the principal's
+   * namespace access filter.
    */
   async findAllWithNamespacesByAccess(
     namespaceFilter: AccessibleFilter,
   ): Promise<DatabaseEndpointWithNamespace[]> {
-    const where = namespaceFilter.all
-      ? undefined
-      : or(
-          eq(endpointsTable.user_id, namespaceFilter.ownerId),
-          eq(namespacesTable.user_id, namespaceFilter.ownerId),
-          ...(namespaceFilter.sharedUuids.length > 0
-            ? [
-                inArray(
-                  endpointsTable.namespace_uuid,
-                  namespaceFilter.sharedUuids,
-                ),
-              ]
-            : []),
-        );
+    const where = or(
+      eq(endpointsTable.user_id, namespaceFilter.ownerId),
+      accessibleWhere(
+        namespaceFilter,
+        namespacesTable.user_id,
+        namespacesTable.uuid,
+      ),
+      ...(namespaceFilter.organisation ? [isNull(endpointsTable.user_id)] : []),
+    );
 
     return await db
       .select({

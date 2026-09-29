@@ -5,7 +5,6 @@ import {
   CreateApiKeyResponseSchema,
   DeleteApiKeyRequestSchema,
   DeleteApiKeyResponseSchema,
-  type ListApiKeysRequest,
   ListApiKeysResponseSchema,
   UpdateApiKeyRequestSchema,
   UpdateApiKeyResponseSchema,
@@ -27,20 +26,22 @@ import { publicErrorMessage } from "../lib/errors";
 
 const apiKeysRepository = new ApiKeysRepository();
 
-/** Keys a caller may manage: own ones; administrators also every other. */
+/**
+ * Keys a caller may manage: their own, and the organisation's for
+ * administrators. Nobody sees or manages the personal keys of others.
+ */
 function managementScope(principal: AccessPrincipal): ApiKeyManagementScope {
   return {
     userId: principal.userId,
     organization: principal.isAdmin,
-    anyUser: principal.isAdmin,
   };
 }
 
 /**
  * Checks the endpoints an endpoint-scoped key is limited to: they must exist
- * and, for a personal key, be reachable by its owner (use access to their
- * namespace). Organisation keys are created by administrators, who may
- * dedicate one to any endpoint. Returns an error message, or null.
+ * and be reachable by the key: for a personal key, by its owner (use access
+ * to their namespace); for an organisation key, as organisation namespaces or
+ * namespaces shared with everyone. Returns an error message, or null.
  */
 async function checkScopeEndpoints(
   scope: ApiKeyScope,
@@ -57,7 +58,25 @@ async function checkScopeEndpoints(
   if (endpoints.length !== uuids.length) {
     return "One or more selected endpoints could not be found.";
   }
-  if (ownerId === null) return null;
+  if (ownerId === null) {
+    const personal = [];
+    for (const endpoint of endpoints) {
+      if (
+        endpoint.namespace.user_id !== null &&
+        !(await accessService.resolveEveryoneAccess(
+          "namespace",
+          endpoint.namespace.uuid,
+        ))
+      ) {
+        personal.push(endpoint);
+      }
+    }
+    return personal.length === 0
+      ? null
+      : `Organisation keys only reach organisation namespaces and namespaces shared with everyone: ${personal
+          .map((endpoint) => endpoint.name)
+          .join(", ")}.`;
+  }
 
   const owner = await accessService.getPrincipal(ownerId);
   if (!owner) {
@@ -142,16 +161,10 @@ export const apiKeysImplementations = {
 
   list: async (
     principal: AccessPrincipal,
-    input?: ListApiKeysRequest,
   ): Promise<z.infer<typeof ListApiKeysResponseSchema>> => {
     try {
-      // Everyone sees their own keys (administrators also organisation
-      // keys); administrators can ask for the keys of every user.
-      const apiKeys = await apiKeysRepository.list({
-        userId: principal.userId,
-        organization: principal.isAdmin,
-        anyUser: principal.isAdmin && input?.allUsers === true,
-      });
+      // Everyone sees their own keys; administrators also the organisation's
+      const apiKeys = await apiKeysRepository.list(managementScope(principal));
       return { apiKeys };
     } catch (error) {
       logger.error("Error fetching API keys:", error);
@@ -201,9 +214,7 @@ export const apiKeysImplementations = {
         target: { type: "api_key", id: result.uuid, label: result.name },
         details: {
           preview: result.key_preview,
-          ...(existing.user_id !== principal.userId
-            ? { owner: existing.user_id ? "other user" : "organisation" }
-            : {}),
+          ...(existing.user_id === null ? { owner: "organisation" } : {}),
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.is_active !== undefined ? { active: input.is_active } : {}),
           ...(input.scope !== undefined || input.endpoint_uuids !== undefined
@@ -238,12 +249,8 @@ export const apiKeysImplementations = {
         actor: principal,
         action: "api_key.deleted",
         target: { type: "api_key", id: deleted.uuid, label: deleted.name },
-        ...(deleted.user_id !== principal.userId
-          ? {
-              details: {
-                owner: deleted.user_id ? "other user" : "organisation",
-              },
-            }
+        ...(deleted.user_id === null
+          ? { details: { owner: "organisation" } }
           : {}),
       });
 

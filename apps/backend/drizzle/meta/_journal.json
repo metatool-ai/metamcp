@@ -176,6 +176,13 @@
       "when": 1790668836793,
       "tag": "0024_mcp_server_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790685729323,
+      "tag": "0025_admins_group_description",
+      "breakpoints": true
     }
   ]
 }

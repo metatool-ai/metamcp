@@ -9,9 +9,9 @@ import type { AccessPrincipal, ResourceAccess } from "@repo/zod-types";
  * when, for every server it contains, the acting user either manages that
  * server or the server is already available to the whole organisation.
  * A server shared with someone "for use" can therefore be used in their own
- * private namespaces, but never redistributed through them.
- *
- * Administrators are exempt.
+ * private namespaces, but never redistributed through them. Administrators
+ * follow the same rules (they manage the organisation's servers, not the
+ * personal servers of others).
  */
 
 export type ServerForComposition = {
@@ -27,7 +27,6 @@ export function canRedistributeServer(
   principal: AccessPrincipal,
   server: ServerForComposition,
 ): boolean {
-  if (principal.isAdmin) return true;
   if (server.sharedWithEveryone) return true;
   return server.access?.level === "manage";
 }

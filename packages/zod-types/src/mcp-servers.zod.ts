@@ -456,6 +456,15 @@ export const CreateMcpServerResponseSchema = z.object({
   message: z.string().optional(),
 });
 
+export const ListMcpServersRequestSchema = z
+  .object({
+    // Administrators only: also list the personal servers of other users,
+    // read-only (no access, secrets hidden)
+    includeOthers: z.boolean().optional(),
+  })
+  .optional();
+export type ListMcpServersRequest = z.infer<typeof ListMcpServersRequestSchema>;
+
 export const ListMcpServersResponseSchema = z.object({
   success: z.boolean(),
   data: z.array(McpServerSchema),

@@ -62,8 +62,6 @@
     "other": "{{count}} endpoints"
   },
   "scopeNoEndpoint": "Plus aucun endpoint",
-  "owner": "Propriétaire",
-  "allUsersKeys": "Clés de tous les utilisateurs",
   "edit": "Modifier",
   "editApiKey": "Modifier la clé API",
   "editApiKeyDescription": "Modifiez le nom, le statut ou l'usage autorisé de cette clé. La clé elle-même reste inchangée.",
