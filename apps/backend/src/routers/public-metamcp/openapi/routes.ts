@@ -7,6 +7,7 @@ import {
 } from "@/middleware/api-key-oauth.middleware";
 import logger from "@/utils/logger";
 
+import { escapeHtml } from "../../../lib/html";
 import { mcpServerPool } from "../../../lib/metamcp/mcp-server-pool";
 import { metaMcpServerPool } from "../../../lib/metamcp/metamcp-server-pool";
 import { lookupEndpoint } from "../../../middleware/lookup-endpoint-middleware";
@@ -24,14 +25,18 @@ openApiRouter.get(
   lookupEndpoint,
   authenticateApiKey,
   async (req, res) => {
-    const { endpointName } = req as ApiKeyAuthenticatedRequest;
+    const { endpoint } = req as ApiKeyAuthenticatedRequest;
+    const title = escapeHtml(endpoint.name);
+    const specUrl = escapeHtml(
+      `/metamcp/${encodeURIComponent(endpoint.name)}/api/openapi.json`,
+    );
 
     // Return a simple HTML page with Swagger UI
     const html = `
 <!DOCTYPE html>
 <html>
 <head>
-    <title>${endpointName} API Documentation</title>
+    <title>${title} API Documentation</title>
     <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui.css" />
     <style>
         html {
@@ -49,13 +54,13 @@ openApiRouter.get(
     </style>
 </head>
 <body>
-    <div id="swagger-ui"></div>
+    <div id="swagger-ui" data-spec-url="${specUrl}"></div>
     <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-bundle.js"></script>
     <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-standalone-preset.js"></script>
     <script>
         window.onload = function() {
             const ui = SwaggerUIBundle({
-                url: '/metamcp/${endpointName}/api/openapi.json',
+                url: document.getElementById("swagger-ui").dataset.specUrl,
                 dom_id: '#swagger-ui',
                 deepLinking: true,
                 presets: [
@@ -72,7 +77,8 @@ openApiRouter.get(
 </body>
 </html>`;
 
-    res.setHeader("Content-Type", "text/html");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.send(html);
   },
 );

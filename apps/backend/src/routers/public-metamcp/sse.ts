@@ -16,6 +16,7 @@ import {
   unbindMcpSession,
 } from "../../lib/access/mcp-session-binding";
 import { buildAdminToolsOptions } from "../../lib/admin-mcp/build-admin-tools-options";
+import { sendError } from "../../lib/errors";
 import { extractClientHeaders } from "../../lib/metamcp/header-forwarding";
 import { MetaMCPHandlerContext } from "../../lib/metamcp/metamcp-middleware/functional-middleware";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
@@ -139,7 +140,7 @@ sseRouter.get(
       await mcpServerInstance.server.connect(webAppTransport);
     } catch (error) {
       logger.error("Error in public endpoint /sse route:", error);
-      res.status(500).json(error);
+      sendError(res, 500, "Internal server error");
     }
   },
 );
@@ -175,7 +176,7 @@ sseRouter.post(
       await transport.handlePostMessage(req, res);
     } catch (error) {
       logger.error("Error in public endpoint /message route:", error);
-      res.status(500).json(error);
+      sendError(res, 500, "Internal server error");
     }
   },
 );

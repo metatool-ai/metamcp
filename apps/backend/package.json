@@ -36,6 +36,7 @@
     "drizzle-orm": "^0.45.3",
     "execa": "^9.6.0",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
     "helmet": "^8.1.0",
     "nanoid": "^5.1.16",
     "pg": "^8.16.0",

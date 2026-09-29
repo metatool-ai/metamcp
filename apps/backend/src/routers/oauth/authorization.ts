@@ -79,7 +79,7 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
  * Legacy landing point after the login (now forwarded to the consent page),
  * and development helper for clients whose redirect_uri is this callback.
  */
-authorizationRouter.get("/oauth/callback", async (req, res) => {
+authorizationRouter.get("/oauth/callback", rateLimitAuth, async (req, res) => {
   try {
     // Check if we have encoded params (from our internal redirect flow)
     const { params } = req.query;
@@ -141,17 +141,19 @@ authorizationRouter.get("/oauth/callback", async (req, res) => {
             [
               "Authorization successful",
               "",
-              `Authorization code: ${String(code)}`,
-              `State: ${String(state || "none")}`,
+              // Codes and states are URL-safe: encoding changes nothing but
+              // guarantees no markup can come out of them
+              `Authorization code: ${encodeURIComponent(String(code))}`,
+              `State: ${encodeURIComponent(String(state || "none"))}`,
               "",
               "Exchange this code for an access token at the token endpoint:",
-              `POST ${baseUrl}/oauth/token`,
+              "POST /oauth/token",
               "Content-Type: application/json",
               "",
               JSON.stringify(
                 {
                   grant_type: "authorization_code",
-                  code: String(code),
+                  code: encodeURIComponent(String(code)),
                   client_id: codeData.client_id,
                   redirect_uri: codeData.redirect_uri,
                 },

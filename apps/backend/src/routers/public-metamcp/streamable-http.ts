@@ -18,7 +18,7 @@ import {
   unbindMcpSession,
 } from "../../lib/access/mcp-session-binding";
 import { buildAdminToolsOptions } from "../../lib/admin-mcp/build-admin-tools-options";
-import { publicErrorMessage } from "../../lib/errors";
+import { publicErrorMessage, sendError } from "../../lib/errors";
 import { extractClientHeaders } from "../../lib/metamcp/header-forwarding";
 import { MetaMCPHandlerContext } from "../../lib/metamcp/metamcp-middleware/functional-middleware";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
@@ -203,7 +203,7 @@ streamableHttpRouter.get(
       }
     } catch (error) {
       logger.error("Error in public endpoint /mcp route:", error);
-      res.status(500).json(error);
+      sendError(res, 500, "Internal server error");
     }
   },
 );

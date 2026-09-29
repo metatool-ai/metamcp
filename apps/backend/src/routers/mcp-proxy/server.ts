@@ -29,6 +29,7 @@ import {
   requireProxySessionOwner,
 } from "../../lib/access/proxy-session-owners";
 import { hasLevel } from "../../lib/access/resource-guards";
+import { sendError } from "../../lib/errors";
 import mcpProxy from "../../lib/mcp-proxy";
 import {
   createMetaMcpClient,
@@ -505,7 +506,7 @@ serverRouter.get("/mcp", async (req, res) => {
     }
   } catch (error) {
     logger.error("Error in /mcp route:", error);
-    res.status(500).json(error);
+    sendError(res, 500, "Internal server error");
   }
 });
 
@@ -527,7 +528,7 @@ serverRouter.post("/mcp", async (req, res) => {
             "Received 401 Unauthorized from MCP server:",
             error.message,
           );
-          res.status(401).json(error);
+          sendError(res, 401, "The MCP server refused the credentials");
           return;
         }
 
@@ -616,7 +617,7 @@ serverRouter.post("/mcp", async (req, res) => {
       );
     } catch (error) {
       logger.error("Error in /mcp POST route:", error);
-      res.status(500).json(error);
+      sendError(res, 500, "Internal server error");
     }
   } else {
     // logger.info(`Received POST message for sessionId ${sessionId}`);
@@ -634,7 +635,7 @@ serverRouter.post("/mcp", async (req, res) => {
       }
     } catch (error) {
       logger.error("Error in /mcp route:", error);
-      res.status(500).json(error);
+      sendError(res, 500, "Internal server error");
     }
   }
 });
@@ -671,7 +672,7 @@ serverRouter.delete("/mcp", async (req, res) => {
       res.status(200).end();
     } catch (error) {
       logger.error("Error in /mcp DELETE route:", error);
-      res.status(500).json(error);
+      sendError(res, 500, "Internal server error");
     }
   } else {
     res.status(400).end("Missing sessionId");
@@ -694,7 +695,7 @@ serverRouter.get("/stdio", async (req, res) => {
         logger.error(
           "Received 401 Unauthorized from MCP server. Authentication failure.",
         );
-        res.status(401).json(error);
+        sendError(res, 401, "The MCP server refused the credentials");
         return;
       }
 
@@ -881,7 +882,7 @@ serverRouter.get("/stdio", async (req, res) => {
     });
   } catch (error) {
     logger.error("Error in /stdio route:", error);
-    res.status(500).json(error);
+    sendError(res, 500, "Internal server error");
   }
 });
 
@@ -902,17 +903,25 @@ serverRouter.get("/sse", async (req, res) => {
         logger.error(
           "Received 401 Unauthorized from MCP server. Authentication failure.",
         );
-        res.status(401).json(error);
+        sendError(res, 401, "The MCP server refused the credentials");
         return;
       } else if (error instanceof SseError && error.code === 404) {
         logger.error(
           "Received 404 not found from MCP server. Does the MCP server support SSE?",
         );
-        res.status(404).json(error);
+        sendError(
+          res,
+          404,
+          "No MCP server answered at this address (does it support SSE?)",
+        );
         return;
       } else if (JSON.stringify(error).includes("ECONNREFUSED")) {
         logger.error("Connection refused. Is the MCP server running?");
-        res.status(500).json(error);
+        sendError(
+          res,
+          502,
+          "The MCP server refused the connection: is it running?",
+        );
       } else {
         throw error;
       }
@@ -966,7 +975,7 @@ serverRouter.get("/sse", async (req, res) => {
     }
   } catch (error) {
     logger.error("Error in /sse route:", error);
-    res.status(500).json(error);
+    sendError(res, 500, "Internal server error");
   }
 });
 
@@ -985,7 +994,7 @@ serverRouter.post("/message", async (req, res) => {
     await transport.handlePostMessage(req, res);
   } catch (error) {
     logger.error("Error in /message route:", error);
-    res.status(500).json(error);
+    sendError(res, 500, "Internal server error");
   }
 });
 

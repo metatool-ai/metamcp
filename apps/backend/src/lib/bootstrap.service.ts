@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { appendFileSync, chmodSync } from "node:fs";
 
 import { ConfigKeyEnum, type Role, RoleEnum } from "@repo/zod-types";
@@ -22,6 +21,11 @@ import {
 } from "../db/schema";
 import { accessService } from "./access/access.service";
 import { runWithAuthRequestContext } from "./access/auth-request-context";
+import {
+  fingerprintMatches,
+  isComparableFingerprint,
+  passwordFingerprint,
+} from "./bootstrap-fingerprint";
 import { hashToken } from "./secrets/token-hash";
 import {
   enforcesSecureDefaults,
@@ -148,42 +152,6 @@ function nonEmpty(value: string | undefined): string | undefined {
 }
 
 const API_KEY_FORMAT = /^sk_mt_[A-Za-z0-9]{32,}$/;
-
-function sha256Hex(input: string): string {
-  return crypto.createHash("sha256").update(input, "utf8").digest("hex");
-}
-
-const FINGERPRINT_PREFIX = "hmac-sha256:";
-
-/**
- * Fingerprint of the last applied bootstrap password, to notice when the
- * environment value changes. Keyed with a server secret: a bare SHA-256
- * stored in the database was a fast, unsalted hash of an admin password.
- */
-function passwordFingerprint(password: string): string {
-  const key = crypto.hkdfSync(
-    "sha256",
-    process.env.BETTER_AUTH_SECRET ?? "",
-    "",
-    "metamcp-bootstrap-password-fingerprint",
-    32,
-  );
-  const digest = crypto
-    .createHmac("sha256", Buffer.from(key))
-    .update(password, "utf8")
-    .digest("hex");
-  return `${FINGERPRINT_PREFIX}${digest}`;
-}
-
-function fingerprintMatches(stored: string, password: string): boolean {
-  const expected = stored.startsWith(FINGERPRINT_PREFIX)
-    ? passwordFingerprint(password)
-    : sha256Hex(password); // written by earlier versions
-  return (
-    stored.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(expected))
-  );
-}
 
 function parseJsonArray<T>(envVar: string | undefined, defaultValue: T[]): T[] {
   if (!envVar) return defaultValue;
@@ -353,6 +321,7 @@ async function warnIfPasswordChanged(
 
     if (
       previousFp &&
+      isComparableFingerprint(previousFp) &&
       !fingerprintMatches(previousFp, password) &&
       !recreateUser
     ) {
@@ -459,6 +428,7 @@ async function ensureUser(
   if (existing && config.recreateDefaultUser) {
     const fpKey = `${BOOTSTRAP_USER_PASSWORD_FP_PREFIX}${email}`;
     const previousFp = await getConfigValue(fpKey);
+    // Unknown (or older) fingerprint: apply it, which records a new one
     if (!previousFp || !fingerprintMatches(previousFp, password)) {
       try {
         await applyPassword(existing.id, password);
@@ -469,8 +439,6 @@ async function ensureUser(
       } catch (err) {
         console.warn("%s", `⚠️ Failed to apply the password of ${email}:`, err);
       }
-    } else if (!previousFp.startsWith(FINGERPRINT_PREFIX)) {
-      await recordPasswordFingerprint(email, password); // upgrade the format
     }
   }
 

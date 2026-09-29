@@ -17,6 +17,7 @@ import {
   requireProxySessionOwner,
 } from "../../lib/access/proxy-session-owners";
 import { hasLevel } from "../../lib/access/resource-guards";
+import { sendError } from "../../lib/errors";
 import { createServer } from "../../lib/metamcp/index";
 import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
@@ -153,7 +154,7 @@ metamcpRouter.get("/:uuid/mcp", async (req, res) => {
     }
   } catch (error) {
     logger.error("Error in MetaMCP /mcp route:", error);
-    res.status(500).json(error);
+    sendError(res, 500, "Internal server error");
   }
 });
 
@@ -224,7 +225,7 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
       );
     } catch (error) {
       logger.error("Error in MetaMCP /mcp POST route:", error);
-      res.status(500).json(error);
+      sendError(res, 500, "Internal server error");
     }
   } else {
     // logger.info(
@@ -244,7 +245,7 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
       }
     } catch (error) {
       logger.error("Error in MetaMCP /mcp route:", error);
-      res.status(500).json(error);
+      sendError(res, 500, "Internal server error");
     }
   }
 });
@@ -263,7 +264,7 @@ metamcpRouter.delete("/:uuid/mcp", async (req, res) => {
       res.status(200).end();
     } catch (error) {
       logger.error("Error in MetaMCP /mcp DELETE route:", error);
-      res.status(500).json(error);
+      sendError(res, 500, "Internal server error");
     }
   } else {
     res.status(400).end("Missing sessionId");
@@ -310,7 +311,7 @@ metamcpRouter.get("/:uuid/sse", async (req, res) => {
     await mcpServerInstance.server.connect(webAppTransport);
   } catch (error) {
     logger.error("Error in MetaMCP /sse route:", error);
-    res.status(500).json(error);
+    sendError(res, 500, "Internal server error");
   }
 });
 
@@ -332,7 +333,7 @@ metamcpRouter.post("/:uuid/message", async (req, res) => {
     await transport.handlePostMessage(req, res);
   } catch (error) {
     logger.error("Error in MetaMCP /message route:", error);
-    res.status(500).json(error);
+    sendError(res, 500, "Internal server error");
   }
 });
 

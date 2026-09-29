@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import express from "express";
+import rateLimit from "express-rate-limit";
 
 import logger from "@/utils/logger";
 
@@ -188,115 +189,37 @@ export function urlencodedParsingMiddleware(
 }
 
 /**
- * Simple in-memory rate limiter for OAuth endpoints
- * In production, use Redis or similar for distributed rate limiting
+ * Rate limits of the OAuth endpoints, per client address (TRUST_PROXY):
+ * 20 requests per minute on the authorization and on the credential
+ * endpoints (token, introspection, revocation, registration).
  */
-class RateLimiter {
-  private attempts: Map<string, { count: number; resetTime: number }> =
-    new Map();
-  private maxAttempts: number;
-  private windowMs: number;
-
-  constructor(maxAttempts: number = 10, windowMs: number = 15 * 60 * 1000) {
-    this.maxAttempts = maxAttempts;
-    this.windowMs = windowMs;
-  }
-
-  isRateLimited(identifier: string): boolean {
-    const now = Date.now();
-    const record = this.attempts.get(identifier);
-
-    if (!record || now > record.resetTime) {
-      // Reset or create new record
-      this.attempts.set(identifier, {
-        count: 1,
-        resetTime: now + this.windowMs,
+function oauthRateLimit(description: string) {
+  return rateLimit({
+    windowMs: 60_000,
+    limit: 20,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    handler: (req, res) => {
+      logger.info(
+        `[RATE LIMIT] ${req.path} rate limited for IP: ${clientAddress(req) ?? "unknown"}`,
+      );
+      res.status(429).json({
+        error: "too_many_requests",
+        error_description: description,
       });
-      return false;
-    }
-
-    if (record.count >= this.maxAttempts) {
-      return true;
-    }
-
-    record.count++;
-    return false;
-  }
-
-  reset(identifier: string): void {
-    this.attempts.delete(identifier);
-  }
-
-  // Clean up old entries periodically
-  cleanup(): void {
-    const now = Date.now();
-    for (const [key, record] of this.attempts) {
-      if (now > record.resetTime) {
-        this.attempts.delete(key);
-      }
-    }
-  }
+    },
+  });
 }
 
-// Create rate limiter instances
-const authEndpointLimiter = new RateLimiter(20, 1 * 60 * 1000); // 20 attempts per 1 minute
-const tokenEndpointLimiter = new RateLimiter(20, 1 * 60 * 1000); // 10 attempts per 1 minute
-
-// Clean up rate limiter entries every 10 minutes
-setInterval(
-  () => {
-    authEndpointLimiter.cleanup();
-    tokenEndpointLimiter.cleanup();
-  },
-  10 * 60 * 1000,
+/** Rate limiting middleware for the OAuth authorization endpoints */
+export const rateLimitAuth = oauthRateLimit(
+  "Too many authorization attempts. Please try again later.",
 );
 
-/**
- * Rate limiting middleware for OAuth authorization endpoint
- */
-export function rateLimitAuth(
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction,
-) {
-  const identifier = clientAddress(req) ?? "unknown";
-
-  if (authEndpointLimiter.isRateLimited(identifier)) {
-    logger.info(
-      `[RATE LIMIT] Authorization endpoint rate limited for IP: ${identifier} - Too many authorization attempts`,
-    );
-    return res.status(429).json({
-      error: "too_many_requests",
-      error_description:
-        "Too many authorization attempts. Please try again later.",
-    });
-  }
-
-  next();
-}
-
-/**
- * Rate limiting middleware for OAuth token endpoint
- */
-export function rateLimitToken(
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction,
-) {
-  const identifier = clientAddress(req) ?? "unknown";
-
-  if (tokenEndpointLimiter.isRateLimited(identifier)) {
-    logger.info(
-      `[RATE LIMIT] Token endpoint rate limited for IP: ${identifier} - Too many token requests`,
-    );
-    return res.status(429).json({
-      error: "too_many_requests",
-      error_description: "Too many token requests. Please try again later.",
-    });
-  }
-
-  next();
-}
+/** Rate limiting middleware for the OAuth credential endpoints */
+export const rateLimitToken = oauthRateLimit(
+  "Too many token requests. Please try again later.",
+);
 
 /**
  * Security headers middleware for OAuth endpoints

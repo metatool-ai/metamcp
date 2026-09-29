@@ -13,7 +13,7 @@ With `NODE_ENV=production` (the default of the Docker image):
 - **Bootstrap users** whose password is a well-known placeholder (`changeme`, `password`...) are skipped: leave `BOOTSTRAP_USER_PASSWORD` empty to create the first account (an administrator) from the sign-up page instead.
 - `ALLOW_INSECURE_DEFAULTS=true` turns these errors into warnings, for a throwaway evaluation instance only.
 
-`BOOTSTRAP_RECREATE_USER=true` re-applies the environment password of bootstrap users when it changed. It never deletes the user (and therefore never their MCP servers, namespaces and endpoints).
+`BOOTSTRAP_RECREATE_USER=true` re-applies the environment password of bootstrap users when it changed. It never deletes the user (and therefore never their MCP servers, namespaces and endpoints). MetaMCP detects the change with a salted scrypt fingerprint of the password; fingerprints stored by version 3.0.0 and earlier cannot be compared, so the first start after the upgrade applies the environment password again.
 
 ## Reverse proxy and client addresses
 
@@ -42,6 +42,14 @@ The [inspector](/en/concepts/inspector) keeps at most 20 sessions per user. The 
 MetaMCP connects to the URLs configured in MCP servers and upstream OAuth settings. Private networks stay reachable (internal MCP servers are a normal use), but **link-local and cloud metadata addresses** (`169.254.0.0/16` such as `169.254.169.254`, `fe80::/10`, `fd00:ec2::254`, `100.100.100.200`) are refused, so that an editor cannot read the credentials of the machine through MetaMCP. `ALLOW_LINK_LOCAL_EGRESS=true` lifts the restriction.
 
 This is a safeguard, not an egress firewall: restrict outbound traffic at the network level for a strict policy. STDIO servers run commands and are therefore reserved to people with the *STDIO servers* permission.
+
+## API keys in URLs
+
+An endpoint can accept its API key in the URL (`?api_key=...`, off by default), for MCP clients that can only be configured with a URL. A URL ends up in proxy access logs, browser history and error reports: prefer the `Authorization: Bearer` header, and enable this option only on endpoints whose clients need it, with a key limited to those endpoints.
+
+## Rate limits
+
+Every route accepts at most `HTTP_RATE_LIMIT_PER_MINUTE` requests per minute from one client address (default `3000`, `0` = no limit), far above normal use; the OAuth endpoints (authorization, token, registration, revocation) accept 20 per minute. The client address follows `TRUST_PROXY`: behind a proxy that is not trusted, every client shares the proxy's address and its limit. Endpoints can also set their own limits.
 
 ## Credentials sent to MCP servers
 

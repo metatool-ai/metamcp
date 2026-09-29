@@ -11,6 +11,7 @@ import {
 import { secretsService } from "./lib/secrets/secrets.service";
 import { initializeIdleServers, initializeOnStartup } from "./lib/startup";
 import { assertSecureConfiguration } from "./lib/startup-checks";
+import { httpRateLimit } from "./middleware/rate-limits.middleware";
 import mcpProxyRouter from "./routers/mcp-proxy";
 import oauthRouter from "./routers/oauth";
 import publicEndpointsRouter from "./routers/public-metamcp";
@@ -26,6 +27,9 @@ app.disable("x-powered-by");
 
 // Client address / user agent for the activity log
 app.use(requestContextMiddleware);
+
+// A ceiling per client address on every route (HTTP_RATE_LIMIT_PER_MINUTE)
+app.use(httpRateLimit);
 
 // Global JSON middleware for non-proxy routes. Bodies are parsed before any
 // authentication, so the limit stays small: 5 MB for the web app's API

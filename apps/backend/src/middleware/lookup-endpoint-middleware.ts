@@ -26,7 +26,7 @@ export const lookupEndpoint = async (
     // Add the endpoint info to the request for use in handlers
     const authReq = req as ApiKeyAuthenticatedRequest;
     authReq.namespaceUuid = endpoint.namespace_uuid;
-    authReq.endpointName = endpointName;
+    authReq.endpointName = endpoint.name;
     authReq.endpoint = endpoint;
 
     next();

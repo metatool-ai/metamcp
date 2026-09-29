@@ -56,3 +56,27 @@ export function publicErrorMessage(error: unknown, fallback: string): string {
   }
   return error instanceof Error && error.message ? error.message : fallback;
 }
+
+/** What an HTTP route answers when it fails: never the error itself. */
+type ErrorResponse = {
+  headersSent: boolean;
+  status(code: number): { json(body: unknown): unknown };
+  end(): unknown;
+};
+
+/**
+ * Answers a failed request with a fixed message: the error object (stack,
+ * internal details) never reaches the client; the caller logs it. When a
+ * stream already started, it is ended instead.
+ */
+export function sendError(
+  res: ErrorResponse,
+  status: number,
+  message: string,
+): void {
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
+  res.status(status).json({ error: message });
+}
