@@ -28,6 +28,7 @@ import {
   createToolOverridesCallToolMiddleware,
   createToolOverridesListToolsMiddleware,
 } from "../../../lib/metamcp/metamcp-middleware/tool-overrides.functional";
+import { serverSnapshots } from "../../../lib/metamcp/server-snapshots";
 import { sanitizeName } from "../../../lib/metamcp/utils";
 
 // Original List Tools Handler (adapted from metamcp-proxy.ts)
@@ -41,8 +42,32 @@ export const createOriginalListToolsHandler = (
     );
     const allTools: Tool[] = [];
 
+    // Servers without a connection are listed from their snapshot, without
+    // being started (MCP_TOOLS_CACHE_TTL)
+    const held = mcpServerPool.getSessionConnections(context.sessionId) ?? {};
+    const snapshots = await serverSnapshots.fresh(
+      Object.entries(serverParams)
+        .filter(
+          ([uuid, params]) => !held[uuid] && serverSnapshots.canUse(params),
+        )
+        .map(([uuid]) => uuid),
+    );
+
     await Promise.allSettled(
       Object.entries(serverParams).map(async ([mcpServerUuid, params]) => {
+        const snapshot = snapshots.get(mcpServerUuid);
+        if (snapshot) {
+          if (!snapshot.capabilities.tools) return;
+          const serverName = params.name || snapshot.serverInfo?.name || "";
+          allTools.push(
+            ...snapshot.tools.map((tool) => ({
+              ...tool,
+              name: `${sanitizeName(serverName)}__${tool.name}`,
+            })),
+          );
+          return;
+        }
+
         const session = await mcpServerPool.getSession(
           context.sessionId,
           mcpServerUuid,

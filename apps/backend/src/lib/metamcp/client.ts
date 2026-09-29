@@ -12,6 +12,10 @@ import { guardedFetch } from "../net/egress-guard";
 import { tryRefreshUpstreamTokens } from "../oauth-upstream/refresh-on-401";
 import { recoverFromPostAuthRace } from "../oauth-upstream/retry-post-auth";
 import { isUpstreamUnauthorizedError } from "../oauth-upstream/token-exchange";
+import {
+  isLauncherCommand,
+  launcherBypass,
+} from "../stdio-transport/launcher-bypass";
 import { ProcessManagedStdioTransport } from "../stdio-transport/process-managed-transport";
 import { metamcpLogStore } from "./log-store";
 import { serverErrorTracker } from "./server-error-tracker";
@@ -40,10 +44,23 @@ export const transformDockerUrl = (url: string): string => {
   return url;
 };
 
+/** A STDIO launch through npx / uvx, possibly bypassing the launcher. */
+export interface LauncherLaunch {
+  /** The configured launch (through the launcher) */
+  params: StdioServerParameters;
+  /** Whether the transport starts the recorded program directly */
+  direct: boolean;
+}
+
 export const createMetaMcpClient = (
   serverParams: ServerParameters,
-): { client: Client | undefined; transport: Transport | undefined } => {
+): {
+  client: Client | undefined;
+  transport: Transport | undefined;
+  launch?: LauncherLaunch;
+} => {
   let transport: Transport | undefined;
+  let launch: LauncherLaunch | undefined;
 
   // Create the appropriate transport based on server type
   // Default to "STDIO" if type is undefined
@@ -59,7 +76,12 @@ export const createMetaMcpClient = (
       env: resolvedEnv,
       stderr: "pipe",
     };
-    transport = new ProcessManagedStdioTransport(stdioParams);
+    // npx / uvx: start the program they ran last time, without them
+    const direct = launcherBypass.directLaunchFor(stdioParams);
+    if (isLauncherCommand(stdioParams.command)) {
+      launch = { params: stdioParams, direct: direct !== undefined };
+    }
+    transport = new ProcessManagedStdioTransport(direct ?? stdioParams);
 
     // Handle stderr stream when set to "pipe"
     if ((transport as ProcessManagedStdioTransport).stderr) {
@@ -167,7 +189,7 @@ export const createMetaMcpClient = (
       capabilities: {},
     },
   );
-  return { client, transport };
+  return { client, transport, launch };
 };
 
 export const connectMetaMcpClient = async (
@@ -182,6 +204,8 @@ export const connectMetaMcpClient = async (
   );
   let count = 0;
   let retry = true;
+  // Set when the last attempt started a recorded program directly
+  let directLaunchFailed = false;
 
   logger.info(
     `Connecting to server ${serverParams.name} (${serverParams.uuid}) with max attempts: ${maxAttempts}`,
@@ -202,6 +226,8 @@ export const connectMetaMcpClient = async (
   const attemptConnect = async (): Promise<ConnectedClient | undefined> => {
     let transport: Transport | undefined;
     let client: Client | undefined;
+    let launch: LauncherLaunch | undefined;
+    let connected = false;
 
     try {
       // Remember whether this server was previously flagged ERROR. We used to
@@ -217,6 +243,7 @@ export const connectMetaMcpClient = async (
       const result = createMetaMcpClient(serverParams);
       client = result.client;
       transport = result.transport;
+      launch = result.launch;
 
       if (!client || !transport) {
         return undefined;
@@ -228,6 +255,11 @@ export const connectMetaMcpClient = async (
           `Setting up crash handler for server ${serverParams.name} (${serverParams.uuid})`,
         );
         transport.onprocesscrash = (exitCode, signal) => {
+          // A recorded program that dies before answering is out of date,
+          // not a crash of the server: the next attempt uses the launcher.
+          if (launch?.direct && !connected) {
+            return;
+          }
           logger.info(
             `Process crashed for server ${serverParams.name} (${serverParams.uuid}): code=${exitCode}, signal=${signal}`,
           );
@@ -252,11 +284,21 @@ export const connectMetaMcpClient = async (
       }
 
       await client.connect(transport);
+      connected = true;
       metamcpLogStore.addLog(
         serverParams.name,
         "info",
         `Connected to server ${serverParams.uuid}`,
       );
+
+      // Started through npx / uvx: next time, start their program directly
+      if (
+        launch &&
+        !launch.direct &&
+        transport instanceof ProcessManagedStdioTransport
+      ) {
+        launcherBypass.record(launch.params, transport.pid);
+      }
 
       // Connection succeeded — self-heal any prior ERROR state so a recovered
       // server isn't left flagged red forever.
@@ -285,6 +327,10 @@ export const connectMetaMcpClient = async (
         },
       };
     } catch (error) {
+      if (launch?.direct) {
+        launcherBypass.forget(launch.params);
+        directLaunchFailed = true;
+      }
       // Clean up transport/process on connection failure so this attempt
       // does not leave orphaned resources behind. Rethrow so the caller
       // can decide whether to recover (fast retry / 401 refresh) or
@@ -319,6 +365,16 @@ export const connectMetaMcpClient = async (
       const connected = await attemptConnect();
       return connected;
     } catch (error) {
+      // The recorded program did not start: retry through the launcher at
+      // once, without counting an attempt.
+      if (directLaunchFailed) {
+        directLaunchFailed = false;
+        logger.warn(
+          `Starting ${serverParams.name} (${serverParams.uuid}) directly failed; starting it through ${serverParams.command}`,
+        );
+        continue;
+      }
+
       metamcpLogStore.addLog(
         "client",
         "error",

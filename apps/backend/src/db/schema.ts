@@ -1,4 +1,9 @@
 import { OAuthClientInformation } from "@modelcontextprotocol/sdk/shared/auth.js";
+import type {
+  Implementation,
+  ServerCapabilities,
+  Tool,
+} from "@modelcontextprotocol/sdk/types.js";
 import {
   McpServerErrorStatusEnum,
   McpServerStatusEnum,
@@ -851,3 +856,20 @@ export const activityLogsTable = pgTable(
     index("activity_logs_target_id_idx").on(table.target_id),
   ],
 );
+
+// What an MCP server exposed the last time it was listed, to answer
+// tools/list (and skip it in prompts/resources lists) without starting it.
+// Never kept for servers that forward client headers (their answer may
+// depend on the client's credentials).
+export const mcpServerSnapshotsTable = pgTable("mcp_server_snapshots", {
+  mcp_server_uuid: uuid("mcp_server_uuid")
+    .primaryKey()
+    .references(() => mcpServersTable.uuid, { onDelete: "cascade" }),
+  server_info: jsonb("server_info").$type<Implementation>(),
+  capabilities: jsonb("capabilities").$type<ServerCapabilities>().notNull(),
+  // Tools as the server lists them (full definitions, names unprefixed)
+  tools: jsonb("tools").$type<Tool[]>().notNull(),
+  listed_at: timestamp("listed_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

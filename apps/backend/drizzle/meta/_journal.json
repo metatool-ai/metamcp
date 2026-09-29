@@ -169,6 +169,13 @@
       "when": 1790623973669,
       "tag": "0023_api_key_scopes",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790668836793,
+      "tag": "0024_mcp_server_snapshots",
+      "breakpoints": true
     }
   ]
 }

@@ -22,6 +22,7 @@ import {
   ResourceTemplate,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { ServerParameters } from "@repo/zod-types";
 
 import logger from "@/utils/logger";
 
@@ -58,6 +59,7 @@ import {
   createToolOverridesListToolsMiddleware,
   mapOverrideNameToOriginal,
 } from "./metamcp-middleware/tool-overrides.functional";
+import { serverSnapshots } from "./server-snapshots";
 import { isBackendSessionLostError } from "./session-error";
 import { parseToolName } from "./tool-name-parser";
 import { toolsSyncCache } from "./tools-sync-cache";
@@ -208,13 +210,39 @@ export const createServer = async (
           [serverUuid]: params,
         })[serverUuid]
       : undefined;
-    return mcpServerPool.getSession(
+    const client = await mcpServerPool.getSession(
       sessionId,
       serverUuid,
       forwarded
         ? { ...params, headers: mergeHeaders(params.headers, forwarded) }
         : params,
       namespaceUuid,
+    );
+    if (client) {
+      serverSnapshots.refreshInBackground(params, client);
+    }
+    return client;
+  };
+
+  // Servers this session holds no connection to and whose snapshot shows no
+  // `capability`: the prompts / resources lists skip them instead of
+  // starting them.
+  const serversWithout = async (
+    serverParams: Record<string, ServerParameters>,
+    capability: "prompts" | "resources",
+  ): Promise<Set<string>> => {
+    const held = mcpServerPool.getSessionConnections(sessionId) ?? {};
+    const snapshots = await serverSnapshots.fresh(
+      Object.entries(serverParams)
+        .filter(
+          ([uuid, params]) => !held[uuid] && serverSnapshots.canUse(params),
+        )
+        .map(([uuid]) => uuid),
+    );
+    return new Set(
+      [...snapshots]
+        .filter(([, snapshot]) => !snapshot.capabilities[capability])
+        .map(([uuid]) => uuid),
     );
   };
 
@@ -243,7 +271,8 @@ export const createServer = async (
     const toolCandidates: Array<{
       tool: Tool;
       serverUuid: string;
-      session: ConnectedClient;
+      // Undefined when listed from the server's snapshot
+      session?: ConnectedClient;
     }> = [];
 
     // Servers that should have contributed tools but failed even after the
@@ -260,6 +289,20 @@ export const createServer = async (
 
     console.log(
       `[DEBUG-TOOLS] 📋 Processing ${allServerEntries.length} servers`,
+    );
+
+    // Servers this session holds no connection to answer from the tools they
+    // listed last (MCP_TOOLS_CACHE_TTL), without being started: they start
+    // for a call.
+    const heldConnections =
+      mcpServerPool.getSessionConnections(context.sessionId) ?? {};
+    const snapshots = await serverSnapshots.fresh(
+      allServerEntries
+        .filter(
+          ([uuid, params]) =>
+            !heldConnections[uuid] && serverSnapshots.canUse(params),
+        )
+        .map(([uuid]) => uuid),
     );
 
     // Cold-start warmup: if pool has 0 idle + 0 active sessions but servers
@@ -295,6 +338,29 @@ export const createServer = async (
           console.log(
             `[DEBUG-TOOLS] ⏭️  Skipping already visited: ${params.name}`,
           );
+          return;
+        }
+
+        const snapshot = snapshots.get(mcpServerUuid);
+        if (snapshot) {
+          if (
+            snapshot.serverInfo?.name === `metamcp-unified-${namespaceUuid}` ||
+            isSameServerInstance(params, mcpServerUuid)
+          ) {
+            return;
+          }
+          visitedServers.add(mcpServerUuid);
+          if (!snapshot.capabilities.tools) return;
+          const serverName = params.name || snapshot.serverInfo?.name || "";
+          for (const tool of snapshot.tools) {
+            toolCandidates.push({
+              tool: {
+                ...tool,
+                name: `${sanitizeName(serverName)}__${tool.name}`,
+              },
+              serverUuid: mcpServerUuid,
+            });
+          }
           return;
         }
 
@@ -415,6 +481,9 @@ export const createServer = async (
             `[DEBUG-TOOLS] ⏱️  Fetched ${allServerTools.length} tools from ${serverName} in ${(performance.now() - toolFetchStart).toFixed(2)}ms`,
           );
 
+          // Later sessions are answered from it without starting the server
+          void serverSnapshots.record(params, activeSession, allServerTools);
+
           // Save original tools to database (before middleware processing)
           // This ensures we only save the actual tool names, not override names
           // Filter out tools that are overrides of existing tools to prevent duplicates
@@ -496,7 +565,11 @@ export const createServer = async (
       }
       if (listedTools.has(tool.name)) continue;
       listedTools.add(tool.name);
-      toolToClient[tool.name] = session;
+      if (session) {
+        toolToClient[tool.name] = session;
+      } else {
+        delete toolToClient[tool.name];
+      }
       toolToServerUuid[tool.name] = serverUuid;
       allTools.push(tool);
     }
@@ -536,7 +609,7 @@ export const createServer = async (
     let serverUuid = toolToServerUuid[name];
 
     // If not found in mappings, dynamically find the server and route the call
-    if (!clientForTool || !serverUuid) {
+    if (!serverUuid) {
       try {
         // Get all MCP servers for this namespace
         const serverParams = await getMcpServers(
@@ -644,12 +717,8 @@ export const createServer = async (
       }
     }
 
-    if (!clientForTool) {
-      throw new Error(`Unknown tool: ${name}`);
-    }
-
     if (!serverUuid) {
-      throw new Error(`Server UUID not found for tool: ${name}`);
+      throw new Error(`Unknown tool: ${name}`);
     }
 
     // The routing table is filled by tools/list: re-check that the server
@@ -903,9 +972,14 @@ export const createServer = async (
       // Track visited servers to detect circular references - reset on each call
       const visitedServers = new Set<string>();
 
+      const withoutPrompts = await serversWithout(serverParams, "prompts");
+
       // Filter out self-referencing servers before processing
       const validPromptServers = Object.entries(serverParams).filter(
         ([uuid, params]) => {
+          if (withoutPrompts.has(uuid)) {
+            return false;
+          }
           // Skip if we've already visited this server to prevent circular references
           if (visitedServers.has(uuid)) {
             logger.info(
@@ -1055,9 +1129,14 @@ export const createServer = async (
       // Track visited servers to detect circular references - reset on each call
       const visitedServers = new Set<string>();
 
+      const withoutResources = await serversWithout(serverParams, "resources");
+
       // Filter out self-referencing servers before processing
       const validResourceServers = Object.entries(serverParams).filter(
         ([uuid, params]) => {
+          if (withoutResources.has(uuid)) {
+            return false;
+          }
           // Skip if we've already visited this server to prevent circular references
           if (visitedServers.has(uuid)) {
             logger.info(
@@ -1250,8 +1329,13 @@ export const createServer = async (
           )
         : {};
 
+      const withoutResources = await serversWithout(serverParams, "resources");
+
       const validTemplateServers = Object.entries(serverParams).filter(
         ([uuid, params]) => {
+          if (withoutResources.has(uuid)) {
+            return false;
+          }
           // Skip if we've already visited this server to prevent circular references
           if (visitedServers.has(uuid)) {
             logger.info(

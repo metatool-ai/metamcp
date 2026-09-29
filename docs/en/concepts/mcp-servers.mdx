@@ -427,7 +427,8 @@ Use bulk import/export for:
 Each client session gets its own connection to the MCP servers it uses (for STDIO servers, a process):
 
 <Card title="Connections on demand" icon="zap">
-- **On first use**: a connection opens when a client first needs the server
+- **On first call**: a connection opens when a client calls one of the server's tools; tool lists are answered from what the server listed last (`MCP_TOOLS_CACHE_TTL`)
+- **Without launcher**: after a first start through `npx` or `uvx`, the server's program starts directly (`MCP_LAUNCHER_BYPASS`)
 - **Released when unused**: a session that stopped calling a server for `MCP_CONNECTION_IDLE_TTL` (15 minutes) gives its connection back, and gets one again on its next call
 - **Reused**: a released connection is kept as the server's spare for the same time, so the next client gets it at once
 - **Warm pool** (`MCP_WARM_POOL=true`): one started connection per server exposed by an endpoint, replaced as soon as it is taken

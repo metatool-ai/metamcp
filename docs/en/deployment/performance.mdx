@@ -10,9 +10,26 @@ Measured with the Docker image, four STDIO servers (three through `npx`, one thr
 | Situation | Memory |
 |-----------|--------|
 | No client | 170-200 MB |
-| One client session using the four servers | 620 MB |
-| Same, servers preinstalled in the image (no `npx`/`uvx`) | 315 MB |
-| The session stopped calling the servers for `MCP_CONNECTION_IDLE_TTL` | back to 200 MB |
+| A client connects and lists tools, prompts and resources | 200-310 MB: no server starts, except those declaring prompts or resources |
+| One client session calling the four servers | 410 MB |
+| The session stopped calling them for `MCP_CONNECTION_IDLE_TTL` | back to 200-280 MB |
+
+## Servers start for calls only
+
+Clients list tools, prompts and resources as soon as they connect. Instead of starting every server of the namespace to answer, MetaMCP keeps what each server exposed the last time it was listed (its capabilities and full tool definitions, in the database):
+
+- `tools/list` is answered from it for the servers the session has no connection to (26 tools in 90 ms instead of 5 s in the measurement above). A server starts when one of its tools is called.
+- `prompts/list` and `resources/list` skip the servers that declare no prompts or resources.
+- The snapshot is refreshed whenever a server is listed on a live connection, at most hourly in the background for the servers in use, and dropped when the server's configuration changes.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_TOOLS_CACHE_TTL` | `86400000` (24 h) | Milliseconds during which a snapshot answers for its server. `0` asks the servers every time |
+
+Servers that forward client headers are always asked: their answer may depend on the client's credentials. The snapshot can be out of date in two cases, which then show as an error when a tool is called rather than as a missing tool:
+
+- a server whose tools change without a change of its configuration (an upgrade through `npx pkg@latest`) is listed with its former tools until its snapshot is refreshed;
+- a server that no longer starts is still listed.
 
 ## Connections on demand
 
@@ -37,10 +54,18 @@ Connections to remote servers are released the same way; getting one again only 
 
 ## Launchers: `npx` and `uvx`
 
-`npx -y <package>` and `uvx <package>` stay alive next to the server they start: about 80-120 MB for `npm exec` (twice as much when it has just installed the package) and 60-75 MB for `uv`, per connection. Two ways to avoid them:
+`npx -y <package>` and `uvx <package>` stay alive next to the server they start: about 80-120 MB for `npm exec` (twice as much when it has just installed the package) and 60-75 MB for `uv`, per connection, and each start pays for their package resolution (1 to 10 s).
 
-- **Keep their caches** so that they do not reinstall the package on each start: the Docker Compose file persists `/home/nextjs/.npm` and `/home/nextjs/.cache/uv` in volumes (`npm_cache`, `uv_cache`).
-- **Preinstall the servers** in an image derived from MetaMCP, and use their executables as commands (`mcp-server-memory` rather than `npx -y @modelcontextprotocol/server-memory`). Each connection then takes about three times less memory, and starts without the delay of `npx`:
+Once a server has started through one of them, MetaMCP reads the program they ran (from `/proc`) and starts that program directly for the next connections: same arguments, environment and working directory, one process instead of two or three, started in 0.2-0.5 s. It goes through the launcher again every 24 hours to pick up package updates, when the server's configuration changes, after a restart of MetaMCP, and whenever the program is no longer where it was (a cleaned cache).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_LAUNCHER_BYPASS` | `true` | `false` always starts servers through their launcher. Linux only (the Docker image) |
+
+Two settings help further:
+
+- **Keep the launchers' caches**, so that they do not reinstall packages after a container is recreated: the Docker Compose file persists `/home/nextjs/.npm` and `/home/nextjs/.cache/uv` in volumes (`npm_cache`, `uv_cache`).
+- **Preinstall the servers** in an image derived from MetaMCP, and use their executables as commands (`mcp-server-memory` rather than `npx -y @modelcontextprotocol/server-memory`): the first start after a restart is direct too, and the versions are pinned:
 
 ```dockerfile
 FROM ghcr.io/sixmon/metamcp:latest
@@ -69,6 +94,6 @@ Flags in `NODE_OPTIONS` take precedence; an empty value falls back to the Node.j
 
 ## Sizing
 
-Count about 200 MB for MetaMCP, plus, for each client session using a STDIO server, about 110 MB through `npx`/`uvx` (twice as much while the package installs) or 30-60 MB for a preinstalled server; heavy servers such as browsers take much more. Sessions left open but unused cost nothing once their connections are released.
+Count about 200 MB for MetaMCP, plus, for each client session and each STDIO server it calls, 30-60 MB for a server started directly (about 110 MB for a start through `npx`/`uvx`, twice as much while a package installs); heavy servers such as browsers take much more. Servers a session does not call, and sessions left open but unused, cost nothing.
 
-For a team of 3 to 10 people, 2 of them active at a time with one session each, and a namespace of 5 STDIO servers: 10 connections, about 1.3 GB at peak through `npx`/`uvx`, 650 MB with preinstalled servers, and 200 MB at rest. **A 2 GB container limit** leaves room for heavier servers and cold starts. With Kubernetes, set the memory request to the usual level and the limit to the peak (`METAMCP_APP_MEMORY_REQUEST`, `METAMCP_APP_MEMORY_LIMIT`).
+For a team of 3 to 10 people, 2 of them active at a time calling 2 or 3 servers each: 4 to 6 connections, about 450 MB in use and 200 MB at rest. Installing packages is the peak: the very first session of a new instance ran at 1.2 GB while `npx` installed three packages at once. **A 2 GB container limit** covers it, as well as heavier servers. With Kubernetes, set the memory request to the usual level and the limit to the peak (`METAMCP_APP_MEMORY_REQUEST`, `METAMCP_APP_MEMORY_LIMIT`).

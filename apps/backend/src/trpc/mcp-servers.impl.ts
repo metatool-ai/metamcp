@@ -41,6 +41,7 @@ import { mcpServerPool } from "../lib/metamcp/mcp-server-pool";
 import { clearOverrideCache } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
 import { serverErrorTracker } from "../lib/metamcp/server-error-tracker";
+import { serverSnapshots } from "../lib/metamcp/server-snapshots";
 import { convertDbServerToParams } from "../lib/metamcp/utils";
 import { persistPreRegisteredOAuthClient } from "./pre-registered-oauth";
 
@@ -660,6 +661,9 @@ export const mcpServersImplementations = {
           );
         }
       }
+
+      // What it listed may change with its configuration
+      await serverSnapshots.forget(updatedServer.uuid);
 
       // Invalidate idle session for the updated server to refresh with new parameters (async)
       const serverParams = await convertDbServerToParams(updatedServer);

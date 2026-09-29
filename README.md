@@ -295,7 +295,7 @@ For more details and alternative approaches, see [issue #76](https://github.com/
 
 ## ❄️ Cold Start Problem and Custom Dockerfile
 
-- Connections to MCP servers open on first use and close after 15 minutes without use (`MCP_CONNECTION_IDLE_TTL`): each STDIO connection is a process, so an idle instance keeps none. `MCP_WARM_POOL=true` instead keeps one started connection per server exposed by an endpoint, for instant first calls. See [Memory and sizing](docs/en/deployment/performance.mdx).
+- Connections to MCP servers open on first call and close after 15 minutes without use (`MCP_CONNECTION_IDLE_TTL`): each STDIO connection is a process, so an idle instance keeps none. Tool lists are answered from what each server listed last, without starting it, and servers started once through `npx`/`uvx` then start directly, without the launcher. `MCP_WARM_POOL=true` instead keeps one started connection per server exposed by an endpoint. See [Memory and sizing](docs/en/deployment/performance.mdx).
 - If your MCP requires dependencies other than `uvx` or `npx`, you need to customize the Dockerfile to install dependencies on your own.
 - Check [invalidation.md](invalidation.md) for a seq diagram about how idle session invalidates during updates.
 
