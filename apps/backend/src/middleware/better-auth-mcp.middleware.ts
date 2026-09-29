@@ -5,6 +5,7 @@ import express from "express";
 import logger from "@/utils/logger";
 
 import { auth } from "../auth";
+import { accessService } from "../lib/access/access.service";
 
 /**
  * Better Auth middleware for MCP proxy routes
@@ -59,9 +60,19 @@ export const betterAuthMcpMiddleware = async (
       });
     }
 
+    // Resolve the RBAC principal; disabled users are rejected.
+    const principal = await accessService.getPrincipal(sessionData.user.id);
+    if (!principal) {
+      return res.status(401).json({
+        error: "Invalid session",
+        message: "This account is disabled",
+      });
+    }
+
     // Add user info to request for downstream use
     (req as any).user = sessionData.user;
     (req as any).session = sessionData.session;
+    (req as any).principal = principal;
 
     next();
   } catch (error) {

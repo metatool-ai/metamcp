@@ -10,6 +10,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useTranslations } from "@/hooks/useTranslations";
 
 interface SamplingMessage {
   role: "user" | "assistant" | "system";
@@ -70,6 +71,7 @@ export function InspectorSampling({
   makeRequest: _makeRequest,
   enabled = true,
 }: InspectorSamplingProps) {
+  const { t } = useTranslations();
   const [messages, setMessages] = useState<SamplingMessage[]>([
     {
       role: "user",
@@ -105,7 +107,7 @@ export function InspectorSampling({
 
   const handleSample = async () => {
     if (messages.length === 0) {
-      toast.error("Please add at least one message");
+      toast.error(t("inspector:samplingComponent.addMessageFirst"));
       return;
     }
 
@@ -134,19 +136,17 @@ export function InspectorSampling({
         role: "assistant" as const,
         content: {
           type: "text" as const,
-          text: "Note: This is a simulated response. The sampling feature requires non-standard MCP protocol extensions that are not available in the current implementation.",
+          text: t("inspector:samplingComponent.simulatedResponse"),
         },
         model: "simulated-model",
         stopReason: "endTurn" as const,
       };
 
       setResponse(simulatedResult);
-      toast.info(
-        "Sampling simulation completed (feature not available in standard MCP)",
-      );
+      toast.info(t("inspector:samplingComponent.simulationDone"));
     } catch (error) {
       console.error("Error during sampling:", error);
-      toast.error("Failed to complete sampling", {
+      toast.error(t("inspector:samplingComponent.failed"), {
         description: error instanceof Error ? error.message : String(error),
       });
     } finally {
@@ -171,9 +171,11 @@ export function InspectorSampling({
     return (
       <div className="rounded-lg border border-dashed p-8 text-center">
         <AlertTriangle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-        <h4 className="text-sm font-medium">Sampling Not Supported</h4>
+        <h4 className="text-sm font-medium">
+          {t("inspector:samplingComponent.notSupportedTitle")}
+        </h4>
         <p className="text-xs text-muted-foreground mt-1">
-          This MCP server doesn&apos;t support LLM sampling.
+          {t("inspector:samplingComponent.notSupportedDescription")}
         </p>
       </div>
     );
@@ -185,7 +187,9 @@ export function InspectorSampling({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ActivitySquare className="h-5 w-5 text-pink-500" />
-          <span className="text-sm font-medium">LLM Sampling</span>
+          <span className="text-sm font-medium">
+            {t("inspector:samplingComponent.title")}
+          </span>
         </div>
         <Button
           onClick={handleSample}
@@ -193,7 +197,9 @@ export function InspectorSampling({
           className="flex items-center gap-2"
         >
           <Brain className={`h-4 w-4 ${sampling ? "animate-pulse" : ""}`} />
-          {sampling ? "Sampling..." : "Sample"}
+          {sampling
+            ? t("inspector:samplingComponent.sampling")
+            : t("inspector:samplingComponent.sample")}
         </Button>
       </div>
 
@@ -202,7 +208,9 @@ export function InspectorSampling({
         <div className="space-y-6">
           {/* Messages */}
           <div className="space-y-4">
-            <h4 className="text-sm font-semibold">Messages</h4>
+            <h4 className="text-sm font-semibold">
+              {t("inspector:samplingComponent.messages")}
+            </h4>
 
             {/* Existing Messages */}
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -219,7 +227,7 @@ export function InspectorSampling({
                       onClick={() => handleRemoveMessage(index)}
                       className="text-xs text-red-600 hover:text-red-800"
                     >
-                      Remove
+                      {t("inspector:samplingComponent.remove")}
                     </button>
                   </div>
                   <div className="text-sm">{message.content.text}</div>
@@ -230,7 +238,9 @@ export function InspectorSampling({
             {/* Add New Message */}
             <div className="border rounded-lg p-3 space-y-3">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium">Add Message:</span>
+                <span className="text-xs font-medium">
+                  {t("inspector:samplingComponent.addMessageLabel")}
+                </span>
                 <select
                   value={newMessageRole}
                   onChange={(e) =>
@@ -238,12 +248,18 @@ export function InspectorSampling({
                   }
                   className="text-xs border rounded px-2 py-1"
                 >
-                  <option value="user">User</option>
-                  <option value="system">System</option>
+                  <option value="user">
+                    {t("inspector:samplingComponent.roleUser")}
+                  </option>
+                  <option value="system">
+                    {t("inspector:samplingComponent.roleSystem")}
+                  </option>
                 </select>
               </div>
               <Textarea
-                placeholder="Enter message content..."
+                placeholder={t(
+                  "inspector:samplingComponent.messagePlaceholder",
+                )}
                 value={newMessageText}
                 onChange={(e) => setNewMessageText(e.target.value)}
                 rows={3}
@@ -254,7 +270,7 @@ export function InspectorSampling({
                 size="sm"
                 className="w-full"
               >
-                Add Message
+                {t("inspector:samplingComponent.addMessage")}
               </Button>
             </div>
           </div>
@@ -263,12 +279,16 @@ export function InspectorSampling({
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <Settings className="h-4 w-4 text-muted-foreground" />
-              <h4 className="text-sm font-semibold">Sampling Parameters</h4>
+              <h4 className="text-sm font-semibold">
+                {t("inspector:samplingComponent.parameters")}
+              </h4>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Max Tokens</label>
+                <label className="text-sm font-medium">
+                  {t("inspector:samplingComponent.maxTokens")}
+                </label>
                 <Input
                   type="number"
                   min="1"
@@ -281,7 +301,9 @@ export function InspectorSampling({
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Temperature</label>
+                <label className="text-sm font-medium">
+                  {t("inspector:samplingComponent.temperature")}
+                </label>
                 <Input
                   type="number"
                   min="0"
@@ -295,7 +317,9 @@ export function InspectorSampling({
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Top P</label>
+                <label className="text-sm font-medium">
+                  {t("inspector:samplingComponent.topP")}
+                </label>
                 <Input
                   type="number"
                   min="0"
@@ -307,9 +331,13 @@ export function InspectorSampling({
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Stop Sequences</label>
+                <label className="text-sm font-medium">
+                  {t("inspector:samplingComponent.stopSequences")}
+                </label>
                 <Input
-                  placeholder="Comma-separated (e.g., \n, END)"
+                  placeholder={t(
+                    "inspector:samplingComponent.stopSequencesPlaceholder",
+                  )}
                   value={stopSequences}
                   onChange={(e) => setStopSequences(e.target.value)}
                 />
@@ -320,7 +348,9 @@ export function InspectorSampling({
 
         {/* Right: Response */}
         <div className="space-y-4">
-          <h4 className="text-sm font-semibold">Response</h4>
+          <h4 className="text-sm font-semibold">
+            {t("inspector:samplingComponent.response")}
+          </h4>
 
           {response ? (
             <div className="space-y-4">
@@ -330,7 +360,7 @@ export function InspectorSampling({
               >
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-medium uppercase">
-                    Assistant Response
+                    {t("inspector:samplingComponent.assistantResponse")}
                   </span>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Brain className="h-3 w-3" />
@@ -344,24 +374,26 @@ export function InspectorSampling({
 
               {/* Response Metadata */}
               <div className="bg-gray-50 p-3 rounded border">
-                <div className="text-xs font-medium text-muted-foreground mb-2">
-                  RESPONSE METADATA
+                <div className="text-xs font-medium uppercase text-muted-foreground mb-2">
+                  {t("inspector:samplingComponent.metadata")}
                 </div>
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between">
-                    <span>Model:</span>
+                    <span>{t("inspector:samplingComponent.model")}</span>
                     <span className="font-mono">{response.model}</span>
                   </div>
                   {response.stopReason && (
                     <div className="flex justify-between">
-                      <span>Stop Reason:</span>
+                      <span>{t("inspector:samplingComponent.stopReason")}</span>
                       <span className="font-mono">{response.stopReason}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span>Response Length:</span>
+                    <span>{t("inspector:samplingComponent.length")}</span>
                     <span className="font-mono">
-                      {response.content.text.length} chars
+                      {t("inspector:samplingComponent.chars", {
+                        count: response.content.text.length,
+                      })}
                     </span>
                   </div>
                 </div>
@@ -372,8 +404,8 @@ export function InspectorSampling({
               <Brain className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
                 {sampling
-                  ? "Generating response..."
-                  : "Configure your messages and parameters, then click Sample to generate a response"}
+                  ? t("inspector:samplingComponent.generating")
+                  : t("inspector:samplingComponent.idle")}
               </p>
             </div>
           )}
@@ -386,29 +418,51 @@ export function InspectorSampling({
           <ActivitySquare className="h-5 w-5 text-pink-500 mt-0.5" />
           <div>
             <h4 className="text-sm font-medium text-pink-900 mb-1">
-              About Sampling
+              {t("inspector:samplingComponent.aboutTitle")}
             </h4>
             <p className="text-xs text-pink-700">
-              LLM Sampling allows the MCP server to generate text responses
-              using language models. This enables the server to create content,
-              answer questions, or perform text-based reasoning tasks.
+              {t("inspector:samplingComponent.aboutDescription")}
             </p>
             <div className="mt-2 text-xs text-pink-600">
-              <strong>Parameters:</strong>
+              <strong>
+                {t("inspector:samplingComponent.parametersLabel")}
+              </strong>
               <ul className="mt-1 space-y-1">
                 <li>
-                  • <strong>Temperature:</strong> Controls randomness (0.0 =
-                  deterministic, 2.0 = very random)
+                  •{" "}
+                  <strong>
+                    {t("inspector:samplingComponent.labelWithColon", {
+                      label: t("inspector:samplingComponent.temperature"),
+                    })}
+                  </strong>{" "}
+                  {t("inspector:samplingComponent.temperatureHelp")}
                 </li>
                 <li>
-                  • <strong>Top P:</strong> Nucleus sampling parameter (0.0-1.0)
+                  •{" "}
+                  <strong>
+                    {t("inspector:samplingComponent.labelWithColon", {
+                      label: t("inspector:samplingComponent.topP"),
+                    })}
+                  </strong>{" "}
+                  {t("inspector:samplingComponent.topPHelp")}
                 </li>
                 <li>
-                  • <strong>Max Tokens:</strong> Maximum response length
+                  •{" "}
+                  <strong>
+                    {t("inspector:samplingComponent.labelWithColon", {
+                      label: t("inspector:samplingComponent.maxTokens"),
+                    })}
+                  </strong>{" "}
+                  {t("inspector:samplingComponent.maxTokensHelp")}
                 </li>
                 <li>
-                  • <strong>Stop Sequences:</strong> Text patterns that end
-                  generation
+                  •{" "}
+                  <strong>
+                    {t("inspector:samplingComponent.labelWithColon", {
+                      label: t("inspector:samplingComponent.stopSequences"),
+                    })}
+                  </strong>{" "}
+                  {t("inspector:samplingComponent.stopSequencesHelp")}
                 </li>
               </ul>
             </div>

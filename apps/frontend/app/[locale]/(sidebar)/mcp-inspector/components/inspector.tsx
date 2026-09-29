@@ -40,8 +40,11 @@ export function Inspector({
   const hasTools = serverCapabilities?.tools !== undefined;
   const hasResources = serverCapabilities?.resources !== undefined;
   const hasPrompts = serverCapabilities?.prompts !== undefined;
-  const hasRoots = serverCapabilities?.roots !== undefined;
-  const hasSampling = serverCapabilities?.sampling !== undefined;
+  // Roots and sampling are capabilities of the client (this inspector
+  // declares both), not of the server: available once connected.
+  const isConnected = Boolean(serverCapabilities);
+  const hasRoots = isConnected;
+  const hasSampling = isConnected;
 
   return (
     <div className="space-y-4">

@@ -1,4 +1,5 @@
 import {
+  type AccessPrincipal,
   CreateEndpointRequestSchema,
   CreateEndpointResponseSchema,
   DeleteEndpointResponseSchema,
@@ -18,26 +19,26 @@ export const createEndpointsRouter = (
   implementations: {
     create: (
       input: z.infer<typeof CreateEndpointRequestSchema>,
-      userId: string,
+      principal: AccessPrincipal,
     ) => Promise<z.infer<typeof CreateEndpointResponseSchema>>;
     list: (
-      userId: string,
+      principal: AccessPrincipal,
     ) => Promise<z.infer<typeof ListEndpointsResponseSchema>>;
     get: (
       input: {
         uuid: string;
       },
-      userId: string,
+      principal: AccessPrincipal,
     ) => Promise<z.infer<typeof GetEndpointResponseSchema>>;
     delete: (
       input: {
         uuid: string;
       },
-      userId: string,
+      principal: AccessPrincipal,
     ) => Promise<z.infer<typeof DeleteEndpointResponseSchema>>;
     update: (
       input: z.infer<typeof UpdateEndpointRequestSchema>,
-      userId: string,
+      principal: AccessPrincipal,
     ) => Promise<z.infer<typeof UpdateEndpointResponseSchema>>;
   },
 ) => {
@@ -46,7 +47,7 @@ export const createEndpointsRouter = (
     list: protectedProcedure
       .output(ListEndpointsResponseSchema)
       .query(async ({ ctx }) => {
-        return await implementations.list(ctx.user.id);
+        return await implementations.list(ctx.principal);
       }),
 
     // Protected: Get single endpoint by UUID
@@ -54,7 +55,7 @@ export const createEndpointsRouter = (
       .input(z.object({ uuid: z.string() }))
       .output(GetEndpointResponseSchema)
       .query(async ({ input, ctx }) => {
-        return await implementations.get(input, ctx.user.id);
+        return await implementations.get(input, ctx.principal);
       }),
 
     // Protected: Create endpoint
@@ -62,7 +63,7 @@ export const createEndpointsRouter = (
       .input(CreateEndpointRequestSchema)
       .output(CreateEndpointResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return await implementations.create(input, ctx.user.id);
+        return await implementations.create(input, ctx.principal);
       }),
 
     // Protected: Delete endpoint
@@ -70,7 +71,7 @@ export const createEndpointsRouter = (
       .input(z.object({ uuid: z.string() }))
       .output(DeleteEndpointResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return await implementations.delete(input, ctx.user.id);
+        return await implementations.delete(input, ctx.principal);
       }),
 
     // Protected: Update endpoint
@@ -78,7 +79,7 @@ export const createEndpointsRouter = (
       .input(UpdateEndpointRequestSchema)
       .output(UpdateEndpointResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return await implementations.update(input, ctx.user.id);
+        return await implementations.update(input, ctx.principal);
       }),
   });
 };

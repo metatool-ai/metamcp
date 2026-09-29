@@ -1,12 +1,24 @@
 "use client";
 
 import { McpServerTypeEnum } from "@repo/zod-types";
-import { ArrowLeft, Calendar, Edit, Hash, Plug, Server } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  Edit,
+  Hash,
+  Plug,
+  Server,
+  Share2,
+} from "lucide-react";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { AccessBadge } from "@/components/access/access-badges";
+import { OwnerLabel } from "@/components/access/owner-label";
+import { ReadOnlyBanner } from "@/components/access/read-only-banner";
+import { ShareDialog } from "@/components/access/share-dialog";
 import { EditNamespace } from "@/components/edit-namespace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { hasAccessLevel, useAccess } from "@/hooks/useAccess";
 import { useConnection } from "@/hooks/useConnection";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
@@ -38,6 +51,8 @@ export default function NamespaceDetailPage({
   const { uuid } = use(params);
   const router = useRouter();
   const { t } = useTranslations();
+  const { me, can } = useAccess();
+  const [shareOpen, setShareOpen] = useState(false);
 
   const [showDeleteDialog, setShowDeleteDialog] = useState<boolean>(false);
   const [editDialogOpen, setEditDialogOpen] = useState<boolean>(false);
@@ -88,6 +103,11 @@ export default function NamespaceDetailPage({
     ? namespaceResponse.data
     : undefined;
 
+  // Live inspection (listing and calling tools through the proxy) needs edit
+  // access or the inspector permission; saved tools are shown either way.
+  const canInspect =
+    hasAccessLevel(namespace?.access, "edit") || can("inspector.use");
+
   // MetaMCP Connection setup - connect to the metamcp proxy endpoint for this namespace
   const connection = useConnection({
     mcpServerUuid: uuid, // Using namespace UUID as the "server" UUID for connection
@@ -98,14 +118,10 @@ export default function NamespaceDetailPage({
     env: {},
     bearerToken: undefined,
     isMetaMCP: true, // Indicate this is a MetaMCP connection
-    includeInactiveServers: true, // Include all servers regardless of status in namespace management
-    onNotification: (notification) => {
-      console.log("MetaMCP Notification:", notification);
-    },
-    onStdErrNotification: (notification) => {
-      console.error("MetaMCP StdErr:", notification);
-    },
-    enabled: Boolean(namespace && !isLoading),
+    // Editors manage every server (incl. inactive ones); others only see what
+    // the namespace actually serves.
+    includeInactiveServers: hasAccessLevel(namespace?.access, "edit"),
+    enabled: Boolean(namespace && !isLoading && canInspect),
   });
 
   // Auto-connect when hook is enabled and not already connected
@@ -114,11 +130,12 @@ export default function NamespaceDetailPage({
       connection &&
       namespace &&
       !isLoading &&
+      canInspect &&
       connection.connectionStatus === "disconnected"
     ) {
       connection.connect();
     }
-  }, [namespace, connection, isLoading]);
+  }, [namespace, connection, isLoading, canInspect]);
 
   // Handle delete namespace
   const handleDeleteNamespace = async () => {
@@ -351,23 +368,62 @@ export default function NamespaceDetailPage({
           </Button>
         </Link>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditDialogOpen(true)}
-          >
-            <Edit className="h-4 w-4 mr-2" />
-            {t("namespaces:editNamespace")}
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            {t("namespaces:deleteNamespace")}
-          </Button>
+          {hasAccessLevel(namespace.access, "manage") &&
+            can("resources.share") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShareOpen(true)}
+              >
+                <Share2 className="h-4 w-4 mr-2" />
+                {t("access:share.action")}
+              </Button>
+            )}
+          {hasAccessLevel(namespace.access, "edit") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditDialogOpen(true)}
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              {t("namespaces:editNamespace")}
+            </Button>
+          )}
+          {hasAccessLevel(namespace.access, "manage") && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              {t("namespaces:deleteNamespace")}
+            </Button>
+          )}
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="text-muted-foreground">
+          {t("access:owner.column")}
+        </span>
+        <OwnerLabel owner={namespace.owner} currentUserId={me?.userId} />
+        {namespace.access?.reason !== "owner" && (
+          <AccessBadge access={namespace.access} />
+        )}
+      </div>
+
+      <ReadOnlyBanner
+        access={namespace.access}
+        owner={namespace.owner}
+        kind="namespace"
+      />
+
+      <ShareDialog
+        resourceType="namespace"
+        resourceUuid={namespace.uuid}
+        resourceName={namespace.name}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
 
       {/* Edit Namespace Dialog */}
       <EditNamespace
@@ -422,28 +478,30 @@ export default function NamespaceDetailPage({
               </p>
             )}
           </div>
-          <div className="flex items-center space-x-4">
-            {/* MetaMCP Connection Status */}
-            <div className="flex items-center space-x-2">
-              <span className="text-sm font-medium">
-                {t("namespaces:detail.metaMcpConnection")}:
-              </span>
-              <ConnectionIcon className="h-4 w-4" />
-              <span className={`text-sm font-medium ${connectionInfo.color}`}>
-                {connectionInfo.text}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleConnectionToggle}
-                disabled={connection.connectionStatus === "connecting"}
-              >
-                {connection.connectionStatus === "connected"
-                  ? t("namespaces:detail.reconnect")
-                  : t("namespaces:detail.connect")}
-              </Button>
+          {/* MetaMCP Connection Status */}
+          {canInspect && (
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium">
+                  {t("namespaces:detail.metaMcpConnection")}:
+                </span>
+                <ConnectionIcon className="h-4 w-4" />
+                <span className={`text-sm font-medium ${connectionInfo.color}`}>
+                  {connectionInfo.text}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleConnectionToggle}
+                  disabled={connection.connectionStatus === "connecting"}
+                >
+                  {connection.connectionStatus === "connected"
+                    ? t("namespaces:detail.reconnect")
+                    : t("namespaces:detail.connect")}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Section 1: Basic Overview */}
@@ -561,6 +619,7 @@ export default function NamespaceDetailPage({
             servers={namespace.servers}
             namespaceUuid={namespace.uuid}
             onServerStatusChange={handleServerStatusChange}
+            canEdit={hasAccessLevel(namespace.access, "edit")}
           />
         </div>
 
@@ -574,20 +633,24 @@ export default function NamespaceDetailPage({
               servers={namespace.servers}
               namespaceUuid={namespace.uuid}
               makeRequest={connection.makeRequest}
+              canEdit={hasAccessLevel(namespace.access, "edit")}
             />
           ) : (
             <div className="space-y-4">
               <NamespaceToolManagement
                 servers={namespace.servers}
                 namespaceUuid={namespace.uuid}
+                canEdit={hasAccessLevel(namespace.access, "edit")}
               />
-              <div className="flex justify-center">
-                <div className="text-sm text-muted-foreground">
-                  {connection.connectionStatus === "connecting"
-                    ? t("namespaces:detail.connectingToMetaMcp")
-                    : t("namespaces:detail.connectToMetaMcpToEnable")}
+              {canInspect && (
+                <div className="flex justify-center">
+                  <div className="text-sm text-muted-foreground">
+                    {connection.connectionStatus === "connecting"
+                      ? t("namespaces:detail.connectingToMetaMcp")
+                      : t("namespaces:detail.connectToMetaMcpToEnable")}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

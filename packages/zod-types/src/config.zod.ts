@@ -10,6 +10,11 @@ export const ConfigKeyEnum = z.enum([
   "MCP_MAX_TOTAL_TIMEOUT",
   "MCP_MAX_ATTEMPTS",
   "SESSION_LIFETIME",
+  "DEFAULT_USER_ROLE",
+  "ROLE_PERMISSIONS",
+  "OIDC_GROUPS_CLAIM",
+  "OIDC_SYNC_GROUPS",
+  "OIDC_REQUIRE_GROUP_MATCH",
 ]);
 
 // Config schema

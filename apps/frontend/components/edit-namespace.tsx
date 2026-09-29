@@ -7,11 +7,12 @@ import {
   NamespaceWithServers,
   UpdateNamespaceRequest,
 } from "@repo/zod-types";
-import { Check, ChevronDown, Search, Server } from "lucide-react";
+import { Check, Search, Server } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { OwnerTransferSelect } from "@/components/access/ownership-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,14 +22,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 import { createTranslatedZodResolver } from "@/lib/zod-resolver";
@@ -50,6 +46,7 @@ export function EditNamespace({
   const [selectedServerUuids, setSelectedServerUuids] = useState<string[]>([]);
   const [serverSearchQuery, setServerSearchQuery] = useState("");
   const { t } = useTranslations();
+  const { me, isAdmin } = useAccess();
 
   // Get tRPC utils for cache invalidation
   const utils = trpc.useUtils();
@@ -241,39 +238,20 @@ export function EditNamespace({
               )}
             </div>
 
-            {/* Namespace Ownership */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                {t("namespaces:ownership")}
-              </label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-between"
-                    type="button"
-                    disabled={isUpdating}
-                  >
-                    {editForm.watch("user_id") === null
-                      ? t("namespaces:everyone")
-                      : t("namespaces:forMyself")}
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
-                  <DropdownMenuItem
-                    onClick={() => editForm.setValue("user_id", undefined)}
-                  >
-                    {t("namespaces:forMyself")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => editForm.setValue("user_id", null)}
-                  >
-                    {t("namespaces:everyone")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            {/* Namespace Ownership (administrators only) */}
+            {isAdmin && me && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  {t("access:ownership.label")}
+                </label>
+                <OwnerTransferSelect
+                  value={editForm.watch("user_id")}
+                  onChange={(value) => editForm.setValue("user_id", value)}
+                  currentOwner={namespace?.owner}
+                  currentUserId={me.userId}
+                />
+              </div>
+            )}
 
             {/* MCP Servers Selection */}
             <div className="space-y-2">

@@ -26,7 +26,9 @@ import {
 import logger from "@/utils/logger";
 
 import { namespacesRepository } from "../../db/repositories/namespaces.repo";
-import { toolsImplementations } from "../../trpc/tools.impl";
+import { toolsRepository } from "../../db/repositories/tools.repo";
+import { accessService } from "../access/access.service";
+import { isServerAllowedInNamespace } from "../access/namespace-composition";
 import { getAdminToolsContext } from "../admin-mcp/admin-session-context";
 import {
   executeAdminTool,
@@ -111,6 +113,9 @@ async function filterOutOverrideTools(
   return filteredTools;
 }
 
+/** Upper bound on the pages read from one upstream list (tools/list). */
+const MAX_UPSTREAM_PAGES = 100;
+
 export const createServer = async (
   namespaceUuid: string,
   sessionId: string,
@@ -121,7 +126,9 @@ export const createServer = async (
   const toolToClient: Record<string, ConnectedClient> = {};
   const toolToServerUuid: Record<string, string> = {};
   const promptToClient: Record<string, ConnectedClient> = {};
+  const promptToServerUuid: Record<string, string> = {};
   const resourceToClient: Record<string, ConnectedClient> = {};
+  const resourceToServerUuid: Record<string, string> = {};
 
   // Helper function to detect if a server is the same instance
   const isSameServerInstance = (
@@ -169,6 +176,48 @@ export const createServer = async (
     auth: requestContext?.auth,
   };
 
+  // Every request handler runs through this: while a request runs, the pool
+  // never releases the connections of this session as unused.
+  const tracked =
+    <Req, Res>(handler: (request: Req) => Promise<Res>) =>
+    (request: Req): Promise<Res> =>
+      mcpServerPool.trackRequest(sessionId, () => handler(request));
+
+  // The routing tables (toolToClient...) remember the pooled connection that
+  // listed each tool, prompt and resource. The pool may have released it
+  // since (MCP_CONNECTION_IDLE_TTL): calls go through the connection this
+  // session holds now, opened again when needed.
+  const liveClientFor = async (
+    serverUuid: string,
+  ): Promise<ConnectedClient | undefined> => {
+    const held = mcpServerPool.getActiveConnection(sessionId, serverUuid);
+    if (held) {
+      return held;
+    }
+
+    const serverParams = await getMcpServers(
+      namespaceUuid,
+      includeInactiveServers,
+    );
+    const params = serverParams[serverUuid];
+    if (!params) {
+      return undefined;
+    }
+    const forwarded = clientRequestHeaders
+      ? extractForwardedHeaders(clientRequestHeaders, {
+          [serverUuid]: params,
+        })[serverUuid]
+      : undefined;
+    return mcpServerPool.getSession(
+      sessionId,
+      serverUuid,
+      forwarded
+        ? { ...params, headers: mergeHeaders(params.headers, forwarded) }
+        : params,
+      namespaceUuid,
+    );
+  };
+
   // Original List Tools Handler
   const originalListToolsHandler: ListToolsHandler = async (
     request,
@@ -190,6 +239,12 @@ export const createServer = async (
       : {};
 
     const allTools: Tool[] = [];
+    // Prefixed tools per server, merged once every server has answered
+    const toolCandidates: Array<{
+      tool: Tool;
+      serverUuid: string;
+      session: ConnectedClient;
+    }> = [];
 
     // Servers that should have contributed tools but failed even after the
     // recovery retry (or had no session at all). Drives the degraded-response
@@ -210,8 +265,10 @@ export const createServer = async (
     // Cold-start warmup: if pool has 0 idle + 0 active sessions but servers
     // exist in DB, trigger a blocking warmup before tools/list responds.
     // This prevents 0-tool responses after idle timeout expires all connections.
+    // Warm pool only: otherwise getSession() below opens the connections.
     const poolStatus = mcpServerPool.getPoolStatus();
     if (
+      mcpServerPool.isWarm &&
       poolStatus.idle === 0 &&
       poolStatus.active === 0 &&
       allServerEntries.length > 0
@@ -308,8 +365,9 @@ export const createServer = async (
             const pages: Tool[] = [];
             let cursor: string | undefined = undefined;
             let hasMore = true;
+            const seenCursors = new Set<string>();
 
-            while (hasMore) {
+            while (hasMore && seenCursors.size < MAX_UPSTREAM_PAGES) {
               const result: ListToolsResult = await active.client.request(
                 {
                   method: "tools/list",
@@ -326,7 +384,9 @@ export const createServer = async (
               }
 
               cursor = result.nextCursor;
-              hasMore = !!result.nextCursor;
+              // A server repeating its cursor would loop forever
+              hasMore = !!cursor && !seenCursors.has(cursor);
+              if (cursor) seenCursors.add(cursor);
             }
 
             return pages;
@@ -360,10 +420,9 @@ export const createServer = async (
           // Filter out tools that are overrides of existing tools to prevent duplicates
           try {
             // PERFORMANCE OPTIMIZATION: Check hash FIRST to avoid expensive operations
-            const toolNames = allServerTools.map((tool) => tool.name);
             const hasChanged = toolsSyncCache.hasChanged(
               mcpServerUuid,
-              toolNames,
+              allServerTools,
             );
 
             console.log(
@@ -378,14 +437,16 @@ export const createServer = async (
               );
 
               if (toolsToSave.length > 0) {
-                // Update cache
-                toolsSyncCache.update(mcpServerUuid, toolNames);
-
                 // Sync with cleanup
-                await toolsImplementations.sync({
+                // Tools come straight from the upstream server here (not
+                // from a client), so no per-user check applies.
+                await toolsRepository.syncTools({
                   tools: toolsToSave,
                   mcpServerUuid: mcpServerUuid,
                 });
+
+                // Update cache once stored (a failed write is retried)
+                toolsSyncCache.update(mcpServerUuid, allServerTools);
               }
             }
           } catch (dbError) {
@@ -396,25 +457,49 @@ export const createServer = async (
           }
 
           // Use original tools for client response (middleware will be applied later)
-          const toolsWithSource = allServerTools.map((tool) => {
-            const toolName = `${sanitizeName(serverName)}__${tool.name}`;
-            toolToClient[toolName] = activeSession;
-            toolToServerUuid[toolName] = mcpServerUuid;
-
-            return {
-              ...tool,
-              name: toolName,
-              description: tool.description,
-            };
-          });
-
-          allTools.push(...toolsWithSource);
+          for (const tool of allServerTools) {
+            toolCandidates.push({
+              tool: {
+                ...tool,
+                name: `${sanitizeName(serverName)}__${tool.name}`,
+                description: tool.description,
+              },
+              serverUuid: mcpServerUuid,
+              session: activeSession,
+            });
+          }
         } catch (error) {
           logger.error(`Error fetching tools from: ${serverName}`, error);
           failedServers.push(serverName || mcpServerUuid);
         }
       }),
     );
+
+    // Two servers of a namespace can yield the same prefixed name (servers
+    // with the same name, e.g. a personal and an organisation "github"). A
+    // name routes to one server only: the one with the smallest uuid, so the
+    // choice does not depend on which server answered first.
+    const toolOwners = new Map<string, string>();
+    for (const { tool, serverUuid } of toolCandidates) {
+      const owner = toolOwners.get(tool.name);
+      if (owner === undefined || serverUuid < owner) {
+        toolOwners.set(tool.name, serverUuid);
+      }
+    }
+    const listedTools = new Set<string>();
+    for (const { tool, serverUuid, session } of toolCandidates) {
+      if (toolOwners.get(tool.name) !== serverUuid) {
+        logger.warn(
+          `tools/list: tool name ${tool.name} is exposed by several servers of namespace ${namespaceUuid}; server ${serverUuid} is ignored for it. Give the servers distinct names.`,
+        );
+        continue;
+      }
+      if (listedTools.has(tool.name)) continue;
+      listedTools.add(tool.name);
+      toolToClient[tool.name] = session;
+      toolToServerUuid[tool.name] = serverUuid;
+      allTools.push(tool);
+    }
 
     const totalTime = performance.now() - startTime;
     console.log(
@@ -464,8 +549,17 @@ export const createServer = async (
           ? extractForwardedHeaders(context.clientRequestHeaders, serverParams)
           : {};
 
-        // Find the server with the matching name prefix
-        for (const [mcpServerUuid, params] of Object.entries(serverParams)) {
+        // Find the server with the matching name prefix. Smallest uuid
+        // first, like tools/list does when several servers share a name.
+        const candidates = Object.entries(serverParams).sort(([a], [b]) =>
+          a < b ? -1 : a > b ? 1 : 0,
+        );
+        for (const [mcpServerUuid, params] of candidates) {
+          // Don't open connections to servers the tool name rules out
+          if (params.name && sanitizeName(params.name) !== serverPrefix) {
+            continue;
+          }
+
           // Merge forwarded headers for this server
           const effectiveParams = forwardedHeadersByServer[mcpServerUuid]
             ? {
@@ -498,8 +592,13 @@ export const createServer = async (
                 let foundTool = false;
                 let cursor: string | undefined = undefined;
                 let hasMore = true;
+                const seenCursors = new Set<string>();
 
-                while (hasMore && !foundTool) {
+                while (
+                  hasMore &&
+                  !foundTool &&
+                  seenCursors.size < MAX_UPSTREAM_PAGES
+                ) {
                   const result: ListToolsResult = await session.client.request(
                     {
                       method: "tools/list",
@@ -523,7 +622,8 @@ export const createServer = async (
                   }
 
                   cursor = result.nextCursor;
-                  hasMore = !!result.nextCursor;
+                  hasMore = !!cursor && !seenCursors.has(cursor);
+                  if (cursor) seenCursors.add(cursor);
                 }
 
                 if (foundTool) {
@@ -551,6 +651,21 @@ export const createServer = async (
     if (!serverUuid) {
       throw new Error(`Server UUID not found for tool: ${name}`);
     }
+
+    // The routing table is filled by tools/list: re-check that the server
+    // is still part of what the namespace may expose (revoked shares).
+    if (!(await isServerAllowedInNamespace(namespaceUuid, serverUuid))) {
+      delete toolToClient[name];
+      delete toolToServerUuid[name];
+      throw new Error(`Unknown tool: ${name}`);
+    }
+
+    const liveClient = await liveClientFor(serverUuid);
+    if (!liveClient) {
+      throw new Error(`The server of tool ${name} is not available`);
+    }
+    clientForTool = liveClient;
+    toolToClient[name] = liveClient;
 
     const abortController = new AbortController();
 
@@ -665,406 +780,457 @@ export const createServer = async (
   )(originalCallToolHandler);
 
   // Set up the handlers with middleware
-  server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-    const result = await listToolsWithMiddleware(request, handlerContext);
-    const adminContext = getAdminToolsContext(handlerContext.sessionId);
-
-    if (adminContext?.enabled && adminContext.userId) {
-      result.tools.push(...getAdminToolsForMcp());
-    }
-
-    return result;
-  });
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (isExposedAdminToolName(request.params.name)) {
+  server.setRequestHandler(
+    ListToolsRequestSchema,
+    tracked(async (request) => {
+      const result = await listToolsWithMiddleware(request, handlerContext);
       const adminContext = getAdminToolsContext(handlerContext.sessionId);
-      if (!adminContext?.enabled || !adminContext.userId) {
-        throw new Error(
-          `Access denied to MetaMCP admin tool: ${request.params.name}`,
-        );
+
+      if (adminContext?.enabled && adminContext.userId) {
+        // Re-resolved on every listing: tools reflect the caller's current role.
+        const principal = await accessService.getPrincipal(adminContext.userId);
+        if (principal) {
+          result.tools.push(...getAdminToolsForMcp(principal));
+        }
       }
 
-      return executeAdminTool(
-        request.params.name,
-        adminContext.userId,
-        request.params.arguments,
+      return result;
+    }),
+  );
+
+  // Admin tool calls are audited like any other tool call.
+  const callAdminToolWithAudit = createAuditCallToolMiddleware()(async (
+    request,
+  ) => {
+    const adminContext = getAdminToolsContext(handlerContext.sessionId);
+    if (!adminContext?.enabled || !adminContext.userId) {
+      throw new Error(
+        `Access denied to MetaMCP admin tool: ${request.params.name}`,
       );
     }
 
-    return await callToolWithMiddleware(request, handlerContext);
+    return executeAdminTool(
+      request.params.name,
+      adminContext.userId,
+      request.params.arguments,
+    );
   });
+
+  server.setRequestHandler(
+    CallToolRequestSchema,
+    tracked(async (request) => {
+      if (isExposedAdminToolName(request.params.name)) {
+        return await callAdminToolWithAudit(request, handlerContext);
+      }
+
+      return await callToolWithMiddleware(request, handlerContext);
+    }),
+  );
 
   // Get Prompt Handler
-  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-    const { name } = request.params;
-    const clientForPrompt = promptToClient[name];
+  server.setRequestHandler(
+    GetPromptRequestSchema,
+    tracked(async (request) => {
+      const { name } = request.params;
+      const promptServerUuid = promptToServerUuid[name];
 
-    if (!clientForPrompt) {
-      throw new Error(`Unknown prompt: ${name}`);
-    }
-
-    try {
-      // Parse the prompt name using shared utility
-      const parsed = parseToolName(name);
-      if (!parsed) {
-        throw new Error(`Invalid prompt name format: ${name}`);
+      if (
+        !promptToClient[name] ||
+        !promptServerUuid ||
+        !(await isServerAllowedInNamespace(namespaceUuid, promptServerUuid))
+      ) {
+        throw new Error(`Unknown prompt: ${name}`);
       }
 
-      const promptName = parsed.originalToolName;
-      const response = await clientForPrompt.client.request(
-        {
-          method: "prompts/get",
-          params: {
-            name: promptName,
-            arguments: request.params.arguments || {},
-            _meta: request.params._meta,
-          },
-        },
-        GetPromptResultSchema,
-      );
+      const clientForPrompt = await liveClientFor(promptServerUuid);
+      if (!clientForPrompt) {
+        throw new Error(`The server of prompt ${name} is not available`);
+      }
+      promptToClient[name] = clientForPrompt;
 
-      return response;
-    } catch (error) {
-      logger.error(
-        `Error getting prompt through ${
-          clientForPrompt.client.getServerVersion()?.name
-        }:`,
-        error,
-      );
-      throw error;
-    }
-  });
+      try {
+        // Parse the prompt name using shared utility
+        const parsed = parseToolName(name);
+        if (!parsed) {
+          throw new Error(`Invalid prompt name format: ${name}`);
+        }
+
+        const promptName = parsed.originalToolName;
+        const response = await clientForPrompt.client.request(
+          {
+            method: "prompts/get",
+            params: {
+              name: promptName,
+              arguments: request.params.arguments || {},
+              _meta: request.params._meta,
+            },
+          },
+          GetPromptResultSchema,
+        );
+
+        return response;
+      } catch (error) {
+        logger.error(
+          `Error getting prompt through ${
+            clientForPrompt.client.getServerVersion()?.name
+          }:`,
+          error,
+        );
+        throw error;
+      }
+    }),
+  );
 
   // List Prompts Handler
-  server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
-    const serverParams = await getMcpServers(
-      namespaceUuid,
-      includeInactiveServers,
-    );
-    const allPrompts: ListPromptsResult["prompts"] = [];
-    const failedServers: string[] = [];
-
-    // Extract forwarded headers from client request for servers that need them
-    const forwardedHeadersByServer = handlerContext.clientRequestHeaders
-      ? extractForwardedHeaders(
-          handlerContext.clientRequestHeaders,
-          serverParams,
-        )
-      : {};
-
-    // Track visited servers to detect circular references - reset on each call
-    const visitedServers = new Set<string>();
-
-    // Filter out self-referencing servers before processing
-    const validPromptServers = Object.entries(serverParams).filter(
-      ([uuid, params]) => {
-        // Skip if we've already visited this server to prevent circular references
-        if (visitedServers.has(uuid)) {
-          logger.info(
-            `Skipping already visited server in prompts: ${params.name || uuid}`,
-          );
-          return false;
-        }
-
-        // Check if this server is the same instance to prevent self-referencing
-        if (isSameServerInstance(params, uuid)) {
-          logger.info(
-            `Skipping self-referencing server in prompts: ${params.name || uuid}`,
-          );
-          return false;
-        }
-
-        // Mark this server as visited
-        visitedServers.add(uuid);
-        return true;
-      },
-    );
-
-    await Promise.allSettled(
-      validPromptServers.map(async ([uuid, params]) => {
-        // Merge forwarded headers into server params for this session
-        const effectiveParams = forwardedHeadersByServer[uuid]
-          ? {
-              ...params,
-              headers: mergeHeaders(
-                params.headers,
-                forwardedHeadersByServer[uuid],
-              ),
-            }
-          : params;
-
-        const session = await mcpServerPool.getSession(
-          sessionId,
-          uuid,
-          effectiveParams,
-          namespaceUuid,
-        );
-        if (!session) {
-          logger.error(
-            `prompts/list: no session available for server ${params.name || uuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
-          );
-          failedServers.push(params.name || uuid);
-          return;
-        }
-
-        // Now check for self-referencing using the actual MCP server name
-        const serverVersion = session.client.getServerVersion();
-        const actualServerName = serverVersion?.name || params.name || "";
-        const ourServerName = `metamcp-unified-${namespaceUuid}`;
-
-        if (actualServerName === ourServerName) {
-          logger.info(
-            `Skipping self-referencing MetaMCP server in prompts: "${actualServerName}"`,
-          );
-          return;
-        }
-
-        const capabilities = session.client.getServerCapabilities();
-        if (!capabilities?.prompts) return;
-
-        // Use name assigned by user, fallback to name from server
-        const serverName =
-          params.name || session.client.getServerVersion()?.name || "";
-        try {
-          let activeSession = session;
-          const result = await requestWithSessionRecovery({
-            pool: mcpServerPool,
-            sessionId,
-            serverUuid: uuid,
-            params,
-            namespaceUuid,
-            operation: "prompts/list",
-            serverName,
-            session,
-            attempt: (active) =>
-              active.client.request(
-                {
-                  method: "prompts/list",
-                  params: {
-                    cursor: request.params?.cursor,
-                    _meta: request.params?._meta,
-                  },
-                },
-                ListPromptsResultSchema,
-              ),
-            onFreshSession: (fresh) => {
-              activeSession = fresh;
-            },
-          });
-
-          if (result.prompts) {
-            const promptsWithSource = result.prompts.map((prompt) => {
-              const promptName = `${sanitizeName(serverName)}__${prompt.name}`;
-              promptToClient[promptName] = activeSession;
-              return {
-                ...prompt,
-                name: promptName,
-                description: prompt.description || "",
-              };
-            });
-            allPrompts.push(...promptsWithSource);
-          }
-        } catch (error) {
-          logger.error(`Error fetching prompts from: ${serverName}`, error);
-          failedServers.push(serverName || uuid);
-        }
-      }),
-    );
-
-    if (failedServers.length > 0) {
-      logger.error(
-        `prompts/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allPrompts.length} prompts`,
+  server.setRequestHandler(
+    ListPromptsRequestSchema,
+    tracked(async (request) => {
+      const serverParams = await getMcpServers(
+        namespaceUuid,
+        includeInactiveServers,
       );
-    }
+      const allPrompts: ListPromptsResult["prompts"] = [];
+      const failedServers: string[] = [];
 
-    return {
-      prompts: allPrompts,
-      nextCursor: request.params?.cursor,
-    };
-  });
+      // Extract forwarded headers from client request for servers that need them
+      const forwardedHeadersByServer = handlerContext.clientRequestHeaders
+        ? extractForwardedHeaders(
+            handlerContext.clientRequestHeaders,
+            serverParams,
+          )
+        : {};
+
+      // Track visited servers to detect circular references - reset on each call
+      const visitedServers = new Set<string>();
+
+      // Filter out self-referencing servers before processing
+      const validPromptServers = Object.entries(serverParams).filter(
+        ([uuid, params]) => {
+          // Skip if we've already visited this server to prevent circular references
+          if (visitedServers.has(uuid)) {
+            logger.info(
+              `Skipping already visited server in prompts: ${params.name || uuid}`,
+            );
+            return false;
+          }
+
+          // Check if this server is the same instance to prevent self-referencing
+          if (isSameServerInstance(params, uuid)) {
+            logger.info(
+              `Skipping self-referencing server in prompts: ${params.name || uuid}`,
+            );
+            return false;
+          }
+
+          // Mark this server as visited
+          visitedServers.add(uuid);
+          return true;
+        },
+      );
+
+      await Promise.allSettled(
+        validPromptServers.map(async ([uuid, params]) => {
+          // Merge forwarded headers into server params for this session
+          const effectiveParams = forwardedHeadersByServer[uuid]
+            ? {
+                ...params,
+                headers: mergeHeaders(
+                  params.headers,
+                  forwardedHeadersByServer[uuid],
+                ),
+              }
+            : params;
+
+          const session = await mcpServerPool.getSession(
+            sessionId,
+            uuid,
+            effectiveParams,
+            namespaceUuid,
+          );
+          if (!session) {
+            logger.error(
+              `prompts/list: no session available for server ${params.name || uuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
+            );
+            failedServers.push(params.name || uuid);
+            return;
+          }
+
+          // Now check for self-referencing using the actual MCP server name
+          const serverVersion = session.client.getServerVersion();
+          const actualServerName = serverVersion?.name || params.name || "";
+          const ourServerName = `metamcp-unified-${namespaceUuid}`;
+
+          if (actualServerName === ourServerName) {
+            logger.info(
+              `Skipping self-referencing MetaMCP server in prompts: "${actualServerName}"`,
+            );
+            return;
+          }
+
+          const capabilities = session.client.getServerCapabilities();
+          if (!capabilities?.prompts) return;
+
+          // Use name assigned by user, fallback to name from server
+          const serverName =
+            params.name || session.client.getServerVersion()?.name || "";
+          try {
+            let activeSession = session;
+            const result = await requestWithSessionRecovery({
+              pool: mcpServerPool,
+              sessionId,
+              serverUuid: uuid,
+              params,
+              namespaceUuid,
+              operation: "prompts/list",
+              serverName,
+              session,
+              attempt: (active) =>
+                active.client.request(
+                  {
+                    method: "prompts/list",
+                    params: {
+                      cursor: request.params?.cursor,
+                      _meta: request.params?._meta,
+                    },
+                  },
+                  ListPromptsResultSchema,
+                ),
+              onFreshSession: (fresh) => {
+                activeSession = fresh;
+              },
+            });
+
+            if (result.prompts) {
+              const promptsWithSource = result.prompts.map((prompt) => {
+                const promptName = `${sanitizeName(serverName)}__${prompt.name}`;
+                promptToClient[promptName] = activeSession;
+                promptToServerUuid[promptName] = uuid;
+                return {
+                  ...prompt,
+                  name: promptName,
+                  description: prompt.description || "",
+                };
+              });
+              allPrompts.push(...promptsWithSource);
+            }
+          } catch (error) {
+            logger.error(`Error fetching prompts from: ${serverName}`, error);
+            failedServers.push(serverName || uuid);
+          }
+        }),
+      );
+
+      if (failedServers.length > 0) {
+        logger.error(
+          `prompts/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allPrompts.length} prompts`,
+        );
+      }
+
+      return {
+        // Complete list: no further page
+        prompts: allPrompts,
+      };
+    }),
+  );
 
   // List Resources Handler
-  server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
-    const serverParams = await getMcpServers(
-      namespaceUuid,
-      includeInactiveServers,
-    );
-    const allResources: ListResourcesResult["resources"] = [];
-    const failedServers: string[] = [];
-
-    // Extract forwarded headers from client request for servers that need them
-    const forwardedHeadersByServer = handlerContext.clientRequestHeaders
-      ? extractForwardedHeaders(
-          handlerContext.clientRequestHeaders,
-          serverParams,
-        )
-      : {};
-
-    // Track visited servers to detect circular references - reset on each call
-    const visitedServers = new Set<string>();
-
-    // Filter out self-referencing servers before processing
-    const validResourceServers = Object.entries(serverParams).filter(
-      ([uuid, params]) => {
-        // Skip if we've already visited this server to prevent circular references
-        if (visitedServers.has(uuid)) {
-          logger.info(
-            `Skipping already visited server in resources: ${params.name || uuid}`,
-          );
-          return false;
-        }
-
-        // Check if this server is the same instance to prevent self-referencing
-        if (isSameServerInstance(params, uuid)) {
-          logger.info(
-            `Skipping self-referencing server in resources: ${params.name || uuid}`,
-          );
-          return false;
-        }
-
-        // Mark this server as visited
-        visitedServers.add(uuid);
-        return true;
-      },
-    );
-
-    await Promise.allSettled(
-      validResourceServers.map(async ([uuid, params]) => {
-        // Merge forwarded headers into server params for this session
-        const effectiveParams = forwardedHeadersByServer[uuid]
-          ? {
-              ...params,
-              headers: mergeHeaders(
-                params.headers,
-                forwardedHeadersByServer[uuid],
-              ),
-            }
-          : params;
-
-        const session = await mcpServerPool.getSession(
-          sessionId,
-          uuid,
-          effectiveParams,
-          namespaceUuid,
-        );
-        if (!session) {
-          logger.error(
-            `resources/list: no session available for server ${params.name || uuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
-          );
-          failedServers.push(params.name || uuid);
-          return;
-        }
-
-        // Now check for self-referencing using the actual MCP server name
-        const serverVersion = session.client.getServerVersion();
-        const actualServerName = serverVersion?.name || params.name || "";
-        const ourServerName = `metamcp-unified-${namespaceUuid}`;
-
-        if (actualServerName === ourServerName) {
-          logger.info(
-            `Skipping self-referencing MetaMCP server in resources: "${actualServerName}"`,
-          );
-          return;
-        }
-
-        const capabilities = session.client.getServerCapabilities();
-        if (!capabilities?.resources) return;
-
-        // Use name assigned by user, fallback to name from server
-        const serverName =
-          params.name || session.client.getServerVersion()?.name || "";
-        try {
-          let activeSession = session;
-          const result = await requestWithSessionRecovery({
-            pool: mcpServerPool,
-            sessionId,
-            serverUuid: uuid,
-            params,
-            namespaceUuid,
-            operation: "resources/list",
-            serverName,
-            session,
-            attempt: (active) =>
-              active.client.request(
-                {
-                  method: "resources/list",
-                  params: {
-                    cursor: request.params?.cursor,
-                    _meta: request.params?._meta,
-                  },
-                },
-                ListResourcesResultSchema,
-              ),
-            onFreshSession: (fresh) => {
-              activeSession = fresh;
-            },
-          });
-
-          if (result.resources) {
-            const resourcesWithSource = result.resources.map((resource) => {
-              resourceToClient[resource.uri] = activeSession;
-              return {
-                ...resource,
-                name: resource.name || "",
-              };
-            });
-            allResources.push(...resourcesWithSource);
-          }
-        } catch (error) {
-          logger.error(`Error fetching resources from: ${serverName}`, error);
-          failedServers.push(serverName || uuid);
-        }
-      }),
-    );
-
-    if (failedServers.length > 0) {
-      logger.error(
-        `resources/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allResources.length} resources`,
+  server.setRequestHandler(
+    ListResourcesRequestSchema,
+    tracked(async (request) => {
+      const serverParams = await getMcpServers(
+        namespaceUuid,
+        includeInactiveServers,
       );
-    }
+      const allResources: ListResourcesResult["resources"] = [];
+      const failedServers: string[] = [];
 
-    return {
-      resources: allResources,
-      nextCursor: request.params?.cursor,
-    };
-  });
+      // Extract forwarded headers from client request for servers that need them
+      const forwardedHeadersByServer = handlerContext.clientRequestHeaders
+        ? extractForwardedHeaders(
+            handlerContext.clientRequestHeaders,
+            serverParams,
+          )
+        : {};
+
+      // Track visited servers to detect circular references - reset on each call
+      const visitedServers = new Set<string>();
+
+      // Filter out self-referencing servers before processing
+      const validResourceServers = Object.entries(serverParams).filter(
+        ([uuid, params]) => {
+          // Skip if we've already visited this server to prevent circular references
+          if (visitedServers.has(uuid)) {
+            logger.info(
+              `Skipping already visited server in resources: ${params.name || uuid}`,
+            );
+            return false;
+          }
+
+          // Check if this server is the same instance to prevent self-referencing
+          if (isSameServerInstance(params, uuid)) {
+            logger.info(
+              `Skipping self-referencing server in resources: ${params.name || uuid}`,
+            );
+            return false;
+          }
+
+          // Mark this server as visited
+          visitedServers.add(uuid);
+          return true;
+        },
+      );
+
+      await Promise.allSettled(
+        validResourceServers.map(async ([uuid, params]) => {
+          // Merge forwarded headers into server params for this session
+          const effectiveParams = forwardedHeadersByServer[uuid]
+            ? {
+                ...params,
+                headers: mergeHeaders(
+                  params.headers,
+                  forwardedHeadersByServer[uuid],
+                ),
+              }
+            : params;
+
+          const session = await mcpServerPool.getSession(
+            sessionId,
+            uuid,
+            effectiveParams,
+            namespaceUuid,
+          );
+          if (!session) {
+            logger.error(
+              `resources/list: no session available for server ${params.name || uuid} — excluded from namespace response (error state, connection cap, or backend unreachable)`,
+            );
+            failedServers.push(params.name || uuid);
+            return;
+          }
+
+          // Now check for self-referencing using the actual MCP server name
+          const serverVersion = session.client.getServerVersion();
+          const actualServerName = serverVersion?.name || params.name || "";
+          const ourServerName = `metamcp-unified-${namespaceUuid}`;
+
+          if (actualServerName === ourServerName) {
+            logger.info(
+              `Skipping self-referencing MetaMCP server in resources: "${actualServerName}"`,
+            );
+            return;
+          }
+
+          const capabilities = session.client.getServerCapabilities();
+          if (!capabilities?.resources) return;
+
+          // Use name assigned by user, fallback to name from server
+          const serverName =
+            params.name || session.client.getServerVersion()?.name || "";
+          try {
+            let activeSession = session;
+            const result = await requestWithSessionRecovery({
+              pool: mcpServerPool,
+              sessionId,
+              serverUuid: uuid,
+              params,
+              namespaceUuid,
+              operation: "resources/list",
+              serverName,
+              session,
+              attempt: (active) =>
+                active.client.request(
+                  {
+                    method: "resources/list",
+                    params: {
+                      cursor: request.params?.cursor,
+                      _meta: request.params?._meta,
+                    },
+                  },
+                  ListResourcesResultSchema,
+                ),
+              onFreshSession: (fresh) => {
+                activeSession = fresh;
+              },
+            });
+
+            if (result.resources) {
+              const resourcesWithSource = result.resources.map((resource) => {
+                resourceToClient[resource.uri] = activeSession;
+                resourceToServerUuid[resource.uri] = uuid;
+                return {
+                  ...resource,
+                  name: resource.name || "",
+                };
+              });
+              allResources.push(...resourcesWithSource);
+            }
+          } catch (error) {
+            logger.error(`Error fetching resources from: ${serverName}`, error);
+            failedServers.push(serverName || uuid);
+          }
+        }),
+      );
+
+      if (failedServers.length > 0) {
+        logger.error(
+          `resources/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allResources.length} resources`,
+        );
+      }
+
+      return {
+        // Complete list: no further page
+        resources: allResources,
+      };
+    }),
+  );
 
   // Read Resource Handler
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    const { uri } = request.params;
-    const clientForResource = resourceToClient[uri];
+  server.setRequestHandler(
+    ReadResourceRequestSchema,
+    tracked(async (request) => {
+      const { uri } = request.params;
+      const resourceServerUuid = resourceToServerUuid[uri];
 
-    if (!clientForResource) {
-      throw new Error(`Unknown resource: ${uri}`);
-    }
+      if (
+        !resourceToClient[uri] ||
+        !resourceServerUuid ||
+        !(await isServerAllowedInNamespace(namespaceUuid, resourceServerUuid))
+      ) {
+        throw new Error(`Unknown resource: ${uri}`);
+      }
 
-    try {
-      return await clientForResource.client.request(
-        {
-          method: "resources/read",
-          params: {
-            uri,
-            _meta: request.params._meta,
+      const clientForResource = await liveClientFor(resourceServerUuid);
+      if (!clientForResource) {
+        throw new Error(`The server of resource ${uri} is not available`);
+      }
+      resourceToClient[uri] = clientForResource;
+
+      try {
+        return await clientForResource.client.request(
+          {
+            method: "resources/read",
+            params: {
+              uri,
+              _meta: request.params._meta,
+            },
           },
-        },
-        ReadResourceResultSchema,
-      );
-    } catch (error) {
-      logger.error(
-        `Error reading resource through ${
-          clientForResource.client.getServerVersion()?.name
-        }:`,
-        error,
-      );
-      throw error;
-    }
-  });
+          ReadResourceResultSchema,
+        );
+      } catch (error) {
+        logger.error(
+          `Error reading resource through ${
+            clientForResource.client.getServerVersion()?.name
+          }:`,
+          error,
+        );
+        throw error;
+      }
+    }),
+  );
 
   // List Resource Templates Handler
   server.setRequestHandler(
     ListResourceTemplatesRequestSchema,
-    async (request) => {
+    tracked(async (request) => {
       const serverParams = await getMcpServers(
         namespaceUuid,
         includeInactiveServers,
@@ -1206,10 +1372,10 @@ export const createServer = async (
       }
 
       return {
+        // Complete list: no further page
         resourceTemplates: allTemplates,
-        nextCursor: request.params?.cursor,
       };
-    },
+    }),
   );
 
   const cleanup = async () => {

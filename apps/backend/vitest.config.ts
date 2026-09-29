@@ -14,6 +14,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    // Integration tests need a real Postgres: see vitest.integration.config.ts
+    exclude: ["**/node_modules/**", "**/dist/**", "**/*.integration.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

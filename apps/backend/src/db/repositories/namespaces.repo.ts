@@ -15,6 +15,7 @@ import {
   namespaceToolMappingsTable,
   toolsTable,
 } from "../schema";
+import type { AccessibleFilter } from "./access-filter";
 import { namespaceMappingsRepository } from "./namespace-mappings.repo";
 
 export class NamespacesRepository {
@@ -83,8 +84,10 @@ export class NamespacesRepository {
       .orderBy(desc(namespacesTable.created_at));
   }
 
-  // Find namespaces accessible to a specific user (public + user's own namespaces)
-  async findAllAccessibleToUser(userId: string): Promise<DatabaseNamespace[]> {
+  // Find namespaces a principal can see (owned + shared, or all for admins)
+  async findAllByAccess(
+    filter: AccessibleFilter,
+  ): Promise<DatabaseNamespace[]> {
     return await db
       .select({
         uuid: namespacesTable.uuid,
@@ -96,27 +99,15 @@ export class NamespacesRepository {
       })
       .from(namespacesTable)
       .where(
-        or(
-          isNull(namespacesTable.user_id), // Public namespaces
-          eq(namespacesTable.user_id, userId), // User's own namespaces
-        ),
+        filter.all
+          ? undefined
+          : filter.sharedUuids.length > 0
+            ? or(
+                eq(namespacesTable.user_id, filter.ownerId),
+                inArray(namespacesTable.uuid, filter.sharedUuids),
+              )
+            : eq(namespacesTable.user_id, filter.ownerId),
       )
-      .orderBy(desc(namespacesTable.created_at));
-  }
-
-  // Find only public namespaces (no user ownership)
-  async findPublicNamespaces(): Promise<DatabaseNamespace[]> {
-    return await db
-      .select({
-        uuid: namespacesTable.uuid,
-        name: namespacesTable.name,
-        description: namespacesTable.description,
-        created_at: namespacesTable.created_at,
-        updated_at: namespacesTable.updated_at,
-        user_id: namespacesTable.user_id,
-      })
-      .from(namespacesTable)
-      .where(isNull(namespacesTable.user_id))
       .orderBy(desc(namespacesTable.created_at));
   }
 

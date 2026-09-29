@@ -1,6 +1,19 @@
+// Sent with every response. HSTS is left to the TLS-terminating proxy.
+const securityHeaders = [
+  // No page of the app is meant to be framed (clickjacking)
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
   experimental: {
     proxyTimeout: 1000 * 120,
   },
@@ -44,10 +57,6 @@ const nextConfig = {
       {
         source: "/metamcp/:path*",
         destination: `${backendUrl}/metamcp/:path*`,
-      },
-      {
-        source: "/service/:path*",
-        destination: "https://metatool-service.jczstudio.workers.dev/:path*",
       },
     ];
   },

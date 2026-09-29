@@ -1,0 +1,74 @@
+---
+title: "Memory and sizing"
+description: "Where the memory goes, connections to MCP servers on demand, and how to size an instance"
+---
+
+MetaMCP itself needs about 200 MB. Most of the memory of an instance goes to the **MCP servers in use**: every connection to a STDIO server is a process, started for a client session. Remote servers (Streamable HTTP, SSE) cost next to nothing.
+
+Measured with the Docker image, four STDIO servers (three through `npx`, one through `uvx`):
+
+| Situation | Memory |
+|-----------|--------|
+| No client | 170-200 MB |
+| One client session using the four servers | 620 MB |
+| Same, servers preinstalled in the image (no `npx`/`uvx`) | 315 MB |
+| The session stopped calling the servers for `MCP_CONNECTION_IDLE_TTL` | back to 200 MB |
+
+## Connections on demand
+
+By default a connection opens when a client first needs a server, and the pool closes what nobody uses:
+
+- A client session that stopped calling a server for `MCP_CONNECTION_IDLE_TTL` gives its connection back; its next call gets one again, transparently (a STDIO server restarts in about a second).
+- A connection given back is kept as the server's spare for the same time, so that the next client gets it at once. Then it is closed: an instance without clients runs no MCP server.
+- A connection is never released while a request of its session is running.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_CONNECTION_IDLE_TTL` | `900000` (15 min) | Milliseconds without use before a connection is released. `0` keeps connections until the client session ends |
+| `MCP_WARM_POOL` | `false` | `true` keeps one started connection per server of the namespaces exposed by an endpoint, replaced as soon as a client takes it: instant first calls, one process per server at all times |
+| `MAX_CONNECTIONS_PER_SERVER` | `5` | Beyond it, a new session takes over the connection of the session that used the server least recently (one is shared only while every holder has a request running) |
+| `MAX_TOTAL_CONNECTIONS` | `100` | Ceiling on all connections |
+
+<Warning>
+A server that keeps state in memory (a browser automation session, a conversation history) loses it when its connection is released. Raise `MCP_CONNECTION_IDLE_TTL`, or set it to `0`, if your clients rely on such state across long pauses.
+</Warning>
+
+Connections to remote servers are released the same way; getting one again only costs a new MCP handshake.
+
+## Launchers: `npx` and `uvx`
+
+`npx -y <package>` and `uvx <package>` stay alive next to the server they start: about 80-120 MB for `npm exec` (twice as much when it has just installed the package) and 60-75 MB for `uv`, per connection. Two ways to avoid them:
+
+- **Keep their caches** so that they do not reinstall the package on each start: the Docker Compose file persists `/home/nextjs/.npm` and `/home/nextjs/.cache/uv` in volumes (`npm_cache`, `uv_cache`).
+- **Preinstall the servers** in an image derived from MetaMCP, and use their executables as commands (`mcp-server-memory` rather than `npx -y @modelcontextprotocol/server-memory`). Each connection then takes about three times less memory, and starts without the delay of `npx`:
+
+```dockerfile
+FROM ghcr.io/sixmon/metamcp:latest
+USER root
+# npm packages: their executables land on the PATH (/usr/bin)
+RUN npm install -g @modelcontextprotocol/server-memory@2026.8.31 \
+    && npm cache clean --force
+# Python tools: in directories the nextjs user can read
+ENV UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin
+RUN uv tool install mcp-server-time==2026.8.18
+USER nextjs
+```
+
+Pin the versions: they are what your users run, and upgrading becomes a deliberate change of the image.
+
+## Node.js heaps
+
+Node.js sizes its heaps from the memory of the host, not from what MetaMCP needs. The Docker image caps them, well above the actual use:
+
+| Variable | Default |
+|----------|---------|
+| `BACKEND_NODE_OPTIONS` | `--max-semi-space-size=4 --max-old-space-size=512` |
+| `FRONTEND_NODE_OPTIONS` | `--max-semi-space-size=2 --max-old-space-size=256` |
+
+Flags in `NODE_OPTIONS` take precedence; an empty value falls back to the Node.js defaults. MCP servers never inherit these options. A process that reaches its cap exits with a `JavaScript heap out of memory` error; the container then stops and its restart policy brings it back (`restart: unless-stopped` in the Compose file). Raise the cap if the logs show one.
+
+## Sizing
+
+Count about 200 MB for MetaMCP, plus, for each client session using a STDIO server, about 110 MB through `npx`/`uvx` (twice as much while the package installs) or 30-60 MB for a preinstalled server; heavy servers such as browsers take much more. Sessions left open but unused cost nothing once their connections are released.
+
+For a team of 3 to 10 people, 2 of them active at a time with one session each, and a namespace of 5 STDIO servers: 10 connections, about 1.3 GB at peak through `npx`/`uvx`, 650 MB with preinstalled servers, and 200 MB at rest. **A 2 GB container limit** leaves room for heavier servers and cold starts. With Kubernetes, set the memory request to the usual level and the limit to the peak (`METAMCP_APP_MEMORY_REQUEST`, `METAMCP_APP_MEMORY_LIMIT`).

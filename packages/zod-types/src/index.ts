@@ -9,3 +9,7 @@ export * from "./metamcp.zod";
 export * from "./api-keys.zod";
 export * from "./config.zod";
 export * from "./mcp-request-audit-logs.zod";
+export * from "./access.zod";
+export * from "./security.zod";
+export * from "./activity.zod";
+export * from "./oauth-consent.zod";

@@ -25,8 +25,8 @@ export class Logger {
   public static readonly defaultLogFilePath = "app.log";
   public static readonly defaultErrorFilePath = "error.log";
 
-  private logFile: WriteStream;
-  private errorFile: WriteStream;
+  private logFile: WriteStream | null;
+  private errorFile: WriteStream | null;
   private consoleMode: "all" | "info" | "errors-only" | "none";
 
   constructor(options: LoggerOptions = {}) {
@@ -36,8 +36,16 @@ export class Logger {
       shouldConsoleLog = "all",
     } = options;
 
+    // A read-only or full file system must not crash the process: file
+    // logging is then turned off (the console keeps working).
     this.logFile = createWriteStream(logFilePath, { flags: "a" });
+    this.logFile.on("error", () => {
+      this.logFile = null;
+    });
     this.errorFile = createWriteStream(errorFilePath, { flags: "a" });
+    this.errorFile.on("error", () => {
+      this.errorFile = null;
+    });
 
     this.consoleMode =
       typeof shouldConsoleLog === "boolean"
@@ -57,48 +65,53 @@ export class Logger {
   }
 
   private customLog(
-    outputStream: WriteStream,
+    outputStream: "log" | "error",
     level: "DEBUG" | "INFO" | "WARN" | "ERROR",
     ...args: unknown[]
   ) {
-    const logMessage = format(...(args as unknown[]));
+    // LOG_LEVEL applies to the log files too (they are not rotated)
+    const selected =
+      this.consoleMode === "all" ||
+      (this.consoleMode === "info" && level === "INFO") ||
+      (this.consoleMode === "errors-only" &&
+        (level === "WARN" || level === "ERROR"));
+    if (!selected) return;
+
+    // The first argument is a message, never a format string: messages
+    // interpolate data ("%s" in a server name must stay text).
+    const [first, ...rest] = args;
+    const logMessage =
+      typeof first === "string"
+        ? format("%s", first, ...rest)
+        : format(...args);
     const formattedMessage = `[${level}] ${this.formatDate(new Date())} | ${logMessage}\n`;
-    outputStream.write(formattedMessage);
 
-    if (this.consoleMode !== "none") {
-      const shouldMirror =
-        this.consoleMode === "all" ||
-        (this.consoleMode === "info" && level === "INFO") ||
-        (this.consoleMode === "errors-only" &&
-          (level === "WARN" || level === "ERROR"));
+    (outputStream === "error" ? this.errorFile : this.logFile)?.write(
+      formattedMessage,
+    );
 
-      if (shouldMirror) {
-        const trimmed = formattedMessage.trim();
-        if (level === "INFO") {
-          console.info(trimmed);
-        } else if (level === "ERROR") {
-          console.error(trimmed);
-        } else if (level === "WARN") {
-          console.warn(trimmed);
-        } else {
-          console.log(trimmed);
-        }
-      }
+    const trimmed = formattedMessage.trim();
+    if (level === "INFO") {
+      console.info(trimmed);
+    } else if (level === "ERROR") {
+      console.error(trimmed);
+    } else if (level === "WARN") {
+      console.warn(trimmed);
+    } else {
+      console.log(trimmed);
     }
   }
 
   public debug = (...args: unknown[]) =>
-    this.customLog(this.logFile, "DEBUG", ...args);
-  public info = (...args: unknown[]) =>
-    this.customLog(this.logFile, "INFO", ...args);
-  public warn = (...args: unknown[]) =>
-    this.customLog(this.logFile, "WARN", ...args);
+    this.customLog("log", "DEBUG", ...args);
+  public info = (...args: unknown[]) => this.customLog("log", "INFO", ...args);
+  public warn = (...args: unknown[]) => this.customLog("log", "WARN", ...args);
   public error = (...args: unknown[]) =>
-    this.customLog(this.errorFile, "ERROR", ...args);
+    this.customLog("error", "ERROR", ...args);
 
   public close(): void {
-    this.logFile.end();
-    this.errorFile.end();
+    this.logFile?.end();
+    this.errorFile?.end();
   }
 }
 

@@ -9,7 +9,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { McpServerErrorStatusEnum, McpServerTypeEnum } from "@repo/zod-types";
+import {
+  type AccessPrincipal,
+  McpServerErrorStatusEnum,
+  McpServerTypeEnum,
+} from "@repo/zod-types";
 import express from "express";
 import { parse as shellParseArgs } from "shell-quote";
 import { findActualExecutable } from "spawn-rx";
@@ -17,10 +21,26 @@ import { findActualExecutable } from "spawn-rx";
 import logger from "@/utils/logger";
 
 import { mcpServersRepository } from "../../db/repositories";
+import { accessService } from "../../lib/access/access.service";
+import { canInspect, hasCapability } from "../../lib/access/policy";
+import {
+  forgetProxySession,
+  recordProxySessionOwner,
+  requireProxySessionOwner,
+} from "../../lib/access/proxy-session-owners";
+import { hasLevel } from "../../lib/access/resource-guards";
 import mcpProxy from "../../lib/mcp-proxy";
-import { transformDockerUrl } from "../../lib/metamcp/client";
+import {
+  createMetaMcpClient,
+  transformDockerUrl,
+} from "../../lib/metamcp/client";
 import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
-import { resolveEnvVariables } from "../../lib/metamcp/utils";
+import {
+  convertDbServerToParams,
+  getDefaultEnvironment as getSafeInheritedEnvironment,
+  resolveEnvVariables,
+} from "../../lib/metamcp/utils";
+import { guardedFetch } from "../../lib/net/egress-guard";
 import { ProcessManagedStdioTransport } from "../../lib/stdio-transport/process-managed-transport";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
 
@@ -86,7 +106,10 @@ const extractServerUuidFromStdioCommand = async (
 
     // First, try to find by command and args pattern
     const fullCommand = `${command} ${args.join(" ")}`;
-    logger.info(`Looking for server with command: ${fullCommand}`);
+    // Arguments can hold credentials (connection strings, tokens): never log them.
+    logger.info(
+      `Looking for server with command: ${command} (${args.length} argument(s))`,
+    );
 
     // Look for servers that match this command pattern
     const servers = await mcpServersRepository.findAll();
@@ -95,9 +118,7 @@ const extractServerUuidFromStdioCommand = async (
     for (const server of servers) {
       if (server.type === "STDIO" && server.command) {
         const serverCommand = `${server.command} ${(server.args || []).join(" ")}`;
-        logger.info(
-          `Checking server ${server.name} (${server.uuid}): ${serverCommand}`,
-        );
+        logger.debug(`Checking server ${server.name} (${server.uuid})`);
         if (serverCommand === fullCommand) {
           logger.info(
             `Found exact match for server ${server.name} (${server.uuid})`,
@@ -117,7 +138,7 @@ const extractServerUuidFromStdioCommand = async (
       }
     }
 
-    logger.info(`No server found for command: ${fullCommand}`);
+    logger.info(`No server found for command: ${command}`);
     return null;
   } catch (error) {
     logger.error("Error extracting server UUID from STDIO command:", error);
@@ -191,6 +212,97 @@ const serverRouter = express.Router();
 
 // Apply better auth middleware to all MCP proxy routes
 serverRouter.use(betterAuthMcpMiddleware);
+// Inspector sessions can only be driven by the user who opened them
+serverRouter.use(requireProxySessionOwner);
+
+/** Access denials surfaced to the inspector with a proper HTTP status. */
+class InspectorAccessError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function getPrincipal(req: express.Request): AccessPrincipal {
+  const principal = (req as express.Request & { principal?: AccessPrincipal })
+    .principal;
+  if (!principal) {
+    throw new InspectorAccessError(401, "Authentication required");
+  }
+  return principal;
+}
+
+const INSPECTOR_DENIED =
+  "Access denied: your role does not allow using the MCP inspector.";
+
+/**
+ * Connects to a stored MCP server using its configuration from the database
+ * (command, env, URL, headers, bearer / OAuth tokens), never values sent by
+ * the browser. Users with "use" access can inspect a server without ever
+ * seeing its secrets.
+ */
+async function createTransportForStoredServer(
+  req: express.Request,
+  principal: AccessPrincipal,
+  mcpServerUuid: string,
+): Promise<Transport> {
+  const server = await mcpServersRepository.findByUuid(mcpServerUuid);
+  const access = server
+    ? await accessService.resolveAccessOne(principal, "mcp_server", server)
+    : null;
+  if (!server || !access) {
+    throw new InspectorAccessError(404, "MCP server not found");
+  }
+  // People who can edit a server can always test it (tools, OAuth setup);
+  // calling the tools of a server that is only shared for use from the web
+  // UI (outside audited endpoints) requires the inspector permission.
+  if (!canInspect(principal, access)) {
+    throw new InspectorAccessError(403, INSPECTOR_DENIED);
+  }
+  if (server.error_status === McpServerErrorStatusEnum.enum.ERROR) {
+    throw new Error(
+      `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
+    );
+  }
+
+  const params = await convertDbServerToParams(server);
+  if (!params) {
+    throw new Error("Invalid MCP server configuration");
+  }
+
+  // Editors running an OAuth flow from the inspector present the fresh
+  // upstream token themselves; everyone else uses the stored credentials.
+  const clientAuthorization = req.headers.authorization;
+  if (
+    clientAuthorization &&
+    hasLevel(access, "edit") &&
+    params.type !== McpServerTypeEnum.enum.STDIO
+  ) {
+    params.oauth_tokens = null;
+    params.bearerToken = null;
+    params.headers = {
+      ...(params.headers || {}),
+      Authorization: clientAuthorization,
+    };
+  }
+
+  const { transport } = createMetaMcpClient(params);
+  if (!transport) {
+    throw new Error("Unsupported MCP server type");
+  }
+  // Server output often echoes its configuration (tokens, connection
+  // strings): only people who can edit the server may read it.
+  if (!hasLevel(access, "edit")) {
+    stderrHiddenTransports.add(transport);
+  }
+  await transport.start();
+  return transport;
+}
+
+/** Transports whose stderr is not relayed to the inspector (see above). */
+const stderrHiddenTransports = new WeakSet<Transport>();
 
 const webAppTransports: Map<string, Transport> = new Map<string, Transport>(); // Web app transports by web app sessionId
 const serverTransports: Map<string, Transport> = new Map<string, Transport>(); // Server Transports by web app sessionId
@@ -212,6 +324,7 @@ const cleanupSession = async (sessionId: string) => {
     }
     webAppTransports.delete(sessionId);
   }
+  forgetProxySession(sessionId);
 
   // Clean up server transport
   const serverTransport = serverTransports.get(sessionId);
@@ -232,9 +345,42 @@ const cleanupSession = async (sessionId: string) => {
 
 const createTransport = async (req: express.Request): Promise<Transport> => {
   const query = req.query;
-  logger.info("Query parameters:", JSON.stringify(query));
+  const principal = getPrincipal(req);
 
   const transportType = query.transportType as string;
+
+  // Stored server: resolve everything server-side, with an access check.
+  if (typeof query.mcpServerUuid === "string" && query.mcpServerUuid) {
+    return await createTransportForStoredServer(
+      req,
+      principal,
+      query.mcpServerUuid,
+    );
+  }
+
+  // Ad-hoc connection (command / URL typed by the user): only for people who
+  // may use the inspector and create such a server anyway.
+  if (!hasCapability(principal, "inspector.use")) {
+    throw new InspectorAccessError(403, INSPECTOR_DENIED);
+  }
+  if (
+    transportType === McpServerTypeEnum.enum.STDIO &&
+    !hasCapability(principal, "mcp_servers.create_stdio")
+  ) {
+    throw new InspectorAccessError(
+      403,
+      "Access denied: running ad-hoc STDIO commands requires the STDIO servers permission.",
+    );
+  }
+  if (
+    transportType !== McpServerTypeEnum.enum.STDIO &&
+    !hasCapability(principal, "mcp_servers.create")
+  ) {
+    throw new InspectorAccessError(
+      403,
+      "Access denied: connecting to arbitrary MCP servers requires the permission to add MCP servers.",
+    );
+  }
 
   if (transportType === McpServerTypeEnum.enum.STDIO) {
     const command = query.command as string;
@@ -244,19 +390,27 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     // Resolve environment variable placeholders
     const resolvedQueryEnv = resolveEnvVariables(queryEnv);
 
-    const env = { ...process.env, ...defaultEnvironment, ...resolvedQueryEnv };
+    // Same inheritance as stored STDIO servers: a safe allow-list, never the
+    // backend's own environment (DATABASE_URL, BETTER_AUTH_SECRET, ...).
+    const env = {
+      ...defaultEnvironment,
+      ...getSafeInheritedEnvironment(),
+      ...resolvedQueryEnv,
+    };
 
     const { cmd, args } = findActualExecutable(command, origArgs);
 
     // Check if this command is in cooldown
     if (isStdioInCooldown(cmd, args, env)) {
-      logger.info(`STDIO command in cooldown: ${cmd} ${args.join(" ")}`);
+      logger.info(
+        `STDIO command in cooldown: ${cmd} (${args.length} argument(s))`,
+      );
       const cooldownEnd = stdioCommandCooldowns.get(
         createStdioKey(cmd, args, env),
       );
       if (cooldownEnd) {
         throw new Error(
-          `Command "${cmd} ${args.join(" ")}" is in cooldown. Please wait ${Math.ceil((cooldownEnd - Date.now()) / 1000)} seconds before retrying.`,
+          `Command "${cmd}" is in cooldown. Please wait ${Math.ceil((cooldownEnd - Date.now()) / 1000)} seconds before retrying.`,
         );
       }
     }
@@ -272,7 +426,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       }
     }
 
-    logger.info(`STDIO transport: command=${cmd}, args=${args}`);
+    logger.info(`STDIO transport: command=${cmd} (${args.length} argument(s))`);
 
     const transport = new ProcessManagedStdioTransport({
       command: cmd,
@@ -288,40 +442,27 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       // If the transport fails to start, put it in cooldown
       setStdioCooldown(cmd, args, env);
       logger.info(
-        `STDIO command failed, setting cooldown: ${cmd} ${args.join(" ")}`,
+        `STDIO command failed, setting cooldown: ${cmd} (${args.length} argument(s))`,
       );
       throw error;
     }
   } else if (transportType === McpServerTypeEnum.enum.SSE) {
     const url = transformDockerUrl(query.url as string);
 
-    // Check if the server is in error state (for SSE, we need to find server by URL)
-    const servers = await mcpServersRepository.findAll();
-    const matchingServer = servers.find(
-      (server) => server.type === "SSE" && server.url === url,
-    );
-    if (matchingServer) {
-      const isInError = await checkServerErrorStatus(matchingServer.uuid);
-      if (isInError) {
-        throw new Error(
-          `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
-        );
-      }
-    }
-
-    // Merge custom headers from database with passthrough headers from request
-    const headers = {
-      ...(matchingServer?.headers || {}),
-      ...getHttpHeaders(req, transportType),
-    };
+    // Ad-hoc connection: only the caller's own headers are sent. Stored
+    // servers (and their credentials) are reached through mcpServerUuid,
+    // after an access check; they used to be looked up by URL here, which
+    // lent another user's stored headers to anyone typing the same URL.
+    const headers = getHttpHeaders(req, transportType);
 
     logger.info(
-      `SSE transport: url=${url}, headers=${JSON.stringify(headers)}`,
+      `SSE transport: ${new URL(url).origin} (${Object.keys(headers).length} header(s))`,
     );
 
     const transport = new SSEClientTransport(new URL(url), {
+      fetch: guardedFetch,
       eventSourceInit: {
-        fetch: (url, init) => fetch(url, { ...init, headers }),
+        fetch: (url, init) => guardedFetch(url, { ...init, headers }),
       },
       requestInit: {
         headers,
@@ -332,27 +473,11 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
   } else if (transportType === McpServerTypeEnum.enum.STREAMABLE_HTTP) {
     const url = transformDockerUrl(query.url as string);
 
-    // Check if the server is in error state (for STREAMABLE_HTTP, we need to find server by URL)
-    const servers = await mcpServersRepository.findAll();
-    const matchingServer = servers.find(
-      (server) => server.type === "STREAMABLE_HTTP" && server.url === url,
-    );
-    if (matchingServer) {
-      const isInError = await checkServerErrorStatus(matchingServer.uuid);
-      if (isInError) {
-        throw new Error(
-          `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
-        );
-      }
-    }
-
-    // Merge custom headers from database with passthrough headers from request
-    const headers = {
-      ...(matchingServer?.headers || {}),
-      ...getHttpHeaders(req, transportType),
-    };
+    // Ad-hoc connection: only the caller's own headers (see the SSE branch)
+    const headers = getHttpHeaders(req, transportType);
 
     const transport = new StreamableHTTPClientTransport(new URL(url), {
+      fetch: guardedFetch,
       requestInit: {
         headers,
       },
@@ -393,6 +518,10 @@ serverRouter.post("/mcp", async (req, res) => {
       try {
         serverTransport = await createTransport(req);
       } catch (error) {
+        if (error instanceof InspectorAccessError) {
+          res.status(error.status).json({ error: error.message });
+          return;
+        }
         if (error instanceof SseError && error.code === 401) {
           logger.error(
             "Received 401 Unauthorized from MCP server:",
@@ -449,6 +578,9 @@ serverRouter.post("/mcp", async (req, res) => {
         sessionIdGenerator: () => newSessionId,
         onsessioninitialized: (sessionId) => {
           webAppTransports.set(sessionId, webAppTransport);
+          recordProxySessionOwner(sessionId, getPrincipal(req).userId, () =>
+            cleanupSession(sessionId),
+          );
           if (serverTransport) {
             serverTransports.set(sessionId, serverTransport);
           }
@@ -554,6 +686,10 @@ serverRouter.get("/stdio", async (req, res) => {
       serverTransport = await createTransport(req);
       logger.info("Created server transport");
     } catch (error) {
+      if (error instanceof InspectorAccessError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
       if (error instanceof SseError && error.code === 401) {
         logger.error(
           "Received 401 Unauthorized from MCP server. Authentication failure.",
@@ -573,6 +709,11 @@ serverRouter.get("/stdio", async (req, res) => {
 
     webAppTransports.set(webAppTransport.sessionId, webAppTransport);
     serverTransports.set(webAppTransport.sessionId, serverTransport);
+    recordProxySessionOwner(
+      webAppTransport.sessionId,
+      getPrincipal(req).userId,
+      () => cleanupSession(webAppTransport.sessionId),
+    );
 
     // Handle cleanup when connection closes
     const handleConnectionClose = () => {
@@ -660,7 +801,7 @@ serverRouter.get("/stdio", async (req, res) => {
 
         setStdioCooldown(cmd, args, env);
         logger.info(
-          `STDIO process terminated quickly (${runTime}ms), setting cooldown: ${cmd} ${args.join(" ")}`,
+          `STDIO process terminated quickly (${runTime}ms), setting cooldown: ${cmd} (${args.length} argument(s))`,
         );
       }
     };
@@ -706,10 +847,13 @@ serverRouter.get("/stdio", async (req, res) => {
 
             setStdioCooldown(cmd, args, env);
             logger.info(
-              `STDIO process reported startup error, setting cooldown: ${cmd} ${args.join(" ")}`,
+              `STDIO process reported startup error, setting cooldown: ${cmd} (${args.length} argument(s))`,
             );
           }
 
+          if (stderrHiddenTransports.has(serverTransport)) {
+            return;
+          }
           webAppTransport
             .send({
               jsonrpc: "2.0",
@@ -750,6 +894,10 @@ serverRouter.get("/sse", async (req, res) => {
     try {
       serverTransport = await createTransport(req);
     } catch (error) {
+      if (error instanceof InspectorAccessError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
       if (error instanceof SseError && error.code === 401) {
         logger.error(
           "Received 401 Unauthorized from MCP server. Authentication failure.",
@@ -776,6 +924,11 @@ serverRouter.get("/sse", async (req, res) => {
         res,
       );
       webAppTransports.set(webAppTransport.sessionId, webAppTransport);
+      recordProxySessionOwner(
+        webAppTransport.sessionId,
+        getPrincipal(req).userId,
+        () => cleanupSession(webAppTransport.sessionId),
+      );
       logger.info("Created client transport");
       if (serverTransport) {
         serverTransports.set(webAppTransport.sessionId, serverTransport);

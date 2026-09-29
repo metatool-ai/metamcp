@@ -34,9 +34,20 @@ function CorsErrorContent() {
   const attemptedPath = searchParams.get("callbackUrl") || "/";
 
   const handleRedirectToCorrectDomain = () => {
-    if (correctDomain) {
-      const redirectUrl = `${correctDomain}${attemptedPath}`;
-      window.location.href = redirectUrl;
+    if (!correctDomain) return;
+    // The path comes from the URL: resolve it against the application's
+    // address and never leave that origin (".evil.com/x" or "@evil.com"
+    // appended to the domain would otherwise point elsewhere).
+    try {
+      const base = new URL(correctDomain);
+      const target = new URL(
+        attemptedPath.startsWith("/") ? attemptedPath : "/",
+        base,
+      );
+      window.location.href =
+        target.origin === base.origin ? target.toString() : base.toString();
+    } catch {
+      // Invalid application URL: nothing to redirect to
     }
   };
 

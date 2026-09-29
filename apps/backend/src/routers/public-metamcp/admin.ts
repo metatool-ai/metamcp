@@ -1,17 +1,51 @@
 import express from "express";
 
-import { authenticateApiKey } from "@/middleware/api-key-oauth.middleware";
+import {
+  ApiKeyAuthenticatedRequest,
+  authenticateApiKey,
+} from "@/middleware/api-key-oauth.middleware";
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
+import { rateLimitMiddleware } from "@/middleware/rate-limit.middleware";
 import logger from "@/utils/logger";
 
-import { mcpServersRepository } from "../../db/repositories";
+import { namespacesRepository } from "../../db/repositories";
+import { publicErrorMessage } from "../../lib/errors";
 import { serverErrorTracker } from "../../lib/metamcp/server-error-tracker";
 import { initializeIdleServers } from "../../lib/startup";
 
 const adminRouter = express.Router();
 
-// JSON body parser for admin routes
-adminRouter.use(express.json());
+/**
+ * These routes administer the endpoint's servers: endpoint-scoped API keys
+ * are only for using its MCP servers.
+ */
+function rejectEndpointScopedKeys(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+): void {
+  if ((req as ApiKeyAuthenticatedRequest).apiKeyScope === "endpoints") {
+    res.status(403).json({
+      error: "forbidden",
+      message:
+        "This API key is limited to using MCP servers: it cannot administer the endpoint.",
+    });
+    return;
+  }
+  next();
+}
+
+/**
+ * Servers reachable through the endpoint. These routes only ever act on the
+ * endpoint's own namespace: they used to list and reset the servers of every
+ * user of the instance.
+ */
+async function getEndpointServers(req: express.Request) {
+  const { namespaceUuid } = req as ApiKeyAuthenticatedRequest;
+  const namespace =
+    await namespacesRepository.findByUuidWithServers(namespaceUuid);
+  return namespace?.servers ?? [];
+}
 
 /**
  * POST /metamcp/admin/reset-errors
@@ -26,30 +60,39 @@ adminRouter.post(
   "/:endpoint_name/admin/reset-errors",
   lookupEndpoint,
   authenticateApiKey,
+  rejectEndpointScopedKeys,
+  rateLimitMiddleware,
+  // Parsed once the caller is authenticated
+  express.json(),
   async (req, res) => {
     try {
       const { serverUuid } = req.body || {};
       const resetResults: string[] = [];
+      const servers = await getEndpointServers(req);
 
       if (serverUuid) {
-        // Reset specific server
-        await serverErrorTracker.resetServerErrorState(serverUuid);
-        resetResults.push(serverUuid);
-        logger.info(`Admin API: Reset error state for server ${serverUuid}`);
-      } else {
-        // Reset all servers in ERROR state
-        const allServers = await mcpServersRepository.findAll();
-        const errorServers = allServers.filter(
-          (s) => s.error_status === "ERROR",
+        // Reset specific server (must belong to this endpoint's namespace)
+        const server = servers.find(
+          (candidate) => candidate.uuid === serverUuid,
         );
+        if (!server) {
+          res.status(404).json({
+            success: false,
+            error: "Server not found in this endpoint's namespace",
+          });
+          return;
+        }
+        await serverErrorTracker.resetServerErrorState(server.uuid);
+        resetResults.push(server.uuid);
+        logger.info(`Admin API: Reset error state for server ${server.uuid}`);
+      } else {
+        // Reset every server of the namespace that is in ERROR state
+        const errorServers = servers.filter((s) => s.error_status === "ERROR");
 
         for (const server of errorServers) {
           await serverErrorTracker.resetServerErrorState(server.uuid);
           resetResults.push(server.name || server.uuid);
         }
-
-        // Also clear all in-memory crash counters
-        serverErrorTracker.resetAllAttempts();
 
         logger.info(
           `Admin API: Reset ${resetResults.length} servers from ERROR state: ${resetResults.join(", ")}`,
@@ -76,7 +119,7 @@ adminRouter.post(
       res.status(500).json({
         success: false,
         error: "Failed to reset server errors",
-        message: error instanceof Error ? error.message : String(error),
+        message: publicErrorMessage(error, "Internal server error"),
       });
     }
   },
@@ -85,16 +128,18 @@ adminRouter.post(
 /**
  * GET /metamcp/admin/error-status
  *
- * Returns current error status of all servers (for diagnostics).
+ * Returns current error status of the endpoint's servers (for diagnostics).
  */
 adminRouter.get(
   "/:endpoint_name/admin/error-status",
   lookupEndpoint,
   authenticateApiKey,
+  rejectEndpointScopedKeys,
+  rateLimitMiddleware,
   async (req, res) => {
     try {
-      const allServers = await mcpServersRepository.findAll();
-      const serverStatuses = allServers.map((s) => ({
+      const servers = await getEndpointServers(req);
+      const serverStatuses = servers.map((s) => ({
         uuid: s.uuid,
         name: s.name,
         error_status: s.error_status,

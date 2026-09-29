@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, or } from "drizzle-orm";
 
 import logger from "@/utils/logger";
 
@@ -28,6 +28,8 @@ export interface McpRequestAuditLogCreateInput {
 
 export interface McpRequestAuditLogListInput {
   userId: string;
+  /** Administrators: no per-user restriction. */
+  includeAll?: boolean;
   limit?: number;
   offset?: number;
   endpointName?: string;
@@ -59,19 +61,27 @@ export class McpRequestAuditLogsRepository {
     }
   }
 
-  private getAccessibleWhereConditions(userId: string) {
+  // Administrators see every call; other users only the calls made with their
+  // own API keys or OAuth tokens (anonymous/organisation-key calls included
+  // nobody's identity and are therefore admin-only).
+  private getAccessibleWhereConditions(userId: string, includeAll: boolean) {
+    if (includeAll) {
+      return [];
+    }
     return [
       or(
         eq(mcpRequestAuditLogsTable.api_key_user_id, userId),
         eq(mcpRequestAuditLogsTable.oauth_user_id, userId),
-        isNull(mcpRequestAuditLogsTable.api_key_user_id),
       ),
     ];
   }
 
   private getListWhereConditions(input: McpRequestAuditLogListInput) {
     const whereConditions = [
-      ...this.getAccessibleWhereConditions(input.userId),
+      ...this.getAccessibleWhereConditions(
+        input.userId,
+        input.includeAll ?? false,
+      ),
     ];
 
     if (input.endpointName) {

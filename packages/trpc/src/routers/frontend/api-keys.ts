@@ -1,8 +1,11 @@
 import {
+  type AccessPrincipal,
   CreateApiKeyRequestSchema,
   CreateApiKeyResponseSchema,
   DeleteApiKeyRequestSchema,
   DeleteApiKeyResponseSchema,
+  type ListApiKeysRequest,
+  ListApiKeysRequestSchema,
   ListApiKeysResponseSchema,
   UpdateApiKeyRequestSchema,
   UpdateApiKeyResponseSchema,
@@ -11,21 +14,24 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
-import { protectedProcedure, router } from "../../trpc";
+import { adminProcedure, protectedProcedure, router } from "../../trpc";
 
 export const createApiKeysRouter = (implementations: {
   create: (
     input: z.infer<typeof CreateApiKeyRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ) => Promise<z.infer<typeof CreateApiKeyResponseSchema>>;
-  list: (userId: string) => Promise<z.infer<typeof ListApiKeysResponseSchema>>;
+  list: (
+    principal: AccessPrincipal,
+    input?: ListApiKeysRequest,
+  ) => Promise<z.infer<typeof ListApiKeysResponseSchema>>;
   update: (
     input: z.infer<typeof UpdateApiKeyRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ) => Promise<z.infer<typeof UpdateApiKeyResponseSchema>>;
   delete: (
     input: z.infer<typeof DeleteApiKeyRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ) => Promise<z.infer<typeof DeleteApiKeyResponseSchema>>;
   validate: (
     input: z.infer<typeof ValidateApiKeyRequestSchema>,
@@ -36,30 +42,32 @@ export const createApiKeysRouter = (implementations: {
       .input(CreateApiKeyRequestSchema)
       .output(CreateApiKeyResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return implementations.create(input, ctx.user.id);
+        return implementations.create(input, ctx.principal);
       }),
 
     list: protectedProcedure
+      .input(ListApiKeysRequestSchema)
       .output(ListApiKeysResponseSchema)
-      .query(async ({ ctx }) => {
-        return implementations.list(ctx.user.id);
+      .query(async ({ ctx, input }) => {
+        return implementations.list(ctx.principal, input);
       }),
 
     update: protectedProcedure
       .input(UpdateApiKeyRequestSchema)
       .output(UpdateApiKeyResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return implementations.update(input, ctx.user.id);
+        return implementations.update(input, ctx.principal);
       }),
 
     delete: protectedProcedure
       .input(DeleteApiKeyRequestSchema)
       .output(DeleteApiKeyResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return implementations.delete(input, ctx.user.id);
+        return implementations.delete(input, ctx.principal);
       }),
 
-    validate: protectedProcedure
+    // Admin only: maps any key string to its owner.
+    validate: adminProcedure
       .input(ValidateApiKeyRequestSchema)
       .output(ValidateApiKeyResponseSchema)
       .query(async ({ input }) => {

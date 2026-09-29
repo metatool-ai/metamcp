@@ -176,6 +176,7 @@
     "reconnect": "重新连接",
     "connect": "连接",
     "connectToManageTools": "连接到 MCP 服务器以管理工具",
+    "inspectorRequired": "浏览此服务器的工具需要 MCP 检查器权限。如有需要，请联系管理员。",
     "connectingToServer": "正在连接到 MCP 服务器...",
     "toolsManagement": "工具管理"
   },

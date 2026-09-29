@@ -34,10 +34,23 @@ spec:
         app.kubernetes.io/name: metamcp
         app.kubernetes.io/component: database
     spec:
+      securityContext:
+        # "postgres" user of the alpine image
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: postgres
           image: postgres:16-alpine
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: POSTGRES_DB
               value: "${METAMCP_POSTGRES_DB}"
@@ -56,6 +69,11 @@ spec:
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+            # Writable with a read-only root file system: socket and temp
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             exec:
               command:
@@ -91,6 +109,10 @@ spec:
         - name: postgres-data
           persistentVolumeClaim:
             claimName: metamcp-postgres-pvc
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

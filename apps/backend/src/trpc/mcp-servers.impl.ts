@@ -1,11 +1,14 @@
 import {
+  type AccessPrincipal,
   BulkImportMcpServersRequestSchema,
   BulkImportMcpServersResponseSchema,
   CreateMcpServerRequestSchema,
   CreateMcpServerResponseSchema,
+  type DatabaseMcpServer,
   DeleteMcpServerResponseSchema,
   GetMcpServerResponseSchema,
   ListMcpServersResponseSchema,
+  type McpServer,
   McpServerTypeEnum,
   UpdateMcpServerRequestSchema,
   UpdateMcpServerResponseSchema,
@@ -19,7 +22,21 @@ import {
   namespaceMappingsRepository,
   oauthSessionsRepository,
 } from "../db/repositories";
+import { resourceSharesRepository } from "../db/repositories/resource-shares.repo";
 import { McpServersSerializer } from "../db/serializers";
+import { accessService } from "../lib/access/access.service";
+import { loadOwners } from "../lib/access/owners";
+import { hasCapability } from "../lib/access/policy";
+import {
+  decideOwnerForCreate,
+  decideOwnerForUpdate,
+  forbiddenMessage,
+  hasLevel,
+  notFoundMessage,
+  redactServerSecrets,
+} from "../lib/access/resource-guards";
+import { activityLog } from "../lib/activity/activity-log.service";
+import { publicErrorMessage } from "../lib/errors";
 import { mcpServerPool } from "../lib/metamcp/mcp-server-pool";
 import { clearOverrideCache } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
@@ -27,15 +44,146 @@ import { serverErrorTracker } from "../lib/metamcp/server-error-tracker";
 import { convertDbServerToParams } from "../lib/metamcp/utils";
 import { persistPreRegisteredOAuthClient } from "./pre-registered-oauth";
 
+const STDIO_CAPABILITY_MESSAGE =
+  'Access denied: STDIO MCP servers run commands on the MetaMCP host and require the "STDIO servers" permission. Ask an administrator.';
+
+/** Adds the caller's access, the owner and redaction to each visible server. */
+export async function serializeServersForPrincipal(
+  principal: AccessPrincipal,
+  servers: DatabaseMcpServer[],
+): Promise<McpServer[]> {
+  const [accessMap, owners, shareCounts] = await Promise.all([
+    accessService.resolveAccess(principal, "mcp_server", servers),
+    loadOwners(servers.map((server) => server.user_id)),
+    resourceSharesRepository.countForResources(
+      "mcp_server",
+      servers.map((server) => server.uuid),
+    ),
+  ]);
+
+  return servers.flatMap((server) => {
+    const access = accessMap.get(server.uuid);
+    if (!access) return [];
+    const serialized: McpServer = {
+      ...McpServersSerializer.serializeMcpServer(server),
+      access,
+      owner: server.user_id ? (owners.get(server.user_id) ?? null) : null,
+      shareCount: shareCounts.get(server.uuid) ?? 0,
+      secretsRedacted: false,
+    };
+    return [
+      access.level === "use" ? redactServerSecrets(serialized) : serialized,
+    ];
+  });
+}
+
+function sortedEntries(record: Record<string, string> | undefined | null) {
+  return JSON.stringify(
+    Object.entries(record ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
+/** True when a create/update defines or changes what a STDIO server executes. */
+function touchesStdioExecution(
+  existing: DatabaseMcpServer | null,
+  input: {
+    type?: string;
+    command?: string | null;
+    args?: string[];
+    env?: Record<string, string>;
+  },
+): boolean {
+  const nextType = input.type ?? existing?.type ?? McpServerTypeEnum.enum.STDIO;
+  const involvesStdio =
+    nextType === McpServerTypeEnum.enum.STDIO ||
+    existing?.type === McpServerTypeEnum.enum.STDIO;
+  if (!involvesStdio) return false;
+  if (!existing || existing.type !== nextType) return true;
+  return (
+    (input.command ?? null) !== (existing.command ?? null) ||
+    JSON.stringify(input.args ?? []) !== JSON.stringify(existing.args ?? []) ||
+    sortedEntries(input.env) !== sortedEntries(existing.env)
+  );
+}
+
+type ServerSnapshot = {
+  name: string;
+  description: string | null;
+  type: string;
+  command: string | null;
+  url: string | null;
+  bearerToken: string | null;
+  args: string[];
+  env: Record<string, string>;
+  headers: Record<string, string>;
+  user_id: string | null;
+};
+
+/** Names of the fields that changed (never their values: they are secrets). */
+function changedServerFields(
+  before: ServerSnapshot,
+  after: ServerSnapshot,
+): string[] {
+  const same = (a: unknown, b: unknown) =>
+    JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const fields: string[] = [];
+  for (const key of [
+    "name",
+    "description",
+    "type",
+    "command",
+    "url",
+    "bearerToken",
+    "args",
+  ] as const) {
+    if (!same(before[key], after[key])) fields.push(key);
+  }
+  for (const map of ["env", "headers"] as const) {
+    const names = new Set([
+      ...Object.keys(before[map] ?? {}),
+      ...Object.keys(after[map] ?? {}),
+    ]);
+    for (const name of names) {
+      if ((before[map] ?? {})[name] !== (after[map] ?? {})[name]) {
+        fields.push(`${map}.${name}`);
+      }
+    }
+  }
+  if (before.user_id !== after.user_id) fields.push("owner");
+  return fields;
+}
+
+const serverTarget = (server: { uuid: string; name: string }) => ({
+  type: "mcp_server",
+  id: server.uuid,
+  label: server.name,
+});
+
 export const mcpServersImplementations = {
   create: async (
     input: z.infer<typeof CreateMcpServerRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof CreateMcpServerResponseSchema>> => {
     try {
-      // Determine user ownership based on input.user_id or default to current user
-      const effectiveUserId =
-        input.user_id !== undefined ? input.user_id : userId;
+      if (!hasCapability(principal, "mcp_servers.create")) {
+        return {
+          success: false as const,
+          message:
+            "Access denied: your role does not allow adding MCP servers.",
+        };
+      }
+      if (
+        touchesStdioExecution(null, input) &&
+        !hasCapability(principal, "mcp_servers.create_stdio")
+      ) {
+        return { success: false as const, message: STDIO_CAPABILITY_MESSAGE };
+      }
+
+      const ownerDecision = decideOwnerForCreate(principal, input.user_id);
+      if (!ownerDecision.ok) {
+        return { success: false as const, message: ownerDecision.message };
+      }
+      const effectiveUserId = ownerDecision.ownerId;
 
       const { oauth_client_info: oauthClientInfo, ...serverInput } = input;
 
@@ -94,32 +242,47 @@ export const mcpServersImplementations = {
           });
       }
 
+      await activityLog.record({
+        actor: principal,
+        action: "mcp_server.created",
+        target: serverTarget(createdServer),
+        details: {
+          type: createdServer.type,
+          owner: createdServer.user_id ? "user" : "organisation",
+        },
+      });
+
+      const [data] = await serializeServersForPrincipal(principal, [
+        createdServer,
+      ]);
       return {
         success: true as const,
-        data: McpServersSerializer.serializeMcpServer(createdServer),
+        data: data ?? McpServersSerializer.serializeMcpServer(createdServer),
         message: "MCP server created successfully",
       };
     } catch (error) {
       logger.error("Error creating MCP server:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
 
   list: async (
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof ListMcpServersResponseSchema>> => {
     try {
-      // Find servers accessible to user (public + user's own)
-      const servers =
-        await mcpServersRepository.findAllAccessibleToUser(userId);
+      // Servers the caller owns or that are shared with them (all for admins)
+      const filter = await accessService.accessibleFilter(
+        principal,
+        "mcp_server",
+      );
+      const servers = await mcpServersRepository.findAllByAccess(filter);
 
       return {
         success: true as const,
-        data: McpServersSerializer.serializeMcpServerList(servers),
+        data: await serializeServersForPrincipal(principal, servers),
         message: "MCP servers retrieved successfully",
       };
     } catch (error) {
@@ -134,9 +297,22 @@ export const mcpServersImplementations = {
 
   bulkImport: async (
     input: z.infer<typeof BulkImportMcpServersRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof BulkImportMcpServersResponseSchema>> => {
+    const userId = principal.userId;
     try {
+      if (!hasCapability(principal, "mcp_servers.create")) {
+        return {
+          success: false as const,
+          imported: 0,
+          message:
+            "Access denied: your role does not allow adding MCP servers.",
+        };
+      }
+      const canCreateStdio = hasCapability(
+        principal,
+        "mcp_servers.create_stdio",
+      );
       const serversToInsert = [];
       const errors: string[] = [];
       let imported = 0;
@@ -145,11 +321,21 @@ export const mcpServersImplementations = {
         input.mcpServers,
       )) {
         try {
-          // Validate server name format
+          // Validate server name format (same rules as create / update:
+          // "__" separates the server prefix from tool names)
           if (!/^[a-zA-Z0-9_-]+$/.test(serverName)) {
             throw new Error(
               `Server name "${serverName}" is invalid. Server names must only contain letters, numbers, underscores, and hyphens.`,
             );
+          }
+          if (/_{2,}/.test(serverName)) {
+            throw new Error(
+              `Server name "${serverName}" is invalid. Server names cannot contain consecutive underscores.`,
+            );
+          }
+
+          if ((serverConfig.type || "STDIO") === "STDIO" && !canCreateStdio) {
+            throw new Error(STDIO_CAPABILITY_MESSAGE);
           }
 
           // Provide default type if not specified
@@ -170,7 +356,7 @@ export const mcpServersImplementations = {
           serversToInsert.push(serverWithDefaults);
         } catch (error) {
           errors.push(
-            `Failed to process server "${serverName}": ${error instanceof Error ? error.message : "Unknown error"}`,
+            `Failed to process server "${serverName}": ${publicErrorMessage(error, "Unknown error")}`,
           );
         }
       }
@@ -210,6 +396,19 @@ export const mcpServersImplementations = {
         }
       }
 
+      if (imported > 0) {
+        await activityLog.record({
+          actor: principal,
+          action: "mcp_server.created",
+          target: { type: "mcp_server", id: null, label: null },
+          details: {
+            import: true,
+            count: imported,
+            names: Object.keys(input.mcpServers).slice(0, 50),
+          },
+        });
+      }
+
       return {
         success: true as const,
         imported,
@@ -233,30 +432,24 @@ export const mcpServersImplementations = {
     input: {
       uuid: string;
     },
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof GetMcpServerResponseSchema>> => {
     try {
       const server = await mcpServersRepository.findByUuid(input.uuid);
+      const [data] = server
+        ? await serializeServersForPrincipal(principal, [server])
+        : [];
 
-      // Check if user has access to this server (own server or public server)
-      if (server && server.user_id && server.user_id !== userId) {
+      if (!data) {
         return {
           success: false as const,
-          message:
-            "Access denied: You can only view servers you own or public servers",
-        };
-      }
-
-      if (!server) {
-        return {
-          success: false as const,
-          message: "MCP server not found",
+          message: notFoundMessage("MCP server"),
         };
       }
 
       return {
         success: true as const,
-        data: McpServersSerializer.serializeMcpServer(server),
+        data,
         message: "MCP server retrieved successfully",
       };
     } catch (error) {
@@ -272,24 +465,27 @@ export const mcpServersImplementations = {
     input: {
       uuid: string;
     },
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof DeleteMcpServerResponseSchema>> => {
     try {
       // Check if server exists and user has permission to delete it
       const server = await mcpServersRepository.findByUuid(input.uuid);
+      const access = server
+        ? await accessService.resolveAccessOne(principal, "mcp_server", server)
+        : null;
 
-      if (!server) {
+      if (!server || !access) {
         return {
           success: false as const,
-          message: "MCP server not found",
+          message: notFoundMessage("MCP server"),
         };
       }
 
-      // Only server owner can delete their own servers, only admin can delete public servers
-      if (server.user_id && server.user_id !== userId) {
+      // Deleting requires "manage" (owner, admin or explicit manage share)
+      if (!hasLevel(access, "manage")) {
         return {
           success: false as const,
-          message: "Access denied: You can only delete servers you own",
+          message: forbiddenMessage("delete this MCP server", "manage"),
         };
       }
 
@@ -351,6 +547,13 @@ export const mcpServersImplementations = {
         );
       }
 
+      await activityLog.record({
+        actor: principal,
+        action: "mcp_server.deleted",
+        target: serverTarget(deletedServer),
+        details: { type: deletedServer.type },
+      });
+
       return {
         success: true as const,
         message: "MCP server deleted successfully",
@@ -359,38 +562,53 @@ export const mcpServersImplementations = {
       logger.error("Error deleting MCP server:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
 
   update: async (
     input: z.infer<typeof UpdateMcpServerRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof UpdateMcpServerResponseSchema>> => {
     try {
       // Check if server exists and user has permission to update it
       const server = await mcpServersRepository.findByUuid(input.uuid);
+      const access = server
+        ? await accessService.resolveAccessOne(principal, "mcp_server", server)
+        : null;
 
-      if (!server) {
+      if (!server || !access) {
         return {
           success: false as const,
-          message: "MCP server not found",
+          message: notFoundMessage("MCP server"),
         };
       }
 
-      // Only server owner can update their own servers, only admin can update public servers
-      if (server.user_id && server.user_id !== userId) {
+      if (!hasLevel(access, "edit")) {
         return {
           success: false as const,
-          message: "Access denied: You can only update servers you own",
+          message: forbiddenMessage("edit this MCP server", "edit"),
         };
       }
 
-      // Determine user ownership based on input.user_id or keep existing ownership
-      const effectiveUserId =
-        input.user_id !== undefined ? input.user_id : server.user_id;
+      if (
+        touchesStdioExecution(server, input) &&
+        !hasCapability(principal, "mcp_servers.create_stdio")
+      ) {
+        return { success: false as const, message: STDIO_CAPABILITY_MESSAGE };
+      }
+
+      // Ownership only changes when an administrator explicitly moves it
+      const ownerDecision = decideOwnerForUpdate(
+        principal,
+        server.user_id,
+        input.user_id,
+      );
+      if (!ownerDecision.ok) {
+        return { success: false as const, message: ownerDecision.message };
+      }
+      const effectiveUserId = ownerDecision.ownerId;
 
       const { oauth_client_info: oauthClientInfo, ...serverInput } = input;
 
@@ -506,17 +724,31 @@ export const mcpServersImplementations = {
         );
       }
 
+      if (server) {
+        const changedFields = changedServerFields(server, updatedServer);
+        if (changedFields.length > 0) {
+          await activityLog.record({
+            actor: principal,
+            action: "mcp_server.updated",
+            target: serverTarget(updatedServer),
+            details: { changedFields },
+          });
+        }
+      }
+
+      const [data] = await serializeServersForPrincipal(principal, [
+        updatedServer,
+      ]);
       return {
         success: true as const,
-        data: McpServersSerializer.serializeMcpServer(updatedServer),
+        data: data ?? McpServersSerializer.serializeMcpServer(updatedServer),
         message: "MCP server updated successfully",
       };
     } catch (error) {
       logger.error("Error updating MCP server:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },

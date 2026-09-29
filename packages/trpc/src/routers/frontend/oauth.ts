@@ -1,4 +1,5 @@
 import {
+  type AccessPrincipal,
   ExchangeOAuthTokenRequestSchema,
   ExchangeOAuthTokenResponseSchema,
   GetOAuthSessionRequestSchema,
@@ -19,17 +20,19 @@ export const createOAuthRouter = (
   implementations: {
     get: (
       input: z.infer<typeof GetOAuthSessionRequestSchema>,
+      principal: AccessPrincipal,
     ) => Promise<z.infer<typeof GetOAuthSessionResponseSchema>>;
     upsert: (
       input: z.infer<typeof UpsertOAuthSessionRequestSchema>,
+      principal: AccessPrincipal,
     ) => Promise<z.infer<typeof UpsertOAuthSessionResponseSchema>>;
     exchangeToken: (
       input: z.infer<typeof ExchangeOAuthTokenRequestSchema>,
-      userId: string,
+      principal: AccessPrincipal,
     ) => Promise<z.infer<typeof ExchangeOAuthTokenResponseSchema>>;
     refreshToken: (
       input: z.infer<typeof RefreshOAuthTokenRequestSchema>,
-      userId: string,
+      principal: AccessPrincipal,
     ) => Promise<z.infer<typeof RefreshOAuthTokenResponseSchema>>;
   },
 ) => {
@@ -38,16 +41,16 @@ export const createOAuthRouter = (
     get: protectedProcedure
       .input(GetOAuthSessionRequestSchema)
       .output(GetOAuthSessionResponseSchema)
-      .query(async ({ input }) => {
-        return await implementations.get(input);
+      .query(async ({ input, ctx }) => {
+        return await implementations.get(input, ctx.principal);
       }),
 
     // Protected: Upsert OAuth session
     upsert: protectedProcedure
       .input(UpsertOAuthSessionRequestSchema)
       .output(UpsertOAuthSessionResponseSchema)
-      .mutation(async ({ input }) => {
-        return await implementations.upsert(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.upsert(input, ctx.principal);
       }),
 
     // Protected: Server-side authorization-code-to-tokens exchange. This
@@ -55,14 +58,14 @@ export const createOAuthRouter = (
     // headers on their token endpoints, so the browser cannot do the
     // exchange directly. See docs/en/troubleshooting/oauth-troubleshooting.
     //
-    // ctx.user.id is forwarded so the impl can enforce ownership on the
+    // ctx.principal is forwarded so the impl can enforce ownership on the
     // referenced MCP server (the upstream URL is loaded from that row, not
     // taken from the request, to prevent SSRF).
     exchangeToken: protectedProcedure
       .input(ExchangeOAuthTokenRequestSchema)
       .output(ExchangeOAuthTokenResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return await implementations.exchangeToken(input, ctx.user.id);
+        return await implementations.exchangeToken(input, ctx.principal);
       }),
 
     // Protected: Server-side refresh-token grant. Same CORS rationale and
@@ -71,7 +74,7 @@ export const createOAuthRouter = (
       .input(RefreshOAuthTokenRequestSchema)
       .output(RefreshOAuthTokenResponseSchema)
       .mutation(async ({ input, ctx }) => {
-        return await implementations.refreshToken(input, ctx.user.id);
+        return await implementations.refreshToken(input, ctx.principal);
       }),
   });
 };

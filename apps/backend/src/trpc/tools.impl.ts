@@ -1,4 +1,5 @@
 import {
+  type AccessPrincipal,
   CreateToolRequestSchema,
   CreateToolResponseSchema,
   GetToolsByMcpServerUuidRequestSchema,
@@ -8,15 +9,40 @@ import { z } from "zod";
 
 import logger from "@/utils/logger";
 
-import { toolsRepository } from "../db/repositories";
+import { mcpServersRepository, toolsRepository } from "../db/repositories";
 import { ToolsSerializer } from "../db/serializers";
+import { accessService } from "../lib/access/access.service";
+import { hasLevel } from "../lib/access/resource-guards";
+import { publicErrorMessage } from "../lib/errors";
 import { toolsSyncCache } from "../lib/metamcp/tools-sync-cache";
+
+/**
+ * Tools are defined per MCP server and shared by every namespace using it:
+ * reading them needs "use" on the server, writing them needs "edit" (tool
+ * descriptions end up in LLM prompts, so they must not be forgeable).
+ */
+async function serverAccessLevel(
+  mcpServerUuid: string,
+  principal: AccessPrincipal,
+) {
+  const server = await mcpServersRepository.findByUuid(mcpServerUuid);
+  if (!server) return null;
+  return accessService.resolveAccessOne(principal, "mcp_server", server);
+}
 
 export const toolsImplementations = {
   getByMcpServerUuid: async (
     input: z.infer<typeof GetToolsByMcpServerUuidRequestSchema>,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof GetToolsByMcpServerUuidResponseSchema>> => {
     try {
+      if (!(await serverAccessLevel(input.mcpServerUuid, principal))) {
+        return {
+          success: false as const,
+          data: [],
+          message: "MCP server not found",
+        };
+      }
       const tools = await toolsRepository.findByMcpServerUuid(
         input.mcpServerUuid,
       );
@@ -38,8 +64,21 @@ export const toolsImplementations = {
 
   create: async (
     input: z.infer<typeof CreateToolRequestSchema>,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof CreateToolResponseSchema>> => {
     try {
+      if (
+        !hasLevel(
+          await serverAccessLevel(input.mcpServerUuid, principal),
+          "edit",
+        )
+      ) {
+        return {
+          success: false as const,
+          count: 0,
+          error: "Access denied: you need edit access to this MCP server",
+        };
+      }
       if (!input.tools || input.tools.length === 0) {
         return {
           success: true as const,
@@ -63,7 +102,7 @@ export const toolsImplementations = {
       return {
         success: false as const,
         count: 0,
-        error: error instanceof Error ? error.message : "Internal server error",
+        error: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
@@ -74,8 +113,21 @@ export const toolsImplementations = {
    */
   sync: async (
     input: z.infer<typeof CreateToolRequestSchema>,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof CreateToolResponseSchema>> => {
     try {
+      if (
+        !hasLevel(
+          await serverAccessLevel(input.mcpServerUuid, principal),
+          "edit",
+        )
+      ) {
+        return {
+          success: false as const,
+          count: 0,
+          error: "Access denied: you need edit access to this MCP server",
+        };
+      }
       if (!input.tools || input.tools.length === 0) {
         return {
           success: true as const,
@@ -85,21 +137,21 @@ export const toolsImplementations = {
       }
 
       // Check if tools changed using hash
-      const toolNames = input.tools.map((tool) => tool.name);
       const hasChanged = toolsSyncCache.hasChanged(
         input.mcpServerUuid,
-        toolNames,
+        input.tools,
       );
 
       if (hasChanged) {
-        // Update cache
-        toolsSyncCache.update(input.mcpServerUuid, toolNames);
-
         // Perform sync with cleanup
         const { upserted, deleted } = await toolsRepository.syncTools({
           tools: input.tools,
           mcpServerUuid: input.mcpServerUuid,
         });
+
+        // Only remember the state once it is stored: a failed write must be
+        // retried by the next sync.
+        toolsSyncCache.update(input.mcpServerUuid, input.tools);
 
         const message =
           deleted.length > 0
@@ -123,7 +175,7 @@ export const toolsImplementations = {
       return {
         success: false as const,
         count: 0,
-        error: error instanceof Error ? error.message : "Internal server error",
+        error: publicErrorMessage(error, "Internal server error"),
       };
     }
   },

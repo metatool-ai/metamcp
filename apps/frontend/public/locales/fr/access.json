@@ -1,0 +1,111 @@
+{
+  "roles": {
+    "admin": "Administrateur",
+    "editor": "Éditeur",
+    "viewer": "Lecteur"
+  },
+  "roleDescriptions": {
+    "admin": "Contrôle total : utilisateurs, groupes, paramètres, journaux et toutes les ressources.",
+    "editor": "Crée et partage ses propres serveurs MCP, namespaces et endpoints.",
+    "viewer": "Utilise ce qui est partagé avec lui. Peut créer des clés API personnelles."
+  },
+  "levels": {
+    "use": "Peut utiliser",
+    "edit": "Peut modifier",
+    "manage": "Peut gérer"
+  },
+  "levelDescriptions": {
+    "use": "Se connecter via les endpoints et l'inspecteur. La configuration est visible, sans ses secrets.",
+    "edit": "Modifier également la configuration, les outils et les identifiants.",
+    "manage": "Supprimer également la ressource et choisir qui y a accès."
+  },
+  "reasons": {
+    "owner": "Propriétaire",
+    "admin": "Accès administrateur",
+    "adminTooltip": "Vous pouvez voir et gérer cette ressource, car vous êtes administrateur.",
+    "share": "Partagé avec vous"
+  },
+  "source": {
+    "oidc": "SSO",
+    "manual": "Manuel",
+    "oidcTooltip": "Synchronisé depuis le fournisseur d'identité à chaque connexion. Retiré automatiquement lorsque l'IdP cesse d'envoyer le groupe.",
+    "manualTooltip": "Ajouté par un administrateur. Jamais retiré par la synchronisation SSO."
+  },
+  "owner": {
+    "column": "Propriétaire",
+    "you": "Vous",
+    "organization": "Organisation"
+  },
+  "ownership": {
+    "label": "Propriétaire",
+    "me": "Moi",
+    "meHelp": "Privé tant que vous ne le partagez pas.",
+    "organization": "Organisation",
+    "organizationHelp": "Géré par les administrateurs. Visible uniquement par les personnes et les groupes avec lesquels vous le partagez."
+  },
+  "organizationKey": "Organisation (non liée à un utilisateur)",
+  "organizationKeyHelp": "Les clés d'organisation ne sont liées à aucune personne et n'accèdent qu'aux namespaces partagés avec tout le monde. Préférez des clés personnelles pour que les appels restent attribuables.",
+  "stdioRequiresPermission": "Nécessite la permission sur les serveurs STDIO",
+  "stdioLocked": "La commande, les arguments et l'environnement d'un serveur STDIO ne peuvent être modifiés que par les personnes disposant de la permission sur les serveurs STDIO (il s'exécute sur l'hôte MetaMCP).",
+  "endpointAuthRequired": "Au moins une méthode d'authentification doit rester activée. Seuls les administrateurs peuvent publier un endpoint sans authentification.",
+  "share": {
+    "action": "Partager",
+    "title": "Partager « {{name}} »",
+    "ownedBy": "Propriétaire :",
+    "kind": {
+      "mcp_server": "Serveur MCP",
+      "namespace": "Namespace"
+    },
+    "searchPlaceholder": "Ajouter des personnes ou des groupes…",
+    "levelForNew": "Niveau d'accès des personnes et groupes ajoutés",
+    "levelFor": "Niveau d'accès de {{name}}",
+    "results": "Personnes et groupes correspondants",
+    "searching": "Recherche en cours…",
+    "noResults": "Aucune personne ni aucun groupe correspondant.",
+    "subjectType": {
+      "user": "Utilisateur",
+      "group": "Groupe"
+    },
+    "everyone": "Tout le monde dans l'organisation",
+    "everyoneHint": "Tous les utilisateurs connectés, actuels et futurs",
+    "memberCount": {
+      "one": "{{count}} membre",
+      "other": "{{count}} membres"
+    },
+    "withAccess": "Personnes et groupes ayant accès",
+    "organizationHint": "Gérée par les administrateurs",
+    "ownerRole": "Propriétaire",
+    "loading": "Chargement des accès…",
+    "notShared": "Pas encore partagé : seuls le propriétaire et les administrateurs peuvent le voir.",
+    "readOnlyHint": "Seules les personnes qui gèrent cette ressource peuvent voir et modifier qui y a accès.",
+    "remove": "Retirer l'accès de {{name}}",
+    "added": "Partagé avec {{name}}",
+    "error": "Impossible de mettre à jour les accès",
+    "sharedWith": {
+      "one": "Partagé avec {{count}}",
+      "other": "Partagé avec {{count}}"
+    },
+    "explain": {
+      "mcp_server": "Les personnes qui peuvent utiliser ce serveur peuvent l'ajouter à leurs propres namespaces et l'inspecter. Elles ne voient jamais ses secrets, sauf si elles peuvent le modifier.",
+      "namespace": "Partager un namespace permet d'utiliser les outils de ses serveurs MCP via ses endpoints, sans voir les identifiants des serveurs."
+    }
+  },
+  "readOnly": {
+    "title": {
+      "mcp_server": "Partagé avec vous par {{owner}}",
+      "namespace": "Partagé avec vous par {{owner}}"
+    },
+    "description": {
+      "mcp_server": "Vous pouvez utiliser et inspecter ce serveur MCP. Pour le modifier, demandez un accès en modification à son propriétaire.",
+      "namespace": "Vous pouvez utiliser ce namespace via ses endpoints. Ses serveurs et ses outils sont configurés par son propriétaire."
+    },
+    "secretsHidden": "Les valeurs des variables d'environnement, les en-têtes et les jetons sont masqués."
+  },
+  "denied": {
+    "title": "Cette section est à accès restreint",
+    "description": "Votre rôle ne vous donne pas accès à cette page.",
+    "yourRole": "Votre rôle :",
+    "contact": "Si vous en avez besoin, adressez-vous à un administrateur MetaMCP.",
+    "back": "Retour aux serveurs MCP"
+  }
+}

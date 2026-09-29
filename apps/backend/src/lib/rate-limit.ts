@@ -2,6 +2,7 @@
 // Rate limiting for protecting MCP servers from abuse
 
 import { mcpServerPool } from "./metamcp/mcp-server-pool";
+import { clientRateLimitKey } from "./request-context";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- middleware context is an intentionally dynamic plugin payload
 type Context = Record<string, any>;
@@ -155,18 +156,17 @@ export class SlidingWindowRateLimiting {
   }
 
   async onRequest(context: Context, callNext: CallNext): Promise<unknown> {
-    const { endpoint, socket, headers } = context.req;
+    const { endpoint } = context.req;
     const { namespace_uuid } = endpoint;
     const clientMaxRate = endpoint.client_max_rate;
     const clientMaxRateSeconds = endpoint.client_max_rate_seconds;
-    const clientMaxRateStrategyKey =
-      endpoint.client_max_rate_strategy_key === ""
-        ? "x-forwarded-for"
-        : endpoint.client_max_rate_strategy_key;
 
     const backgroundIdleSessions =
       mcpServerPool.getBackgroundIdleSessionsByNamespace();
-    const key = headers[clientMaxRateStrategyKey] || socket.remoteAddress;
+    const key = clientRateLimitKey(
+      context.req,
+      endpoint.client_max_rate_strategy_key ?? "",
+    );
 
     let limiter = this.limiters.get(key);
 

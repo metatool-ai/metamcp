@@ -56,6 +56,27 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
       });
     }
 
+    if (redirect_uris.length > 10) {
+      return res.status(400).json({
+        error: "invalid_redirect_uri",
+        error_description: "At most 10 redirect URIs can be registered",
+      });
+    }
+
+    // Shown on the consent page: keep it short and printable
+    if (
+      client_name !== undefined &&
+      (typeof client_name !== "string" ||
+        client_name.length > 100 ||
+        [...client_name].some((char) => char < " " || char === "\u007f"))
+    ) {
+      return res.status(400).json({
+        error: "invalid_client_metadata",
+        error_description:
+          "client_name must be a string of at most 100 printable characters",
+      });
+    }
+
     // OAuth 2.1 Security: Validate redirect URIs
     for (const uri of redirect_uris) {
       if (!validateRedirectUri(uri)) {
@@ -81,11 +102,8 @@ registrationRouter.post("/oauth/register", rateLimitToken, async (req, res) => {
     const clientTokenEndpointAuthMethod = token_endpoint_auth_method || "none";
 
     // Validate grant types and response types consistency
-    const validGrantTypes = [
-      "authorization_code",
-      "refresh_token",
-      "client_credentials",
-    ];
+    // Only the grants the token endpoint implements
+    const validGrantTypes = ["authorization_code", "refresh_token"];
     const validResponseTypes = ["code"];
     const validAuthMethods = [
       "none",

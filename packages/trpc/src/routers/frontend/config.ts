@@ -1,43 +1,39 @@
-import { SetConfigRequest, SetConfigRequestSchema } from "@repo/zod-types";
+import {
+  type AccessPrincipal,
+  SetConfigRequest,
+  SetConfigRequestSchema,
+} from "@repo/zod-types";
 import { z } from "zod";
 
-import { protectedProcedure, publicProcedure, router } from "../../trpc";
+import { adminProcedure, publicProcedure, router } from "../../trpc";
+
+/** Settings setters receive the administrator, for the activity log. */
+type Setter<I> = (
+  input: I,
+  principal?: AccessPrincipal,
+) => Promise<{ success: boolean }>;
 
 export const createConfigRouter = (implementations: {
   getSignupDisabled: () => Promise<boolean>;
-  setSignupDisabled: (input: {
-    disabled: boolean;
-  }) => Promise<{ success: boolean }>;
+  setSignupDisabled: Setter<{ disabled: boolean }>;
   getSsoSignupDisabled: () => Promise<boolean>;
-  setSsoSignupDisabled: (input: {
-    disabled: boolean;
-  }) => Promise<{ success: boolean }>;
+  setSsoSignupDisabled: Setter<{ disabled: boolean }>;
   getBasicAuthDisabled: () => Promise<boolean>;
-  setBasicAuthDisabled: (input: {
-    disabled: boolean;
-  }) => Promise<{ success: boolean }>;
+  setBasicAuthDisabled: Setter<{ disabled: boolean }>;
   getMcpResetTimeoutOnProgress: () => Promise<boolean>;
-  setMcpResetTimeoutOnProgress: (input: {
-    enabled: boolean;
-  }) => Promise<{ success: boolean }>;
+  setMcpResetTimeoutOnProgress: Setter<{ enabled: boolean }>;
   getMcpTimeout: () => Promise<number>;
-  setMcpTimeout: (input: { timeout: number }) => Promise<{ success: boolean }>;
+  setMcpTimeout: Setter<{ timeout: number }>;
   getMcpMaxTotalTimeout: () => Promise<number>;
-  setMcpMaxTotalTimeout: (input: {
-    timeout: number;
-  }) => Promise<{ success: boolean }>;
+  setMcpMaxTotalTimeout: Setter<{ timeout: number }>;
   getMcpMaxAttempts: () => Promise<number>;
-  setMcpMaxAttempts: (input: {
-    maxAttempts: number;
-  }) => Promise<{ success: boolean }>;
+  setMcpMaxAttempts: Setter<{ maxAttempts: number }>;
   getSessionLifetime: () => Promise<number | null>;
-  setSessionLifetime: (input: {
-    lifetime?: number | null;
-  }) => Promise<{ success: boolean }>;
+  setSessionLifetime: Setter<{ lifetime?: number | null }>;
   getAllConfigs: () => Promise<
     Array<{ id: string; value: string; description?: string | null }>
   >;
-  setConfig: (input: SetConfigRequest) => Promise<{ success: boolean }>;
+  setConfig: Setter<SetConfigRequest>;
   getAuthProviders: () => Promise<
     Array<{ id: string; name: string; enabled: boolean }>
   >;
@@ -47,94 +43,100 @@ export const createConfigRouter = (implementations: {
       return await implementations.getSignupDisabled();
     }),
 
-    setSignupDisabled: protectedProcedure
+    setSignupDisabled: adminProcedure
       .input(z.object({ disabled: z.boolean() }))
-      .mutation(async ({ input }) => {
-        return await implementations.setSignupDisabled(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.setSignupDisabled(input, ctx.principal);
       }),
 
     getSsoSignupDisabled: publicProcedure.query(async () => {
       return await implementations.getSsoSignupDisabled();
     }),
 
-    setSsoSignupDisabled: protectedProcedure
+    setSsoSignupDisabled: adminProcedure
       .input(z.object({ disabled: z.boolean() }))
-      .mutation(async ({ input }) => {
-        return await implementations.setSsoSignupDisabled(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.setSsoSignupDisabled(input, ctx.principal);
       }),
 
     getBasicAuthDisabled: publicProcedure.query(async () => {
       return await implementations.getBasicAuthDisabled();
     }),
 
-    setBasicAuthDisabled: protectedProcedure
+    setBasicAuthDisabled: adminProcedure
       .input(z.object({ disabled: z.boolean() }))
-      .mutation(async ({ input }) => {
-        return await implementations.setBasicAuthDisabled(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.setBasicAuthDisabled(input, ctx.principal);
       }),
 
     getMcpResetTimeoutOnProgress: publicProcedure.query(async () => {
       return await implementations.getMcpResetTimeoutOnProgress();
     }),
 
-    setMcpResetTimeoutOnProgress: protectedProcedure
+    setMcpResetTimeoutOnProgress: adminProcedure
       .input(z.object({ enabled: z.boolean() }))
-      .mutation(async ({ input }) => {
-        return await implementations.setMcpResetTimeoutOnProgress(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.setMcpResetTimeoutOnProgress(
+          input,
+          ctx.principal,
+        );
       }),
 
     getMcpTimeout: publicProcedure.query(async () => {
       return await implementations.getMcpTimeout();
     }),
 
-    setMcpTimeout: protectedProcedure
+    setMcpTimeout: adminProcedure
       .input(z.object({ timeout: z.number().min(1000).max(86400000) }))
-      .mutation(async ({ input }) => {
-        return await implementations.setMcpTimeout(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.setMcpTimeout(input, ctx.principal);
       }),
 
     getMcpMaxTotalTimeout: publicProcedure.query(async () => {
       return await implementations.getMcpMaxTotalTimeout();
     }),
 
-    setMcpMaxTotalTimeout: protectedProcedure
+    setMcpMaxTotalTimeout: adminProcedure
       .input(z.object({ timeout: z.number().min(1000).max(86400000) }))
-      .mutation(async ({ input }) => {
-        return await implementations.setMcpMaxTotalTimeout(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.setMcpMaxTotalTimeout(
+          input,
+          ctx.principal,
+        );
       }),
 
     getMcpMaxAttempts: publicProcedure.query(async () => {
       return await implementations.getMcpMaxAttempts();
     }),
 
-    setMcpMaxAttempts: protectedProcedure
+    setMcpMaxAttempts: adminProcedure
       .input(z.object({ maxAttempts: z.number().min(1).max(10) }))
-      .mutation(async ({ input }) => {
-        return await implementations.setMcpMaxAttempts(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.setMcpMaxAttempts(input, ctx.principal);
       }),
 
     getSessionLifetime: publicProcedure.query(async () => {
       return await implementations.getSessionLifetime();
     }),
 
-    setSessionLifetime: protectedProcedure
+    setSessionLifetime: adminProcedure
       .input(
         z.object({
           lifetime: z.number().min(300000).max(86400000).nullable().optional(),
         }),
       )
-      .mutation(async ({ input }) => {
-        return await implementations.setSessionLifetime(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.setSessionLifetime(input, ctx.principal);
       }),
 
-    getAllConfigs: protectedProcedure.query(async () => {
+    getAllConfigs: adminProcedure.query(async () => {
       return await implementations.getAllConfigs();
     }),
 
-    setConfig: protectedProcedure
+    setConfig: adminProcedure
       .input(SetConfigRequestSchema)
-      .mutation(async ({ input }) => {
-        return await implementations.setConfig(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.setConfig(input, ctx.principal);
       }),
 
     getAuthProviders: publicProcedure.query(async () => {

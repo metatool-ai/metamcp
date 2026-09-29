@@ -1,11 +1,15 @@
 import {
+  type AccessPrincipal,
   CreateNamespaceRequestSchema,
   CreateNamespaceResponseSchema,
+  type DatabaseMcpServer,
+  type DatabaseNamespace,
   DeleteNamespaceResponseSchema,
   GetNamespaceResponseSchema,
   GetNamespaceToolsRequestSchema,
   GetNamespaceToolsResponseSchema,
   ListNamespacesResponseSchema,
+  type Namespace,
   RefreshNamespaceToolsRequestSchema,
   RefreshNamespaceToolsResponseSchema,
   UpdateNamespaceRequestSchema,
@@ -22,65 +26,196 @@ import { z } from "zod";
 import logger from "@/utils/logger";
 
 import {
+  endpointsRepository,
   mcpServersRepository,
   namespaceMappingsRepository,
   namespacesRepository,
   toolsRepository,
 } from "../db/repositories";
+import { resourceSharesRepository } from "../db/repositories/resource-shares.repo";
 import { NamespacesSerializer } from "../db/serializers";
+import { accessService } from "../lib/access/access.service";
+import { endpointAccessCache } from "../lib/access/endpoint-access-cache";
+import { loadOwners } from "../lib/access/owners";
+import { hasCapability } from "../lib/access/policy";
+import { checkEmbeddedCredentialRedistribution } from "../lib/access/redistribution";
+import {
+  decideOwnerForCreate,
+  decideOwnerForUpdate,
+  forbiddenMessage,
+  hasLevel,
+  notFoundMessage,
+  redactServerSecrets,
+} from "../lib/access/resource-guards";
+import {
+  describeRedistributionError,
+  findNonRedistributableServers,
+} from "../lib/access/sharing-rules";
+import { activityLog } from "../lib/activity/activity-log.service";
+import { publicErrorMessage } from "../lib/errors";
 import {
   clearOverrideCache,
   mapOverrideNameToOriginal,
 } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
 
+/** Adds the caller's access, the owner and the share count to namespaces. */
+export async function serializeNamespacesForPrincipal(
+  principal: AccessPrincipal,
+  namespaces: DatabaseNamespace[],
+): Promise<Namespace[]> {
+  const [accessMap, owners, shareCounts] = await Promise.all([
+    accessService.resolveAccess(principal, "namespace", namespaces),
+    loadOwners(namespaces.map((namespace) => namespace.user_id)),
+    resourceSharesRepository.countForResources(
+      "namespace",
+      namespaces.map((namespace) => namespace.uuid),
+    ),
+  ]);
+  return namespaces.flatMap((namespace) => {
+    const access = accessMap.get(namespace.uuid);
+    if (!access) return [];
+    return [
+      {
+        ...NamespacesSerializer.serializeNamespace(namespace),
+        access,
+        owner: namespace.user_id
+          ? (owners.get(namespace.user_id) ?? null)
+          : null,
+        shareCount: shareCounts.get(namespace.uuid) ?? 0,
+      },
+    ];
+  });
+}
+
+/**
+ * Validates the servers a namespace will contain: they must exist and be
+ * usable by the caller, and — when the namespace is (or will be) shared —
+ * redistributable by the caller (see sharing-rules.ts).
+ */
+async function validateNamespaceServers(
+  principal: AccessPrincipal,
+  serverUuids: string[],
+  options: { namespaceIsShared: boolean; previousServerUuids?: string[] },
+): Promise<
+  { ok: true; servers: DatabaseMcpServer[] } | { ok: false; message: string }
+> {
+  const uniqueUuids = [...new Set(serverUuids)];
+  const servers = await mcpServersRepository.findByUuids(uniqueUuids);
+  const access = await accessService.resolveAccess(
+    principal,
+    "mcp_server",
+    servers,
+  );
+
+  // Servers already in the namespace stay even if the caller cannot use
+  // them (another editor added them); only new ones need the caller's access.
+  const previous = new Set(options.previousServerUuids ?? []);
+  if (
+    servers.length !== uniqueUuids.length ||
+    servers.some(
+      (server) => !previous.has(server.uuid) && !access.get(server.uuid),
+    )
+  ) {
+    return {
+      ok: false,
+      message: "One or more selected MCP servers could not be found",
+    };
+  }
+
+  if (options.namespaceIsShared && !principal.isAdmin) {
+    const added = servers.filter((server) => !previous.has(server.uuid));
+    const everyone = await accessService.getEveryoneGroup();
+    const grants = await resourceSharesRepository.findGrantsForResources(
+      "mcp_server",
+      added.map((server) => server.uuid),
+    );
+    const blocked = findNonRedistributableServers(
+      principal,
+      added.map((server) => ({
+        uuid: server.uuid,
+        name: server.name,
+        access: access.get(server.uuid) ?? null,
+        sharedWithEveryone: grants.some(
+          (grant) =>
+            grant.resourceUuid === server.uuid &&
+            grant.groupUuid !== null &&
+            grant.groupUuid === everyone?.uuid,
+        ),
+      })),
+    );
+    if (blocked.length > 0) {
+      return { ok: false, message: describeRedistributionError(blocked) };
+    }
+    // Servers holding MetaMCP credentials redistribute what those reach
+    for (const server of added) {
+      const embedded = await checkEmbeddedCredentialRedistribution(
+        principal,
+        server,
+      );
+      if (embedded) return { ok: false, message: embedded };
+    }
+  }
+
+  return { ok: true, servers };
+}
+
+/** Loads a namespace with the caller's access, enforcing a minimum level. */
+async function loadNamespaceWithAccess(
+  principal: AccessPrincipal,
+  namespaceUuid: string,
+  required: "use" | "edit" | "manage",
+  action: string,
+) {
+  const namespace = await namespacesRepository.findByUuid(namespaceUuid);
+  const access = namespace
+    ? await accessService.resolveAccessOne(principal, "namespace", namespace)
+    : null;
+  if (!namespace || !access) {
+    return { ok: false as const, message: notFoundMessage("Namespace") };
+  }
+  if (!hasLevel(access, required)) {
+    return { ok: false as const, message: forbiddenMessage(action, required) };
+  }
+  return { ok: true as const, namespace, access };
+}
+
+const namespaceTarget = (namespace: { uuid: string; name: string }) => ({
+  type: "namespace",
+  id: namespace.uuid,
+  label: namespace.name,
+});
+
 export const namespacesImplementations = {
   create: async (
     input: z.infer<typeof CreateNamespaceRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof CreateNamespaceResponseSchema>> => {
     try {
-      // Determine user ownership based on input.user_id or default to current user
-      const effectiveUserId =
-        input.user_id !== undefined ? input.user_id : userId;
-      const isPublicNamespace = effectiveUserId === null;
+      if (!hasCapability(principal, "namespaces.create")) {
+        return {
+          success: false as const,
+          message:
+            "Access denied: your role does not allow creating namespaces.",
+        };
+      }
 
-      // Validate server accessibility and relationship rules
+      const ownerDecision = decideOwnerForCreate(principal, input.user_id);
+      if (!ownerDecision.ok) {
+        return { success: false as const, message: ownerDecision.message };
+      }
+      const effectiveUserId = ownerDecision.ownerId;
+
+      // Every server must be usable by the creator. A new namespace has no
+      // shares yet, so redistribution rules apply only when it gets shared.
       if (input.mcpServerUuids && input.mcpServerUuids.length > 0) {
-        // Get detailed server information to validate access and ownership
-        const serverPromises = input.mcpServerUuids.map((uuid) =>
-          mcpServersRepository.findByUuid(uuid),
+        const validation = await validateNamespaceServers(
+          principal,
+          input.mcpServerUuids,
+          { namespaceIsShared: false },
         );
-        const servers = await Promise.all(serverPromises);
-
-        // Check if any servers don't exist
-        const missingServers = servers.some((server) => !server);
-        if (missingServers) {
-          return {
-            success: false as const,
-            message: "One or more selected MCP servers could not be found",
-          };
-        }
-
-        // Validate access and relationship rules
-        for (const server of servers) {
-          if (!server) continue;
-
-          // Check if user has access to this server (own server or public server)
-          if (server.user_id && server.user_id !== userId) {
-            return {
-              success: false as const,
-              message: `Access denied: You don't have permission to use server "${server.name}"`,
-            };
-          }
-
-          // Enforce relationship rules: public namespaces can only contain public servers
-          if (isPublicNamespace && server.user_id !== null) {
-            return {
-              success: false as const,
-              message: `Access denied: Public namespaces can only contain public MCP servers. Server "${server.name}" is private`,
-            };
-          }
+        if (!validation.ok) {
+          return { success: false as const, message: validation.message };
         }
       }
 
@@ -108,32 +243,45 @@ export const namespacesImplementations = {
           // Don't fail the entire create operation if idle server creation fails
         });
 
+      await activityLog.record({
+        actor: principal,
+        action: "namespace.created",
+        target: namespaceTarget(result),
+        details: {
+          servers: input.mcpServerUuids?.length ?? 0,
+          owner: result.user_id ? "user" : "organisation",
+        },
+      });
+
+      const [data] = await serializeNamespacesForPrincipal(principal, [result]);
       return {
         success: true as const,
-        data: NamespacesSerializer.serializeNamespace(result),
+        data: data ?? NamespacesSerializer.serializeNamespace(result),
         message: "Namespace created successfully",
       };
     } catch (error) {
       logger.error("Error creating namespace:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
 
   list: async (
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof ListNamespacesResponseSchema>> => {
     try {
-      // Find namespaces accessible to user (public + user's own)
-      const namespaces =
-        await namespacesRepository.findAllAccessibleToUser(userId);
+      // Namespaces the caller owns or that are shared with them (all for admins)
+      const filter = await accessService.accessibleFilter(
+        principal,
+        "namespace",
+      );
+      const namespaces = await namespacesRepository.findAllByAccess(filter);
 
       return {
         success: true as const,
-        data: NamespacesSerializer.serializeNamespaceList(namespaces),
+        data: await serializeNamespacesForPrincipal(principal, namespaces),
         message: "Namespaces retrieved successfully",
       };
     } catch (error) {
@@ -150,36 +298,51 @@ export const namespacesImplementations = {
     input: {
       uuid: string;
     },
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof GetNamespaceResponseSchema>> => {
     try {
       const namespaceWithServers =
         await namespacesRepository.findByUuidWithServers(input.uuid);
+      const [namespace] = namespaceWithServers
+        ? await serializeNamespacesForPrincipal(principal, [
+            namespaceWithServers,
+          ])
+        : [];
 
-      if (!namespaceWithServers) {
+      if (!namespaceWithServers || !namespace) {
         return {
           success: false as const,
-          message: "Namespace not found",
+          message: notFoundMessage("Namespace"),
         };
       }
 
-      // Check if user has access to this namespace (own namespace or public namespace)
-      if (
-        namespaceWithServers.user_id &&
-        namespaceWithServers.user_id !== userId
-      ) {
-        return {
-          success: false as const,
-          message:
-            "Access denied: You can only view namespaces you own or public namespaces",
-        };
-      }
+      // Server secrets are only visible to people who can edit that server;
+      // using a namespace never reveals the credentials of its servers.
+      const serverAccess = await accessService.resolveAccess(
+        principal,
+        "mcp_server",
+        namespaceWithServers.servers,
+      );
+      const serialized =
+        NamespacesSerializer.serializeNamespaceWithServers(
+          namespaceWithServers,
+        );
 
       return {
         success: true as const,
-        data: NamespacesSerializer.serializeNamespaceWithServers(
-          namespaceWithServers,
-        ),
+        data: {
+          ...serialized,
+          access: namespace.access,
+          owner: namespace.owner,
+          shareCount: namespace.shareCount,
+          servers: serialized.servers.map((server) => {
+            const access = serverAccess.get(server.uuid) ?? null;
+            const withAccess = { ...server, access: access ?? undefined };
+            return hasLevel(access, "edit")
+              ? { ...withAccess, secretsRedacted: false }
+              : redactServerSecrets(withAccess);
+          }),
+        },
         message: "Namespace retrieved successfully",
       };
     } catch (error) {
@@ -193,30 +356,17 @@ export const namespacesImplementations = {
 
   getTools: async (
     input: z.infer<typeof GetNamespaceToolsRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof GetNamespaceToolsResponseSchema>> => {
     try {
-      // First, check if user has access to this namespace
-      const namespace = await namespacesRepository.findByUuid(
+      const loaded = await loadNamespaceWithAccess(
+        principal,
         input.namespaceUuid,
+        "use",
+        "view this namespace",
       );
-
-      if (!namespace) {
-        return {
-          success: false as const,
-          data: [],
-          message: "Namespace not found",
-        };
-      }
-
-      // Check if user has access to this namespace (own namespace or public namespace)
-      if (namespace.user_id && namespace.user_id !== userId) {
-        return {
-          success: false as const,
-          data: [],
-          message:
-            "Access denied: You can only view tools for namespaces you own or public namespaces",
-        };
+      if (!loaded.ok) {
+        return { success: false as const, data: [], message: loaded.message };
       }
 
       const toolsData = await namespacesRepository.findToolsByNamespaceUuid(
@@ -242,32 +392,23 @@ export const namespacesImplementations = {
     input: {
       uuid: string;
     },
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof DeleteNamespaceResponseSchema>> => {
     try {
-      // First, check if the namespace exists and user has permission to delete it
-      const existingNamespace = await namespacesRepository.findByUuid(
+      const loaded = await loadNamespaceWithAccess(
+        principal,
         input.uuid,
+        "manage",
+        "delete this namespace",
       );
-
-      if (!existingNamespace) {
-        return {
-          success: false as const,
-          message: "Namespace not found",
-        };
-      }
-
-      // Check if user owns this namespace (only owners can delete, protect public namespaces)
-      if (existingNamespace.user_id && existingNamespace.user_id !== userId) {
-        return {
-          success: false as const,
-          message: "Access denied: You can only delete namespaces you own",
-        };
+      if (!loaded.ok) {
+        return { success: false as const, message: loaded.message };
       }
 
       const deletedNamespace = await namespacesRepository.deleteByUuid(
         input.uuid,
       );
+      endpointAccessCache.clear(); // owner / namespace may have changed
 
       if (!deletedNamespace) {
         return {
@@ -296,6 +437,12 @@ export const namespacesImplementations = {
         `Cleared tool overrides cache for deleted namespace ${input.uuid}`,
       );
 
+      await activityLog.record({
+        actor: principal,
+        action: "namespace.deleted",
+        target: namespaceTarget(deletedNamespace),
+      });
+
       return {
         success: true as const,
         message: "Namespace deleted successfully",
@@ -304,78 +451,68 @@ export const namespacesImplementations = {
       logger.error("Error deleting namespace:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
 
   update: async (
     input: z.infer<typeof UpdateNamespaceRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof UpdateNamespaceResponseSchema>> => {
     try {
-      // First, check if the namespace exists and user has permission to update it
-      const existingNamespace = await namespacesRepository.findByUuid(
+      const loaded = await loadNamespaceWithAccess(
+        principal,
         input.uuid,
+        "edit",
+        "edit this namespace",
       );
+      if (!loaded.ok) {
+        return { success: false as const, message: loaded.message };
+      }
+      const existingNamespace = loaded.namespace;
+      // Servers before the update, for the activity log.
+      const previousServerUuids =
+        (
+          await namespacesRepository.findByUuidWithServers(input.uuid)
+        )?.servers.map((server) => server.uuid) ?? [];
 
-      if (!existingNamespace) {
-        return {
-          success: false as const,
-          message: "Namespace not found",
-        };
+      const ownerDecision = decideOwnerForUpdate(
+        principal,
+        existingNamespace.user_id,
+        input.user_id,
+      );
+      if (!ownerDecision.ok) {
+        return { success: false as const, message: ownerDecision.message };
       }
 
-      // Check if user owns this namespace (only owners can update)
-      if (existingNamespace.user_id && existingNamespace.user_id !== userId) {
-        return {
-          success: false as const,
-          message: "Access denied: You can only update namespaces you own",
-        };
-      }
-
-      // Determine the effective ownership for validation (use input.user_id if provided, otherwise existing)
-      const effectiveUserId =
-        input.user_id !== undefined ? input.user_id : existingNamespace.user_id;
-      const isPublicNamespace = effectiveUserId === null;
-
-      // Validate server accessibility and relationship rules if servers are being updated
       if (input.mcpServerUuids && input.mcpServerUuids.length > 0) {
-        // Get detailed server information to validate access and ownership
-        const serverPromises = input.mcpServerUuids.map((uuid) =>
-          mcpServersRepository.findByUuid(uuid),
+        const [existingWithServers, shareCounts, endpoints] = await Promise.all(
+          [
+            namespacesRepository.findByUuidWithServers(input.uuid),
+            resourceSharesRepository.countForResources("namespace", [
+              input.uuid,
+            ]),
+            endpointsRepository.findByNamespaceUuid(input.uuid),
+          ],
         );
-        const servers = await Promise.all(serverPromises);
-
-        // Check if any servers don't exist
-        const missingServers = servers.some((server) => !server);
-        if (missingServers) {
-          return {
-            success: false as const,
-            message: "One or more selected MCP servers could not be found",
-          };
-        }
-
-        // Validate access and relationship rules
-        for (const server of servers) {
-          if (!server) continue;
-
-          // Check if user has access to this server (own server or public server)
-          if (server.user_id && server.user_id !== userId) {
-            return {
-              success: false as const,
-              message: `Access denied: You don't have permission to use server "${server.name}"`,
-            };
-          }
-
-          // Enforce relationship rules: public namespaces can only contain public servers
-          if (isPublicNamespace && server.user_id !== null) {
-            return {
-              success: false as const,
-              message: `Access denied: Public namespaces can only contain public MCP servers. Server "${server.name}" is private`,
-            };
-          }
+        // An endpoint without authentication publishes the namespace to
+        // anyone: it counts as sharing it.
+        const hasOpenEndpoint = endpoints.some(
+          (endpoint) => !endpoint.enable_api_key_auth && !endpoint.enable_oauth,
+        );
+        const validation = await validateNamespaceServers(
+          principal,
+          input.mcpServerUuids,
+          {
+            namespaceIsShared:
+              (shareCounts.get(input.uuid) ?? 0) > 0 || hasOpenEndpoint,
+            previousServerUuids:
+              existingWithServers?.servers.map((server) => server.uuid) ?? [],
+          },
+        );
+        if (!validation.ok) {
+          return { success: false as const, message: validation.message };
         }
       }
 
@@ -383,9 +520,10 @@ export const namespacesImplementations = {
         uuid: input.uuid,
         name: input.name,
         description: input.description,
-        user_id: input.user_id,
+        user_id: ownerDecision.ownerId,
         mcpServerUuids: input.mcpServerUuids,
       });
+      endpointAccessCache.clear(); // owner / namespace may have changed
 
       // Invalidate idle MetaMCP server for this namespace since the MCP servers list may have changed
       // Run this asynchronously to avoid blocking the response
@@ -426,45 +564,73 @@ export const namespacesImplementations = {
         `Cleared tool overrides cache for updated namespace ${input.uuid}`,
       );
 
+      const before = loaded.namespace;
+      const beforeServers = previousServerUuids;
+      const changedFields = [
+        ...(input.name !== undefined && input.name !== before.name
+          ? ["name"]
+          : []),
+        ...(input.description !== undefined &&
+        (input.description ?? null) !== (before.description ?? null)
+          ? ["description"]
+          : []),
+        ...(result.user_id !== before.user_id ? ["owner"] : []),
+      ];
+      const nextServers = input.mcpServerUuids ?? beforeServers;
+      const addedServers = nextServers.filter(
+        (uuid) => !beforeServers.includes(uuid),
+      );
+      const removedServers = beforeServers.filter(
+        (uuid) => !nextServers.includes(uuid),
+      );
+      if (
+        changedFields.length > 0 ||
+        addedServers.length > 0 ||
+        removedServers.length > 0
+      ) {
+        await activityLog.record({
+          actor: principal,
+          action: "namespace.updated",
+          target: namespaceTarget(result),
+          details: {
+            ...(changedFields.length > 0 ? { changedFields } : {}),
+            ...(addedServers.length > 0 ? { serversAdded: addedServers } : {}),
+            ...(removedServers.length > 0
+              ? { serversRemoved: removedServers }
+              : {}),
+          },
+        });
+      }
+
+      const [data] = await serializeNamespacesForPrincipal(principal, [result]);
       return {
         success: true as const,
-        data: NamespacesSerializer.serializeNamespace(result),
+        data: data ?? NamespacesSerializer.serializeNamespace(result),
         message: "Namespace updated successfully",
       };
     } catch (error) {
       logger.error("Error updating namespace:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
 
   updateServerStatus: async (
     input: z.infer<typeof UpdateNamespaceServerStatusRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof UpdateNamespaceServerStatusResponseSchema>> => {
     try {
       // First, check if user has permission to update this namespace
-      const namespace = await namespacesRepository.findByUuid(
+      const loaded = await loadNamespaceWithAccess(
+        principal,
         input.namespaceUuid,
+        "edit",
+        "change server status in this namespace",
       );
-
-      if (!namespace) {
-        return {
-          success: false as const,
-          message: "Namespace not found",
-        };
-      }
-
-      // Check if user owns this namespace (only owners can update server status)
-      if (namespace.user_id && namespace.user_id !== userId) {
-        return {
-          success: false as const,
-          message:
-            "Access denied: You can only update server status for namespaces you own",
-        };
+      if (!loaded.ok) {
+        return { success: false as const, message: loaded.message };
       }
 
       const updatedMapping =
@@ -514,6 +680,16 @@ export const namespacesImplementations = {
           // Don't fail the entire operation if OpenAPI session invalidation fails
         });
 
+      await activityLog.record({
+        actor: principal,
+        action: "namespace.updated",
+        target: namespaceTarget(loaded.namespace),
+        details: {
+          server: input.serverUuid,
+          serverStatus: input.status,
+        },
+      });
+
       return {
         success: true as const,
         message: "Server status updated successfully",
@@ -522,36 +698,25 @@ export const namespacesImplementations = {
       logger.error("Error updating server status:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
 
   updateToolStatus: async (
     input: z.infer<typeof UpdateNamespaceToolStatusRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof UpdateNamespaceToolStatusResponseSchema>> => {
     try {
       // First, check if user has permission to update this namespace
-      const namespace = await namespacesRepository.findByUuid(
+      const loaded = await loadNamespaceWithAccess(
+        principal,
         input.namespaceUuid,
+        "edit",
+        "change tool status in this namespace",
       );
-
-      if (!namespace) {
-        return {
-          success: false as const,
-          message: "Namespace not found",
-        };
-      }
-
-      // Check if user owns this namespace (only owners can update tool status)
-      if (namespace.user_id && namespace.user_id !== userId) {
-        return {
-          success: false as const,
-          message:
-            "Access denied: You can only update tool status for namespaces you own",
-        };
+      if (!loaded.ok) {
+        return { success: false as const, message: loaded.message };
       }
 
       const updatedMapping = await namespaceMappingsRepository.updateToolStatus(
@@ -570,6 +735,17 @@ export const namespacesImplementations = {
         };
       }
 
+      const tool = await toolsRepository.findByUuid(input.toolUuid);
+      await activityLog.record({
+        actor: principal,
+        action: "namespace.updated",
+        target: namespaceTarget(loaded.namespace),
+        details: {
+          tool: tool?.name ?? input.toolUuid,
+          toolStatus: input.status,
+        },
+      });
+
       return {
         success: true as const,
         message: "Tool status updated successfully",
@@ -578,36 +754,25 @@ export const namespacesImplementations = {
       logger.error("Error updating tool status:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
 
   updateToolOverrides: async (
     input: z.infer<typeof UpdateNamespaceToolOverridesRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof UpdateNamespaceToolOverridesResponseSchema>> => {
     try {
       // First, check if user has permission to update this namespace
-      const namespace = await namespacesRepository.findByUuid(
+      const loaded = await loadNamespaceWithAccess(
+        principal,
         input.namespaceUuid,
+        "edit",
+        "change tool overrides in this namespace",
       );
-
-      if (!namespace) {
-        return {
-          success: false as const,
-          message: "Namespace not found",
-        };
-      }
-
-      // Check if user owns this namespace (only owners can update tool overrides)
-      if (namespace.user_id && namespace.user_id !== userId) {
-        return {
-          success: false as const,
-          message:
-            "Access denied: You can only update tool overrides for namespaces you own",
-        };
+      if (!loaded.ok) {
+        return { success: false as const, message: loaded.message };
       }
 
       const updatedMapping =
@@ -634,6 +799,22 @@ export const namespacesImplementations = {
         `Cleared tool overrides cache for namespace ${input.namespaceUuid} after updating tool overrides`,
       );
 
+      const overriddenTool = await toolsRepository.findByUuid(input.toolUuid);
+      await activityLog.record({
+        actor: principal,
+        action: "namespace.updated",
+        target: namespaceTarget(loaded.namespace),
+        details: {
+          tool: overriddenTool?.name ?? input.toolUuid,
+          toolOverrides: [
+            ...(input.overrideName !== undefined ? ["name"] : []),
+            ...(input.overrideTitle !== undefined ? ["title"] : []),
+            ...(input.overrideDescription !== undefined ? ["description"] : []),
+            ...(input.overrideAnnotations !== undefined ? ["annotations"] : []),
+          ],
+        },
+      });
+
       return {
         success: true as const,
         message: "Tool overrides updated successfully",
@@ -642,36 +823,25 @@ export const namespacesImplementations = {
       logger.error("Error updating tool overrides:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
 
   refreshTools: async (
     input: z.infer<typeof RefreshNamespaceToolsRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof RefreshNamespaceToolsResponseSchema>> => {
     try {
       // First, check if user has permission to refresh tools for this namespace
-      const namespace = await namespacesRepository.findByUuid(
+      const loaded = await loadNamespaceWithAccess(
+        principal,
         input.namespaceUuid,
+        "edit",
+        "refresh tools of this namespace",
       );
-
-      if (!namespace) {
-        return {
-          success: false as const,
-          message: "Namespace not found",
-        };
-      }
-
-      // Check if user owns this namespace (only owners can refresh tools)
-      if (namespace.user_id && namespace.user_id !== userId) {
-        return {
-          success: false as const,
-          message:
-            "Access denied: You can only refresh tools for namespaces you own",
-        };
+      if (!loaded.ok) {
+        return { success: false as const, message: loaded.message };
       }
 
       if (!input.tools || input.tools.length === 0) {
@@ -767,11 +937,30 @@ export const namespacesImplementations = {
         }
       > = {};
 
+      // Only servers that belong to this namespace can receive tools, and
+      // tool definitions (shared by every namespace using the server) are
+      // only written for servers the caller may edit. For other servers we
+      // only map tools that already exist, so a namespace editor cannot
+      // rewrite the tool descriptions another server's owner published.
+      const namespaceWithServers =
+        await namespacesRepository.findByUuidWithServers(input.namespaceUuid);
+      const serversInNamespace = new Map(
+        (namespaceWithServers?.servers ?? []).map((server) => [
+          server.name,
+          server,
+        ]),
+      );
+      const serverAccess = await accessService.resolveAccess(
+        principal,
+        "mcp_server",
+        namespaceWithServers?.servers ?? [],
+      );
+      const findServerByName = async (name: string) =>
+        serversInNamespace.get(name);
+
       for (const parsedTool of parsedTools) {
         // Find server by name - first try exact match
-        let server = await mcpServersRepository.findByName(
-          parsedTool.serverName,
-        );
+        let server = await findServerByName(parsedTool.serverName);
 
         // If exact match fails, try to handle nested MetaMCP scenarios
         // For nested MetaMCP, tool names may be in format "ParentServer__ChildServer__tool"
@@ -785,7 +974,7 @@ export const namespacesImplementations = {
             firstDoubleUnderscoreIndex,
           );
 
-          server = await mcpServersRepository.findByName(actualServerName);
+          server = await findServerByName(actualServerName);
 
           if (server) {
             logger.info(
@@ -836,16 +1025,23 @@ export const namespacesImplementations = {
         toolsByServerName,
       )) {
         const { serverUuid, tools } = serverData;
+        const canEditServer = hasLevel(serverAccess.get(serverUuid), "edit");
 
         // Bulk upsert tools to the tools table with the actual tool names
-        const upsertedTools = await toolsRepository.bulkUpsert({
-          mcpServerUuid: serverUuid,
-          tools: tools.map((tool) => ({
-            name: tool.toolName, // Use the actual tool name, not the prefixed name
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-          })),
-        });
+        // (or, without edit access on the server, reuse the existing rows)
+        const upsertedTools = canEditServer
+          ? await toolsRepository.bulkUpsert({
+              mcpServerUuid: serverUuid,
+              tools: tools.map((tool) => ({
+                name: tool.toolName, // Use the actual tool name, not the prefixed name
+                description: tool.description,
+                inputSchema: tool.inputSchema,
+              })),
+            })
+          : (await toolsRepository.findByMcpServerUuid(serverUuid)).filter(
+              (existing) =>
+                tools.some((tool) => tool.toolName === existing.name),
+            );
 
         totalToolsCreated += upsertedTools.length;
 
@@ -912,8 +1108,7 @@ export const namespacesImplementations = {
       logger.error("Error refreshing namespace tools:", error);
       return {
         success: false as const,
-        message:
-          error instanceof Error ? error.message : "Internal server error",
+        message: publicErrorMessage(error, "Internal server error"),
       };
     }
   },

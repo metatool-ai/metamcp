@@ -1,8 +1,9 @@
 import type { BaseContext } from "@repo/trpc";
-import { initTRPC, TRPCError } from "@trpc/server";
+import type { AccessPrincipal } from "@repo/zod-types";
 import type { Request, Response } from "express";
 
 import { auth, type Session, type User } from "./auth";
+import { accessService } from "./lib/access/access.service";
 import logger from "./utils/logger";
 
 // Extend the base context with Express request/response and auth data
@@ -11,6 +12,7 @@ export interface Context extends BaseContext {
   res: Response;
   user?: User;
   session?: Session;
+  principal?: AccessPrincipal;
 }
 
 // Create context from Express request/response with auth
@@ -23,6 +25,7 @@ export const createContext = async ({
 }): Promise<Context> => {
   let user: User | undefined;
   let session: Session | undefined;
+  let principal: AccessPrincipal | undefined;
 
   try {
     // Check if we have cookies in the request
@@ -50,8 +53,16 @@ export const createContext = async ({
         };
 
         if (sessionData?.user && sessionData?.session) {
-          user = sessionData.user;
-          session = sessionData.session;
+          // Disabled or deleted users resolve to no principal and are
+          // therefore treated as anonymous by every procedure.
+          const resolved = await accessService.getPrincipal(
+            sessionData.user.id,
+          );
+          if (resolved) {
+            user = sessionData.user;
+            session = sessionData.session;
+            principal = resolved;
+          }
         }
       }
     }
@@ -65,31 +76,6 @@ export const createContext = async ({
     res,
     user,
     session,
+    principal,
   };
 };
-
-// Initialize tRPC with extended context
-const t = initTRPC.context<Context>().create();
-
-// Export router and procedure helpers
-export const router = t.router;
-export const publicProcedure = t.procedure;
-
-// Create a protected procedure that requires authentication
-export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
-  if (!ctx.user || !ctx.session) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "You must be logged in to access this resource",
-    });
-  }
-
-  return next({
-    ctx: {
-      ...ctx,
-      // Override types to indicate user and session are guaranteed to exist
-      user: ctx.user,
-      session: ctx.session,
-    } as Context & { user: User; session: Session },
-  });
-});

@@ -1,4 +1,5 @@
 import {
+  type AccessPrincipal,
   ListMcpRequestAuditLogsRequestSchema,
   ListMcpRequestAuditLogsResponseSchema,
 } from "@repo/zod-types";
@@ -9,7 +10,7 @@ import { protectedProcedure, router } from "../../trpc";
 export const createMcpRequestAuditLogsRouter = (implementations: {
   list: (
     input: z.infer<typeof ListMcpRequestAuditLogsRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ) => Promise<z.infer<typeof ListMcpRequestAuditLogsResponseSchema>>;
 }) => {
   return router({
@@ -17,7 +18,7 @@ export const createMcpRequestAuditLogsRouter = (implementations: {
       .input(ListMcpRequestAuditLogsRequestSchema)
       .output(ListMcpRequestAuditLogsResponseSchema)
       .query(async ({ input, ctx }) => {
-        return implementations.list(input, ctx.user.id);
+        return implementations.list(input, ctx.principal);
       }),
   });
 };

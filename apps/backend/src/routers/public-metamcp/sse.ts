@@ -10,6 +10,11 @@ import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 import { rateLimitMiddleware } from "@/middleware/rate-limit.middleware";
 import logger from "@/utils/logger";
 
+import {
+  bindMcpSession,
+  isMcpSessionOwner,
+  unbindMcpSession,
+} from "../../lib/access/mcp-session-binding";
 import { buildAdminToolsOptions } from "../../lib/admin-mcp/build-admin-tools-options";
 import { extractClientHeaders } from "../../lib/metamcp/header-forwarding";
 import { MetaMCPHandlerContext } from "../../lib/metamcp/metamcp-middleware/functional-middleware";
@@ -53,6 +58,7 @@ const cleanupSession = async (sessionId: string, transport?: Transport) => {
 
     // Remove from session manager
     sessionManager.removeSession(sessionId);
+    unbindMcpSession(sessionId);
 
     // Clean up MetaMCP server pool session
     await metaMcpServerPool.cleanupSession(sessionId);
@@ -62,6 +68,7 @@ const cleanupSession = async (sessionId: string, transport?: Transport) => {
     logger.error(`Error during cleanup of session ${sessionId}:`, error);
     // Even if cleanup fails, remove the session from manager to prevent memory leaks
     sessionManager.removeSession(sessionId);
+    unbindMcpSession(sessionId);
     logger.info(`Removed orphaned session ${sessionId} due to cleanup error`);
     throw error;
   }
@@ -89,8 +96,12 @@ sseRouter.get(
 
       const sessionId = webAppTransport.sessionId;
 
-      // Extract client request headers for per-server header forwarding
-      const clientRequestHeaders = extractClientHeaders(req.headers);
+      // Extract client request headers for per-server header forwarding,
+      // minus the MetaMCP credentials used to authenticate this request
+      const clientRequestHeaders = extractClientHeaders(req.headers, {
+        withoutCredentials:
+          authReq.endpoint.enable_api_key_auth || authReq.endpoint.enable_oauth,
+      });
 
       const adminTools = await buildAdminToolsOptions(
         authReq.endpoint,
@@ -115,6 +126,7 @@ sseRouter.get(
       );
 
       sessionManager.addSession(sessionId, webAppTransport);
+      bindMcpSession(sessionId, authReq);
 
       // Handle cleanup when connection closes
       res.on("close", async () => {
@@ -150,7 +162,13 @@ sseRouter.post(
       const transport = sessionManager.getSession(
         sessionId as string,
       ) as SSEServerTransport;
-      if (!transport) {
+      if (
+        !transport ||
+        !isMcpSessionOwner(
+          sessionId as string,
+          req as ApiKeyAuthenticatedRequest,
+        )
+      ) {
         res.status(404).end("Session not found");
         return;
       }

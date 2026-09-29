@@ -29,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { hasAccessLevel, useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 import { createTranslatedZodResolver } from "@/lib/zod-resolver";
@@ -52,6 +53,7 @@ export function EditEndpoint({
   const [selectedNamespaceName, setSelectedNamespaceName] =
     useState<string>("");
   const { t } = useTranslations();
+  const { isAdmin } = useAccess();
 
   // Get tRPC utils for cache invalidation
   const utils = trpc.useUtils();
@@ -59,8 +61,13 @@ export function EditEndpoint({
   // Fetch namespaces list
   const { data: namespacesResponse, isLoading: namespacesLoading } =
     trpc.frontend.namespaces.list.useQuery();
+  // Namespaces the caller manages (plus the current one, which is kept)
   const availableNamespaces = namespacesResponse?.success
-    ? namespacesResponse.data
+    ? namespacesResponse.data.filter(
+        (namespace) =>
+          hasAccessLevel(namespace.access, "manage") ||
+          namespace.uuid === endpoint?.namespace_uuid,
+      )
     : [];
 
   // tRPC mutation for updating endpoint
@@ -572,7 +579,12 @@ export function EditEndpoint({
                   onCheckedChange={(checked) =>
                     editForm.setValue("enableApiKeyAuth", checked)
                   }
-                  disabled={isUpdating}
+                  disabled={
+                    isUpdating ||
+                    (!isAdmin &&
+                      editForm.watch("enableApiKeyAuth") &&
+                      !editForm.watch("enableOauth"))
+                  }
                 />
               </div>
 
@@ -619,9 +631,19 @@ export function EditEndpoint({
                   onCheckedChange={(checked) =>
                     editForm.setValue("enableOauth", checked)
                   }
-                  disabled={isUpdating}
+                  disabled={
+                    isUpdating ||
+                    (!isAdmin &&
+                      editForm.watch("enableOauth") &&
+                      !editForm.watch("enableApiKeyAuth"))
+                  }
                 />
               </div>
+              {!isAdmin && (
+                <p className="text-xs text-muted-foreground">
+                  {t("access:endpointAuthRequired")}
+                </p>
+              )}
 
               {/* OAuth HTTPS Warning */}
               {editForm.watch("enableOauth") && (
@@ -633,32 +655,36 @@ export function EditEndpoint({
               )}
             </div>
 
-            <div className="space-y-4 border-t pt-4">
-              <h4 className="text-sm font-medium">
-                {t("endpoints:edit.adminToolsSection")}
-              </h4>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <label className="text-sm font-medium">
-                    {t("endpoints:edit.enableMetamcpAdminToolsLabel")}
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("endpoints:edit.enableMetamcpAdminToolsDescription")}
-                  </p>
+            {(isAdmin || endpoint?.enable_metamcp_admin_tools) && (
+              <div className="space-y-4 border-t pt-4">
+                <h4 className="text-sm font-medium">
+                  {t("endpoints:edit.adminToolsSection")}
+                </h4>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">
+                      {t("endpoints:edit.enableMetamcpAdminToolsLabel")}
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {t("endpoints:edit.enableMetamcpAdminToolsDescription")}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={editForm.watch("enableMetamcpAdminTools")}
+                    onCheckedChange={(checked) =>
+                      editForm.setValue("enableMetamcpAdminTools", checked)
+                    }
+                    disabled={
+                      isUpdating ||
+                      (!isAdmin &&
+                        !editForm.watch("enableMetamcpAdminTools")) ||
+                      (!editForm.watch("enableApiKeyAuth") &&
+                        !editForm.watch("enableOauth"))
+                    }
+                  />
                 </div>
-                <Switch
-                  checked={editForm.watch("enableMetamcpAdminTools")}
-                  onCheckedChange={(checked) =>
-                    editForm.setValue("enableMetamcpAdminTools", checked)
-                  }
-                  disabled={
-                    isUpdating ||
-                    (!editForm.watch("enableApiKeyAuth") &&
-                      !editForm.watch("enableOauth"))
-                  }
-                />
               </div>
-            </div>
+            )}
           </div>
 
           <DialogFooter>

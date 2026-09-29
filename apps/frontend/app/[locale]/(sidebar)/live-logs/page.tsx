@@ -1,7 +1,7 @@
 "use client";
 
 import { FileTerminal, RefreshCw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useTranslations } from "@/hooks/useTranslations";
-import { useLogsStore } from "@/lib/stores/logs-store";
+import { initializeLogsPolling, useLogsStore } from "@/lib/stores/logs-store";
 
 export default function LiveLogsPage() {
   const { t } = useTranslations();
@@ -31,6 +31,10 @@ export default function LiveLogsPage() {
     clearLogs,
     setAutoRefresh,
   } = useLogsStore();
+
+  useEffect(() => {
+    initializeLogsPolling();
+  }, []);
 
   const handleClearLogs = async () => {
     try {

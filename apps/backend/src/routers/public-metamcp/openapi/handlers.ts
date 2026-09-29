@@ -122,6 +122,9 @@ export const createOriginalCallToolHandler = (): CallToolHandler => {
     let targetSession = null;
 
     for (const [mcpServerUuid, params] of Object.entries(serverParams)) {
+      // Don't open connections to servers the tool name rules out
+      if (params.name && sanitizeName(params.name) !== serverPrefix) continue;
+
       const session = await mcpServerPool.getSession(
         context.sessionId,
         mcpServerUuid,

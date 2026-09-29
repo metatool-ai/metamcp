@@ -1,0 +1,83 @@
+{
+  "required": "Ce champ est obligatoire",
+  "nameRequired": "Le nom est obligatoire",
+  "minLength": "Doit contenir au moins {{min}} caractères",
+  "maxLength": "Doit contenir au plus {{max}} caractères",
+  "email": "Veuillez saisir une adresse e-mail valide",
+  "urlFormat": "Veuillez saisir une URL valide",
+  "invalidFormat": "Format invalide",
+  "serverName": {
+    "required": "Le nom du serveur est obligatoire",
+    "invalidCharacters": "Le nom du serveur ne doit contenir que des lettres, des chiffres, des tirets bas et des traits d'union",
+    "consecutiveUnderscores": "Le nom du serveur ne peut pas contenir de tirets bas consécutifs",
+    "alreadyExists": "Ce nom de serveur existe déjà. Les noms de serveur doivent être uniques dans votre périmètre."
+  },
+  "command": {
+    "required": "La commande est obligatoire pour les serveurs STDIO",
+    "invalidCommand": "Veuillez saisir une commande valide"
+  },
+  "url": {
+    "required": "L'URL est obligatoire pour les types SSE et Streamable HTTP",
+    "invalidUrl": "L'URL doit être valide pour les types SSE et Streamable HTTP"
+  },
+  "oauthClientId": {
+    "required": "L'ID client est obligatoire dès qu'un champ OAuth pré-enregistré est renseigné"
+  },
+  "oauthAuthorizationEndpoint": {
+    "invalid": "L'endpoint d'autorisation doit être une URL valide"
+  },
+  "oauthTokenEndpoint": {
+    "invalid": "L'endpoint de jeton doit être une URL valide"
+  },
+  "namespaceName": {
+    "required": "Le nom du namespace est obligatoire",
+    "invalidCharacters": "Le nom du namespace ne doit contenir que des lettres, des chiffres, des tirets bas et des traits d'union"
+  },
+  "endpointName": {
+    "required": "Le nom de l'endpoint est obligatoire",
+    "invalidCharacters": "Le nom de l'endpoint doit être compatible avec les URL",
+    "urlCompatible": "Le nom doit être compatible avec les URL"
+  },
+  "apiKeyName": {
+    "required": "Le nom de la clé API est obligatoire"
+  },
+  "description": {
+    "tooLong": "La description est trop longue"
+  },
+  "password": {
+    "tooShort": "Le mot de passe doit contenir au moins 8 caractères",
+    "mismatch": "Les mots de passe ne correspondent pas"
+  },
+  "forwardHeaders": {
+    "invalidHeaderName": "Nom d'en-tête invalide ou interdit. Interdits : Host, Cookie, Set-Cookie, Connection, Proxy-*, Sec-*, etc."
+  },
+  "generic": {
+    "invalid": "Valeur invalide",
+    "required": "Ce champ est obligatoire",
+    "tooShort": "Trop court",
+    "tooLong": "Trop long"
+  },
+  "maxRateSeconds": {
+    "required": "La fenêtre du débit maximal (en secondes) est obligatoire",
+    "tooSmall": "Le débit maximal doit être supérieur à 0",
+    "tooLarge": "Le débit maximal doit être inférieur à 1 000 000"
+  },
+  "maxRate": {
+    "required": "Le débit maximal est obligatoire",
+    "tooSmall": "Le débit maximal doit être supérieur à 0",
+    "tooLarge": "Le débit maximal doit être inférieur à 1 000 000"
+  },
+  "clientMaxRateSeconds": {
+    "required": "La fenêtre du débit maximal (en secondes) est obligatoire",
+    "tooSmall": "Le débit maximal doit être supérieur à 0",
+    "tooLarge": "Le débit maximal doit être inférieur à 1 000 000"
+  },
+  "clientMaxRate": {
+    "required": "Le débit maximal est obligatoire",
+    "tooSmall": "Le débit maximal doit être supérieur à 0",
+    "tooLarge": "Le débit maximal doit être inférieur à 1 000 000"
+  },
+  "apiKeyScope": {
+    "endpointsRequired": "Sélectionnez au moins un endpoint."
+  }
+}

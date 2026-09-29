@@ -13,12 +13,17 @@ import {
   Plug,
   SearchCode,
   Server,
+  Share2,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { AccessBadge } from "@/components/access/access-badges";
+import { OwnerLabel } from "@/components/access/owner-label";
+import { ReadOnlyBanner } from "@/components/access/read-only-banner";
+import { ShareDialog } from "@/components/access/share-dialog";
 import { EditMcpServer } from "@/components/edit-mcp-server";
 import { ServerDetailsSkeleton } from "@/components/skeletons/server-details-skeleton";
 import { ToolManagementSkeleton } from "@/components/skeletons/tool-management-skeleton";
@@ -33,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { hasAccessLevel, useAccess } from "@/hooks/useAccess";
 import { useConnection } from "@/hooks/useConnection";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
@@ -51,6 +57,8 @@ export default function McpServerDetailPage({
   const { uuid } = use(params);
   const router = useRouter();
   const { t } = useTranslations();
+  const { me, can } = useAccess();
+  const [shareOpen, setShareOpen] = useState(false);
 
   // State to track which sensitive fields are revealed
   const [revealedEnvVars, setRevealedEnvVars] = useState<Set<string>>(
@@ -113,22 +121,22 @@ export default function McpServerDetailPage({
       if (result.success) {
         // Invalidate the list cache since server was deleted
         utils.frontend.mcpServers.list.invalidate();
-        toast.success(t("mcp-servers:detail.deleteServerSuccess"));
+        toast.success(t("mcp-servers:list.deleteServerSuccess"));
         // Navigate back to the servers list
         router.push("/mcp-servers");
       } else {
         // Handle business logic failures
         console.error("Delete failed:", result.message);
-        toast.error(t("mcp-servers:detail.deleteServerError"), {
+        toast.error(t("mcp-servers:list.deleteServerError"), {
           description:
-            result.message || t("mcp-servers:detail.deleteServerError"),
+            result.message || t("mcp-servers:list.deleteServerError"),
         });
         setShowDeleteDialog(false);
       }
     },
     onError: (error) => {
       console.error("Error deleting server:", error);
-      toast.error(t("mcp-servers:detail.deleteServerError"), {
+      toast.error(t("mcp-servers:list.deleteServerError"), {
         description: error.message,
       });
       setShowDeleteDialog(false);
@@ -139,6 +147,10 @@ export default function McpServerDetailPage({
     ? serverResponse.data
     : undefined;
 
+  // Live inspection needs edit access or the inspector permission.
+  const canInspect =
+    hasAccessLevel(server?.access, "edit") || can("inspector.use");
+
   // MCP Connection setup - only enable when server data is loaded and not in error state
   const connection = useConnection({
     mcpServerUuid: uuid,
@@ -148,15 +160,11 @@ export default function McpServerDetailPage({
     url: server?.url || "",
     env: server?.env || {},
     bearerToken: server?.bearerToken || undefined,
-    onNotification: (notification) => {
-      console.log("MCP Notification:", notification);
-    },
-    onStdErrNotification: (notification) => {
-      console.error("MCP StdErr:", notification);
-    },
+    allowOAuthFlow: hasAccessLevel(server?.access, "edit"),
     enabled: Boolean(
       server &&
       !isLoading &&
+      canInspect &&
       server.error_status !== McpServerErrorStatusEnum.enum.ERROR,
     ),
   });
@@ -173,13 +181,14 @@ export default function McpServerDetailPage({
       connection &&
       server &&
       !isLoading &&
+      canInspect &&
       server.error_status !== McpServerErrorStatusEnum.enum.ERROR &&
       connection.connectionStatus === "disconnected"
     ) {
       didAutoConnect.current = true;
       connection.connect();
     }
-  }, [server, connection, isLoading]);
+  }, [server, connection, isLoading, canInspect]);
 
   // Handle delete server
   const handleDeleteServer = async () => {
@@ -345,33 +354,75 @@ export default function McpServerDetailPage({
           </Button>
         </Link>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              router.push(`/mcp-inspector?server=${encodeURIComponent(uuid)}`)
-            }
-          >
-            <SearchCode className="h-4 w-4 mr-2" />
-            {t("mcp-servers:list.inspect")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditDialogOpen(true)}
-          >
-            <Edit className="h-4 w-4 mr-2" />
-            {t("mcp-servers:detail.editServer")}
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            {t("mcp-servers:detail.deleteServer")}
-          </Button>
+          {can("inspector.use") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                router.push(`/mcp-inspector?server=${encodeURIComponent(uuid)}`)
+              }
+            >
+              <SearchCode className="h-4 w-4 mr-2" />
+              {t("mcp-servers:list.inspect")}
+            </Button>
+          )}
+          {hasAccessLevel(server.access, "manage") &&
+            can("resources.share") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShareOpen(true)}
+              >
+                <Share2 className="h-4 w-4 mr-2" />
+                {t("access:share.action")}
+              </Button>
+            )}
+          {hasAccessLevel(server.access, "edit") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditDialogOpen(true)}
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              {t("mcp-servers:detail.editServer")}
+            </Button>
+          )}
+          {hasAccessLevel(server.access, "manage") && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              {t("mcp-servers:detail.deleteServer")}
+            </Button>
+          )}
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="text-muted-foreground">
+          {t("access:owner.column")}
+        </span>
+        <OwnerLabel owner={server.owner} currentUserId={me?.userId} />
+        {server.access?.reason !== "owner" && (
+          <AccessBadge access={server.access} />
+        )}
+      </div>
+
+      <ReadOnlyBanner
+        access={server.access}
+        owner={server.owner}
+        kind="mcp_server"
+        secretsHidden={server.secretsRedacted}
+      />
+
+      <ShareDialog
+        resourceType="mcp_server"
+        resourceUuid={server.uuid}
+        resourceName={server.name}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
 
       {/* Edit Server Dialog */}
       <EditMcpServer
@@ -437,7 +488,7 @@ export default function McpServerDetailPage({
           </div>
           <div className="flex-shrink-0">
             {/* MCP Connection Status - only show if server exists */}
-            {server && (
+            {server && canInspect && (
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                 <div className="flex items-center space-x-2">
                   <span className="text-sm font-medium whitespace-nowrap">
@@ -753,10 +804,15 @@ export default function McpServerDetailPage({
                   </div>
                 </div>
               </div>
+            ) : !canInspect ? (
+              <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                {t("mcp-servers:detail.inspectorRequired")}
+              </p>
             ) : connection.connectionStatus === "connected" ? (
               <ToolManagement
                 mcpServerUuid={uuid}
                 makeRequest={connection.makeRequest}
+                canSaveTools={hasAccessLevel(server.access, "edit")}
               />
             ) : (
               <div className="space-y-4">

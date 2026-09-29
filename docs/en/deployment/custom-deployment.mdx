@@ -8,7 +8,7 @@ This guide walks you through deploying MetaMCP on a DigitalOcean VPS running Ubu
 
 ## System Requirements
 
-MetaMCP requires at least **2GB-4GB of memory** for optimal performance. The larger the instance, the better the performance due to MCP server pre-allocation and Docker operations.
+MetaMCP itself runs in about 200 MB; each connection to a STDIO MCP server in use adds a process (about 110 MB through `npx`/`uvx`, a third of it for a preinstalled server). A 2GB instance serves a small team; count more for many concurrent users or heavy servers (browsers, Docker-based servers). See [Memory and sizing](/en/deployment/performance).
 
 **Recommended DigitalOcean Droplet:**
 

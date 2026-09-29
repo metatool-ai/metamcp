@@ -52,13 +52,18 @@
               "en/concepts/endpoints",
               "en/concepts/middleware",
               "en/concepts/inspector",
-              "en/concepts/audit-logs"
+              "en/concepts/audit-logs",
+              "en/concepts/access-control",
+              "en/concepts/activity-log"
             ]
           },
           {
             "group": "Deployment",
             "pages": [
-              "en/deployment/custom-deployment"
+              "en/deployment/custom-deployment",
+              "en/deployment/secrets-encryption",
+              "en/deployment/security",
+              "en/deployment/performance"
             ]
           },
           {

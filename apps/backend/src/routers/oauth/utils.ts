@@ -3,6 +3,8 @@ import express from "express";
 
 import logger from "@/utils/logger";
 
+import { clientAddress } from "../../lib/request-context";
+
 // OAuth 2.0 Authorization Parameters interface
 export interface OAuthParams {
   client_id: string;
@@ -58,43 +60,34 @@ export function generateSecureClientSecret(): string {
   return `mcp_secret_${randomPart}`;
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
 /**
- * Validate redirect URI according to OAuth 2.1 security requirements
- * Prevents open redirect vulnerabilities
+ * Redirect URIs a client may register (MCP authorization spec, RFC 8252):
+ * HTTPS, or HTTP on the loopback interface for native clients (Claude Code,
+ * IDEs...), which receive the code on a local port. Other HTTP URLs only
+ * outside production. Never a fragment or credentials. The code only ever
+ * travels as a browser redirect, and the consent page shows its target.
  */
 export function validateRedirectUri(
   uri: string,
   allowedHosts?: string[],
 ): boolean {
   try {
+    if (typeof uri !== "string" || uri.length > 2048) return false;
     const parsedUri = new URL(uri);
 
-    // Only allow secure schemes (no custom: schemes)
-    if (!["https:", "http:"].includes(parsedUri.protocol)) {
+    if (parsedUri.hash || parsedUri.username || parsedUri.password) {
       return false;
     }
 
-    // For production, only allow HTTPS
-    if (
-      process.env.NODE_ENV === "production" &&
-      parsedUri.protocol !== "https:"
-    ) {
-      return false;
-    }
-
-    // Prevent localhost/private IPs in production
-    if (process.env.NODE_ENV === "production") {
-      const hostname = parsedUri.hostname.toLowerCase();
-      if (
-        hostname === "localhost" ||
-        hostname === "127.0.0.1" ||
-        hostname === "::1" ||
-        hostname.startsWith("192.168.") ||
-        hostname.startsWith("10.") ||
-        hostname.startsWith("172.")
-      ) {
+    const isLoopback = LOOPBACK_HOSTS.has(parsedUri.hostname.toLowerCase());
+    if (parsedUri.protocol === "http:") {
+      if (!isLoopback && process.env.NODE_ENV === "production") {
         return false;
       }
+    } else if (parsedUri.protocol !== "https:") {
+      return false;
     }
 
     // Check against allowed hosts if provided
@@ -136,26 +129,16 @@ export function verifyClientSecret(
 }
 
 /**
- * Helper function to get the correct base URL from request
- * Prioritizes APP_URL environment variable, then checks proxy headers
+ * Public base URL of this MetaMCP instance: APP_URL when set (always, with
+ * the provided compose files). Otherwise the request's protocol and host;
+ * Express only reads X-Forwarded-Proto / X-Forwarded-Host for them when the
+ * request came through a proxy trusted by TRUST_PROXY.
  */
 export function getBaseUrl(req: express.Request): string {
-  // Prioritize APP_URL environment variable
   if (process.env.APP_URL) {
-    return process.env.APP_URL;
+    return process.env.APP_URL.replace(/\/+$/, "");
   }
-
-  // Check for forwarded headers from Next.js proxy
-  const forwardedHost = req.headers["x-forwarded-host"] as string;
-  const forwardedProto = req.headers["x-forwarded-proto"] as string;
-
-  if (forwardedHost) {
-    const protocol = forwardedProto || "http";
-    return `${protocol}://${forwardedHost}`;
-  }
-
-  // Fallback to request host
-  return `${req.protocol}://${req.get("host")}`;
+  return `${req.protocol}://${req.host}`;
 }
 
 /**
@@ -172,8 +155,9 @@ export function jsonParsingMiddleware(
     (req.path === "/oauth/register" && req.method === "POST");
 
   if (needsJsonParsing) {
+    // OAuth requests are tiny; parsing happens before any authentication
     return express.json({
-      limit: "10mb",
+      limit: "64kb",
       type: "application/json",
     })(req, res, next);
   }
@@ -194,9 +178,10 @@ export function urlencodedParsingMiddleware(
     (req.path === "/oauth/register" && req.method === "POST");
 
   if (needsUrlencodedParsing) {
+    // Flat parameters only (RFC 6749 form posts): no nested objects
     return express.urlencoded({
-      extended: true,
-      limit: "10mb",
+      extended: false,
+      limit: "64kb",
     })(req, res, next);
   }
   next();
@@ -274,7 +259,7 @@ export function rateLimitAuth(
   res: express.Response,
   next: express.NextFunction,
 ) {
-  const identifier = req.ip || req.socket?.remoteAddress || "unknown";
+  const identifier = clientAddress(req) ?? "unknown";
 
   if (authEndpointLimiter.isRateLimited(identifier)) {
     logger.info(
@@ -298,7 +283,7 @@ export function rateLimitToken(
   res: express.Response,
   next: express.NextFunction,
 ) {
-  const identifier = req.ip || req.socket?.remoteAddress || "unknown";
+  const identifier = clientAddress(req) ?? "unknown";
 
   if (tokenEndpointLimiter.isRateLimited(identifier)) {
     logger.info(
@@ -341,7 +326,7 @@ export function securityHeaders(
   );
 
   // Cache control for sensitive endpoints
-  if (req.path.includes("/oauth/")) {
+  if (req.originalUrl.startsWith("/oauth/")) {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");

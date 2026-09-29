@@ -5,9 +5,9 @@ FROM ghcr.io/astral-sh/uv:debian AS base
 RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y nodejs \
-    && npm install -g pnpm@10.12.0 \
+    && npm install -g pnpm@10.29.3 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 FROM base AS deps
 WORKDIR /app
 
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy root package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -48,16 +48,15 @@ COPY . .
 # Build all packages and apps
 RUN pnpm build
 
-RUN sed -i -e "s/30000/600000/" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/server/lib/router-utils/proxy-request.js" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js"
+# (The Next.js proxy timeout is set by experimental.proxyTimeout in
+# next.config.js; patching node_modules is not needed.)
 
 # Production runner stage
 FROM base AS runner
 WORKDIR /app
 
 # OCI image labels
-LABEL org.opencontainers.image.source="https://github.com/metatool-ai/metamcp"
+LABEL org.opencontainers.image.source="https://github.com/SIXMON/metamcp"
 LABEL org.opencontainers.image.description="MetaMCP - aggregates MCP servers into a unified MetaMCP"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.title="MetaMCP"
@@ -69,12 +68,13 @@ RUN apt-get update && apt-get install -y curl postgresql-client && apt-get clean
 # Create non-root user with proper home directory
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 --home /home/nextjs nextjs && \
-    mkdir -p /home/nextjs/.cache/node/corepack /home/nextjs/.cache/uv && \
+    mkdir -p /home/nextjs/.cache/node/corepack /home/nextjs/.cache/uv /home/nextjs/.npm && \
     chown -R nextjs:nodejs /home/nextjs
 
 # Copy built applications
 COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/.next ./apps/frontend/.next
 COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/package.json ./apps/frontend/
+COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/forwarded-for.cjs ./apps/frontend/
 COPY --from=builder --chown=nextjs:nodejs /app/apps/backend/dist ./apps/backend/dist
 COPY --from=builder --chown=nextjs:nodejs /app/apps/backend/package.json ./apps/backend/
 COPY --from=builder --chown=nextjs:nodejs /app/apps/backend/drizzle ./apps/backend/drizzle
@@ -85,12 +85,16 @@ COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
+# Production dependencies are installed from the lockfile (reproducible,
+# pinned versions and integrity hashes)
+COPY --from=builder --chown=nextjs:nodejs /app/pnpm-lock.yaml ./
 
-# Install production dependencies only
-RUN pnpm install --prod
-
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+# Install production dependencies only (drizzle-kit, which runs the
+# migrations, is a backend dependency pinned by the lockfile)
+ENV NODE_ENV=production
+# The node_modules copied from the builder include dev dependencies: let pnpm
+# replace them without asking (there is no terminal to confirm in a build)
+RUN pnpm install --prod --frozen-lockfile --config.confirmModulesPurge=false
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./

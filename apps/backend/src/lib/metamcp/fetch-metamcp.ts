@@ -10,6 +10,7 @@ import logger from "@/utils/logger";
 import { db } from "../../db/index";
 import { oauthSessionsRepository } from "../../db/repositories/index";
 import { mcpServersTable, namespaceServerMappingsTable } from "../../db/schema";
+import { allowedNamespaceServers } from "../access/namespace-composition";
 import { getDefaultEnvironment } from "./utils";
 
 // Define IOType for stderr handling
@@ -65,8 +66,18 @@ export async function getMcpServers(
       )
       .where(and(...whereConditions));
 
+    // Shares may have changed since the servers were added (see
+    // namespace-composition.ts): skip those the namespace may not expose.
+    const allowed = await allowedNamespaceServers(namespaceUuid);
+
     const serverDict: Record<string, ServerParameters> = {};
     for (const server of servers) {
+      if (allowed && !allowed.has(server.uuid)) {
+        logger.info(
+          `Namespace ${namespaceUuid}: server ${server.uuid} is no longer available to its owner, skipped`,
+        );
+        continue;
+      }
       // Fetch OAuth tokens from OAuth sessions table
       const oauthSession = await oauthSessionsRepository.findByMcpServerUuid(
         server.uuid,

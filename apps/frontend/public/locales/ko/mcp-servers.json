@@ -175,6 +175,7 @@
     "reconnect": "재연결",
     "connect": "연결",
     "connectToManageTools": "MCP Server에 연결하여 Tool 관리",
+    "inspectorRequired": "이 서버의 도구를 탐색하려면 MCP 인스펙터 권한이 필요합니다. 필요하면 관리자에게 요청하세요.",
     "connectingToServer": "MCP Server에 연결 중...",
     "toolsManagement": "Tool 관리",
     "serverErrorTitle": "Server 오류",

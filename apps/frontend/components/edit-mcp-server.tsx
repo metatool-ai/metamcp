@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { OwnerTransferSelect } from "@/components/access/ownership-select";
 import { AdvancedOAuthSection } from "@/components/advanced-oauth-section";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +30,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
+import {
+  formatArgs,
+  formatKeyValueLines,
+  parseArgs,
+  parseKeyValueLines,
+} from "@/lib/server-config-text";
 import { trpc } from "@/lib/trpc";
 import { createTranslatedZodResolver } from "@/lib/zod-resolver";
 
@@ -48,6 +56,11 @@ export function EditMcpServer({
 }: EditMcpServerProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const { t } = useTranslations();
+  const { me, isAdmin, can } = useAccess();
+  const canEditStdio = can("mcp_servers.create_stdio");
+  // Changing what a STDIO server executes requires the STDIO permission.
+  const stdioLocked =
+    !canEditStdio && server?.type === McpServerTypeEnum.enum.STDIO;
 
   // Get tRPC utils for cache invalidation
   const utils = trpc.useUtils();
@@ -234,18 +247,14 @@ export function EditMcpServer({
         description: server.description || "",
         type: server.type,
         command: server.command || "",
-        args: server.args.join(" "),
+        args: formatArgs(server.args),
         url: server.url || "",
         bearerToken: server.bearerToken || "",
-        headers: Object.entries(server.headers)
-          .map(([key, value]) => `${key}=${value}`)
-          .join("\n"),
+        headers: formatKeyValueLines(server.headers),
         forward_headers: Object.entries(server.forward_headers || {})
           .map(([k, v]) => (k === v ? k : `${k}=${v}`))
           .join("\n"),
-        env: Object.entries(server.env)
-          .map(([key, value]) => `${key}=${value}`)
-          .join("\n"),
+        env: formatKeyValueLines(server.env),
         user_id: server.user_id,
         oauth_client_id: existingClient?.client_id ?? "",
         oauth_client_secret: existingClient?.client_secret ?? "",
@@ -269,45 +278,17 @@ export function EditMcpServer({
 
     setIsUpdating(true);
     try {
-      // Parse args string into array by splitting on spaces
-      const argsArray = data.args
-        ? data.args
-            .trim()
-            .split(/\s+/)
-            .filter((arg) => arg.length > 0)
-        : [];
-
-      // Parse env string into object
-      const envObject: Record<string, string> = {};
-      if (data.env) {
-        const envLines = data.env.trim().split("\n");
-        for (const line of envLines) {
-          const trimmedLine = line.trim();
-          if (trimmedLine && trimmedLine.includes("=")) {
-            const [key, ...valueParts] = trimmedLine.split("=");
-            const value = valueParts.join("="); // Handle values that contain '='
-            if (key?.trim()) {
-              envObject[key.trim()] = value;
-            }
-          }
-        }
-      }
-
-      // Parse headers string into object
-      const headersObject: Record<string, string> = {};
-      if (data.headers) {
-        const headersLines = data.headers.trim().split("\n");
-        for (const line of headersLines) {
-          const trimmedLine = line.trim();
-          if (trimmedLine && trimmedLine.includes("=")) {
-            const [key, ...valueParts] = trimmedLine.split("=");
-            const value = valueParts.join("="); // Handle values that contain '='
-            if (key?.trim()) {
-              headersObject[key.trim()] = value;
-            }
-          }
-        }
-      }
+      // Only fields the user changed are re-parsed: re-serializing untouched
+      // arguments, environment or headers could alter them (and trip the
+      // STDIO permission check for people who cannot edit those fields).
+      const dirty = editForm.formState.dirtyFields as Record<string, unknown>;
+      const argsArray = dirty.args ? parseArgs(data.args ?? "") : server.args;
+      const envObject = dirty.env
+        ? parseKeyValueLines(data.env ?? "")
+        : server.env;
+      const headersObject = dirty.headers
+        ? parseKeyValueLines(data.headers ?? "")
+        : server.headers;
 
       // Parse forward_headers string into record
       // Each line is either "HeaderName" (1:1) or "ClientHeader=ServerHeader" (rename)
@@ -341,7 +322,6 @@ export function EditMcpServer({
       const isHttpServer =
         data.type === McpServerTypeEnum.enum.SSE ||
         data.type === McpServerTypeEnum.enum.STREAMABLE_HTTP;
-      const dirty = editForm.formState.dirtyFields as Record<string, unknown>;
       const oauthSectionTouched = Boolean(
         dirty.oauth_client_id ||
         dirty.oauth_client_secret ||
@@ -376,7 +356,9 @@ export function EditMcpServer({
         url: data.url,
         bearerToken: data.bearerToken,
         headers: headersObject,
-        forward_headers: forwardHeadersRecord,
+        forward_headers: dirty.forward_headers
+          ? forwardHeadersRecord
+          : (server.forward_headers ?? {}),
         user_id: data.user_id,
         oauth_client_info: oauthClientInfo,
       };
@@ -438,40 +420,19 @@ export function EditMcpServer({
             />
           </div>
 
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">
-              {t("mcp-servers:ownership")}
-            </label>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-between"
-                  type="button"
-                >
-                  {editForm.watch("user_id") === null
-                    ? t("mcp-servers:public")
-                    : t("mcp-servers:private")}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
-                <DropdownMenuItem
-                  onClick={() => editForm.setValue("user_id", undefined)}
-                >
-                  {t("mcp-servers:private")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => editForm.setValue("user_id", null)}
-                >
-                  {t("mcp-servers:public")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <p className="text-xs text-muted-foreground">
-              {t("mcp-servers:ownershipHelp")}
-            </p>
-          </div>
+          {isAdmin && me && (
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">
+                {t("access:ownership.label")}
+              </label>
+              <OwnerTransferSelect
+                value={editForm.watch("user_id")}
+                onChange={(value) => editForm.setValue("user_id", value)}
+                currentOwner={server?.owner}
+                currentUserId={me.userId}
+              />
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">
@@ -483,6 +444,7 @@ export function EditMcpServer({
                   variant="outline"
                   className="w-full justify-between"
                   type="button"
+                  disabled={stdioLocked}
                 >
                   {editForm.watch("type") === McpServerTypeEnum.enum.STDIO
                     ? t("mcp-servers:stdio")
@@ -497,6 +459,7 @@ export function EditMcpServer({
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
                 <DropdownMenuItem
+                  disabled={!canEditStdio}
                   onClick={() =>
                     editForm.setValue("type", McpServerTypeEnum.enum.STDIO)
                   }
@@ -525,7 +488,12 @@ export function EditMcpServer({
           </div>
 
           {editForm.watch("type") === McpServerTypeEnum.enum.STDIO && (
-            <>
+            <fieldset disabled={stdioLocked} className="space-y-4">
+              {stdioLocked && (
+                <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  {t("access:stdioLocked")}
+                </p>
+              )}
               <div className="flex flex-col gap-2">
                 <label htmlFor="edit-command" className="text-sm font-medium">
                   {t("mcp-servers:command")}
@@ -570,7 +538,7 @@ export function EditMcpServer({
                   One environment variable per line in KEY=VALUE format
                 </p>
               </div>
-            </>
+            </fieldset>
           )}
 
           {(editForm.watch("type") === McpServerTypeEnum.enum.SSE ||

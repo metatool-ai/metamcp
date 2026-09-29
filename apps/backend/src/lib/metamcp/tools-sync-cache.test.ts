@@ -9,6 +9,41 @@ describe("ToolsSyncCache", () => {
     cache = new ToolsSyncCache();
   });
 
+  describe("hashTools with full definitions", () => {
+    const tool = {
+      name: "search",
+      description: "Search the web",
+      inputSchema: { type: "object", properties: { q: { type: "string" } } },
+    };
+
+    it("changes when a description or schema changes", () => {
+      const base = cache.hashTools([tool]);
+      expect(cache.hashTools([{ ...tool, description: "Search" }])).not.toBe(
+        base,
+      );
+      expect(
+        cache.hashTools([
+          { ...tool, inputSchema: { type: "object", properties: {} } },
+        ]),
+      ).not.toBe(base);
+    });
+
+    it("ignores the key order of schemas", () => {
+      expect(
+        cache.hashTools([
+          {
+            name: "search",
+            inputSchema: {
+              properties: { q: { type: "string" } },
+              type: "object",
+            },
+            description: "Search the web",
+          },
+        ]),
+      ).toBe(cache.hashTools([tool]));
+    });
+  });
+
   describe("hashTools", () => {
     it("should generate consistent hash for same tools", () => {
       const tools = ["tool1", "tool2", "tool3"];

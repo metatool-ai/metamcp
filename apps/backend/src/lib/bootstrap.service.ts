@@ -1,18 +1,32 @@
 import crypto from "node:crypto";
+import { appendFileSync, chmodSync } from "node:fs";
 
-import { ConfigKeyEnum } from "@repo/zod-types";
+import { ConfigKeyEnum, type Role, RoleEnum } from "@repo/zod-types";
 import { and, eq, isNull, notInArray } from "drizzle-orm";
 
 import { auth } from "../auth";
 import { db } from "../db";
 import {
-  accountsTable,
+  generateApiKey,
+  storedApiKeyFields,
+} from "../db/repositories/api-keys.repo";
+import { groupsRepository } from "../db/repositories/groups.repo";
+import { resourceSharesRepository } from "../db/repositories/resource-shares.repo";
+import {
   apiKeysTable,
   configTable,
   endpointsTable,
   namespacesTable,
+  sessionsTable,
   usersTable,
 } from "../db/schema";
+import { accessService } from "./access/access.service";
+import { runWithAuthRequestContext } from "./access/auth-request-context";
+import { hashToken } from "./secrets/token-hash";
+import {
+  enforcesSecureDefaults,
+  isPlaceholderPassword,
+} from "./startup-checks";
 
 /**
  * Environment-based bootstrap for MetaMCP.
@@ -23,6 +37,24 @@ type UserConfig = {
   email: string;
   password: string;
   name?: string;
+  // RBAC base role. When set it is enforced at every boot; when omitted the
+  // user is created as an administrator (bootstrap accounts are the
+  // break-glass admins) and later changes made in the UI are kept.
+  role?: Role;
+  // Names of groups (see BOOTSTRAP_GROUPS) the user is added to.
+  groups?: string[];
+};
+
+type GroupConfig = {
+  name: string;
+  description?: string;
+  // Role granted to members: "admin" | "editor" | "viewer" | null
+  role?: Role | null;
+  // IdP group values (OIDC claim) mapped to this group; "*" wildcards allowed
+  oidc_groups?: string[];
+  // Emails of users added as manual members
+  members?: string[];
+  update?: boolean;
 };
 
 type ApiKeyConfig = {
@@ -30,6 +62,10 @@ type ApiKeyConfig = {
   is_public?: boolean;
   user_email?: string; // Email of user who owns this key (for private keys)
   owner?: string; // Alias for user_email
+  // Optional key value (sk_mt_...), e.g. provisioned from a secret store.
+  // Without it a key is generated and printed once: MetaMCP only keeps its
+  // digest, so it cannot be displayed again.
+  key?: string;
 };
 
 type NamespaceConfig = {
@@ -67,19 +103,22 @@ type EnvConfig = {
   deleteOtherUsers: boolean;
 
   // User lifecycle / safety
+  // Re-apply the environment password when it changed (never deletes the
+  // user: BOOTSTRAP_PRESERVE_API_KEYS is therefore no longer needed)
   recreateDefaultUser: boolean;
-  preserveApiKeysOnRecreate: boolean;
   warnOnPasswordChange: boolean;
   bootstrapOnlyOnFirstRun: boolean;
 
   // Registration controls
-  disableUiRegistration: boolean;
-  disableSsoRegistration: boolean;
+  // undefined: not set in the environment, the setting of the UI is kept
+  disableUiRegistration: boolean | undefined;
+  disableSsoRegistration: boolean | undefined;
 
   // Array configurations
   apiKeys: ApiKeyConfig[];
   namespaces: NamespaceConfig[];
   endpoints: EndpointConfig[];
+  groups: GroupConfig[];
 };
 
 const BOOTSTRAP_COMPLETE_KEY = "BOOTSTRAP_COMPLETE";
@@ -94,23 +133,56 @@ function parseBool(value: string | undefined, def: boolean): boolean {
   return def;
 }
 
+/** A boolean only when the variable is set (and valid). */
+function optionalBool(value: string | undefined): boolean | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const v = value.trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on"].includes(v)) return true;
+  if (["0", "false", "no", "n", "off"].includes(v)) return false;
+  return undefined;
+}
+
 function nonEmpty(value: string | undefined): string | undefined {
   const v = value?.trim();
   return v ? v : undefined;
 }
 
-function generateApiKey(): string {
-  return `sk_mt_${crypto.randomBytes(32).toString("hex")}`; // 64 hex chars
-}
-
-function maskKey(key: string): string {
-  if (!key) return "";
-  if (key.length <= 14) return `${key.slice(0, 6)}…`;
-  return `${key.slice(0, 10)}…${key.slice(-4)}`;
-}
+const API_KEY_FORMAT = /^sk_mt_[A-Za-z0-9]{32,}$/;
 
 function sha256Hex(input: string): string {
   return crypto.createHash("sha256").update(input, "utf8").digest("hex");
+}
+
+const FINGERPRINT_PREFIX = "hmac-sha256:";
+
+/**
+ * Fingerprint of the last applied bootstrap password, to notice when the
+ * environment value changes. Keyed with a server secret: a bare SHA-256
+ * stored in the database was a fast, unsalted hash of an admin password.
+ */
+function passwordFingerprint(password: string): string {
+  const key = crypto.hkdfSync(
+    "sha256",
+    process.env.BETTER_AUTH_SECRET ?? "",
+    "",
+    "metamcp-bootstrap-password-fingerprint",
+    32,
+  );
+  const digest = crypto
+    .createHmac("sha256", Buffer.from(key))
+    .update(password, "utf8")
+    .digest("hex");
+  return `${FINGERPRINT_PREFIX}${digest}`;
+}
+
+function fingerprintMatches(stored: string, password: string): boolean {
+  const expected = stored.startsWith(FINGERPRINT_PREFIX)
+    ? passwordFingerprint(password)
+    : sha256Hex(password); // written by earlier versions
+  return (
+    stored.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(expected))
+  );
 }
 
 function parseJsonArray<T>(envVar: string | undefined, defaultValue: T[]): T[] {
@@ -179,10 +251,6 @@ function parseEnvConfig(): EnvConfig {
     ),
 
     recreateDefaultUser: parseBool(process.env.BOOTSTRAP_RECREATE_USER, false),
-    preserveApiKeysOnRecreate: parseBool(
-      process.env.BOOTSTRAP_PRESERVE_API_KEYS,
-      true,
-    ),
     warnOnPasswordChange: parseBool(
       process.env.BOOTSTRAP_WARN_PASSWORD_CHANGE,
       true,
@@ -193,13 +261,11 @@ function parseEnvConfig(): EnvConfig {
     ),
 
     // Registration controls
-    disableUiRegistration: parseBool(
+    disableUiRegistration: optionalBool(
       process.env.BOOTSTRAP_DISABLE_REGISTRATION_UI,
-      false,
     ),
-    disableSsoRegistration: parseBool(
+    disableSsoRegistration: optionalBool(
       process.env.BOOTSTRAP_DISABLE_REGISTRATION_SSO,
-      false,
     ),
 
     // Array configurations
@@ -212,6 +278,7 @@ function parseEnvConfig(): EnvConfig {
       process.env.BOOTSTRAP_ENDPOINTS,
       [],
     ),
+    groups: parseJsonArray<GroupConfig>(process.env.BOOTSTRAP_GROUPS, []),
   };
 }
 
@@ -281,11 +348,14 @@ async function warnIfPasswordChanged(
   if (!hasExistingUser) return;
 
   try {
-    const currentFp = sha256Hex(password);
     const fpKey = `${BOOTSTRAP_USER_PASSWORD_FP_PREFIX}${email}`;
     const previousFp = await getConfigValue(fpKey);
 
-    if (previousFp && previousFp !== currentFp && !recreateUser) {
+    if (
+      previousFp &&
+      !fingerprintMatches(previousFp, password) &&
+      !recreateUser
+    ) {
       console.warn(
         `⚠️ Password for ${email} appears to have changed since last applied.`,
       );
@@ -298,6 +368,7 @@ async function warnIfPasswordChanged(
     }
   } catch (err) {
     console.warn(
+      "%s",
       `⚠️ Failed password-change detection for ${email} (ignored):`,
       err,
     );
@@ -312,12 +383,37 @@ async function recordPasswordFingerprint(
     const fpKey = `${BOOTSTRAP_USER_PASSWORD_FP_PREFIX}${email}`;
     await upsertConfig(
       fpKey,
-      sha256Hex(password),
+      passwordFingerprint(password),
       `Fingerprint of last-applied password for ${email}`,
     );
   } catch (err) {
-    console.warn(`⚠️ Failed to store password fingerprint for ${email}:`, err);
+    console.warn(
+      "%s",
+      `⚠️ Failed to store password fingerprint for ${email}:`,
+      err,
+    );
   }
+}
+
+/**
+ * Sets the email/password sign-in of a user (adding it to SSO-only users)
+ * and signs the user out of existing sessions.
+ */
+async function applyPassword(userId: string, password: string): Promise<void> {
+  const ctx = await auth.$context;
+  const hash = await ctx.password.hash(password);
+  const accounts = await ctx.internalAdapter.findAccounts(userId);
+  if (accounts.some((account) => account.providerId === "credential")) {
+    await ctx.internalAdapter.updatePassword(userId, hash);
+  } else {
+    await ctx.internalAdapter.linkAccount({
+      userId,
+      providerId: "credential",
+      accountId: userId,
+      password: hash,
+    });
+  }
+  await db.delete(sessionsTable).where(eq(sessionsTable.userId, userId));
 }
 
 /**
@@ -341,6 +437,15 @@ async function ensureUser(
     where: eq(usersTable.email, email),
   });
 
+  // Never create (or reset) an account with a password everybody knows,
+  // such as the one of the example configuration.
+  if (isPlaceholderPassword(password) && enforcesSecureDefaults()) {
+    console.error(
+      `❌ Bootstrap user ${email} skipped: its password is a well-known placeholder. Set BOOTSTRAP_USER_PASSWORD (or the "password" of BOOTSTRAP_USERS) to a real password.`,
+    );
+    return { userId: existing?.id, email, recreated: false };
+  }
+
   await warnIfPasswordChanged(
     email,
     password,
@@ -349,60 +454,27 @@ async function ensureUser(
     config.recreateDefaultUser,
   );
 
-  let preservedUserApiKeys:
-    | { name: string; key: string; is_active: boolean }[]
-    | undefined;
-
   let recreated = false;
 
   if (existing && config.recreateDefaultUser) {
-    recreated = true;
-    console.warn(
-      `⚠️ BOOTSTRAP_RECREATE_USER=true — deleting existing user ${email} to reapply password via Better Auth`,
-    );
-
-    if (config.preserveApiKeysOnRecreate) {
+    const fpKey = `${BOOTSTRAP_USER_PASSWORD_FP_PREFIX}${email}`;
+    const previousFp = await getConfigValue(fpKey);
+    if (!previousFp || !fingerprintMatches(previousFp, password)) {
       try {
-        preservedUserApiKeys = await db
-          .select({
-            name: apiKeysTable.name,
-            key: apiKeysTable.key,
-            is_active: apiKeysTable.is_active,
-          })
-          .from(apiKeysTable)
-          .where(eq(apiKeysTable.user_id, existing.id));
+        await applyPassword(existing.id, password);
+        recreated = true;
+        console.log(
+          `✓ BOOTSTRAP_RECREATE_USER=true — password of ${email} updated from the environment`,
+        );
       } catch (err) {
-        console.warn(`⚠️ Failed to preserve API keys for ${email}:`, err);
+        console.warn("%s", `⚠️ Failed to apply the password of ${email}:`, err);
       }
-    }
-
-    try {
-      await db
-        .delete(accountsTable)
-        .where(eq(accountsTable.userId, existing.id));
-    } catch (err) {
-      console.warn(`⚠️ Failed to delete accounts for ${email}:`, err);
-    }
-
-    try {
-      await db
-        .delete(apiKeysTable)
-        .where(eq(apiKeysTable.user_id, existing.id));
-    } catch (err) {
-      console.warn(
-        `⚠️ Failed to delete user-scoped API keys for ${email}:`,
-        err,
-      );
-    }
-
-    try {
-      await db.delete(usersTable).where(eq(usersTable.id, existing.id));
-    } catch (err) {
-      console.warn(`⚠️ Failed to delete existing user ${email}:`, err);
+    } else if (!previousFp.startsWith(FINGERPRINT_PREFIX)) {
+      await recordPasswordFingerprint(email, password); // upgrade the format
     }
   }
 
-  if (!existing || recreated) {
+  if (!existing) {
     // Create via Better Auth
     const request = new Request("http://internal/api/auth/sign-up/email", {
       method: "POST",
@@ -414,7 +486,12 @@ async function ensureUser(
       }),
     });
 
-    const response = await auth.handler(request);
+    // Bootstrap is a trusted operation: it must work even when self-service
+    // registration is disabled (BOOTSTRAP_DISABLE_REGISTRATION_UI).
+    const response = await runWithAuthRequestContext(
+      { bypassSignupRestrictions: true },
+      () => auth.handler(request),
+    );
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       console.warn(
@@ -446,34 +523,32 @@ async function ensureUser(
       })
       .where(eq(usersTable.id, user.id));
   } catch (err) {
-    console.warn(`⚠️ Failed to update user metadata for ${email}:`, err);
+    console.warn("%s", `⚠️ Failed to update user metadata for ${email}:`, err);
   }
 
-  // Restore preserved keys if recreated
-  if (recreated && config.preserveApiKeysOnRecreate && preservedUserApiKeys) {
-    for (const k of preservedUserApiKeys) {
-      try {
-        await db
-          .insert(apiKeysTable)
-          .values({
-            name: k.name,
-            key: k.key,
-            user_id: user.id,
-            is_active: k.is_active,
-          })
-          .onConflictDoUpdate({
-            target: [apiKeysTable.user_id, apiKeysTable.name],
-            set: { key: k.key, is_active: k.is_active },
-          });
-      } catch (err) {
-        console.warn(
-          `⚠️ Failed to restore preserved API key for ${email}:`,
-          err,
-        );
-      }
+  // RBAC base role
+  try {
+    const configuredRole = RoleEnum.safeParse(userConfig.role);
+    const role: Role | undefined = configuredRole.success
+      ? configuredRole.data
+      : !existing
+        ? "admin"
+        : undefined;
+    if (userConfig.role !== undefined && !configuredRole.success) {
+      console.warn(
+        `⚠️ Unknown role "${String(userConfig.role)}" for ${email}; expected admin, editor or viewer`,
+      );
     }
-
-    console.log(`✓ Restored preserved API keys for recreated user ${email}`);
+    if (role && role !== user.role) {
+      await db
+        .update(usersTable)
+        .set({ role, updatedAt: new Date() })
+        .where(eq(usersTable.id, user.id));
+      accessService.invalidateUser(user.id);
+      console.log(`✓ Role of ${email} set to ${role}`);
+    }
+  } catch (err) {
+    console.warn("%s", `⚠️ Failed to set role for ${email}:`, err);
   }
 
   // Record fingerprint when we actually create/recreate
@@ -512,7 +587,11 @@ async function bootstrapUsers(config: EnvConfig): Promise<Map<string, string>> {
         userMap.set(result.email, result.userId);
       }
     } catch (err) {
-      console.warn(`⚠️ Failed to bootstrap user ${userConfig.email}:`, err);
+      console.warn(
+        "%s",
+        `⚠️ Failed to bootstrap user ${userConfig.email}:`,
+        err,
+      );
     }
   }
 
@@ -601,31 +680,66 @@ async function bootstrapApiKeys(
         where: whereCondition,
       });
 
+      const providedKey = apiKeyConfig.key?.trim();
+      if (providedKey && !API_KEY_FORMAT.test(providedKey)) {
+        console.warn(
+          `⚠️ Skipping API key "${name}": "key" must look like sk_mt_ followed by at least 32 letters or digits`,
+        );
+        continue;
+      }
+
+      const ownerInfo = userId
+        ? `for user ${ownerEmail ?? Array.from(userMap.keys())[0]}`
+        : "(public)";
+
       if (!existing) {
-        const key = generateApiKey();
+        // Only a digest is stored, so a generated key must be handed over
+        // now. Never through the logs (collected, shipped, kept): to a file
+        // readable by the service account only, or not at all.
+        const keysFile = process.env.BOOTSTRAP_API_KEYS_FILE?.trim();
+        if (!providedKey && !keysFile) {
+          console.warn(
+            `⚠️ Skipping API key "${name}" ${ownerInfo}: set its "key" (sk_mt_...) in BOOTSTRAP_API_KEYS, or BOOTSTRAP_API_KEYS_FILE to receive generated keys, or create it from the UI`,
+          );
+          continue;
+        }
+        const key = providedKey || generateApiKey();
+        const stored = storedApiKeyFields(key);
         await db.insert(apiKeysTable).values({
           name,
-          key,
+          ...stored,
           user_id: userId,
           is_active: true,
         });
 
-        const ownerInfo = userId
-          ? `for user ${ownerEmail ?? Array.from(userMap.keys())[0]}`
-          : "(public)";
         console.log(
-          `✓ Created ${isPublic ? "public" : "private"} API key "${name}" ${ownerInfo}: ${maskKey(key)}`,
+          `✓ Created ${isPublic ? "public" : "private"} API key "${name}" ${ownerInfo}: ${stored.key_preview}`,
         );
+        if (!providedKey && keysFile) {
+          appendFileSync(keysFile, `${name}\t${key}\n`, { mode: 0o600 });
+          chmodSync(keysFile, 0o600);
+          console.log(
+            `🔑 Generated API key "${name}" written to ${keysFile} (store it and delete the file)`,
+          );
+        }
       } else {
-        const ownerInfo = userId
-          ? `for user ${ownerEmail ?? Array.from(userMap.keys())[0]}`
-          : "(public)";
-        console.log(
-          `✓ ${isPublic ? "Public" : "Private"} API key "${name}" ${ownerInfo} already exists: ${maskKey(existing.key)}`,
-        );
+        if (providedKey && existing.key_hash !== hashToken(providedKey)) {
+          await db
+            .update(apiKeysTable)
+            .set(storedApiKeyFields(providedKey))
+            .where(eq(apiKeysTable.uuid, existing.uuid));
+          console.log(
+            `✓ ${isPublic ? "Public" : "Private"} API key "${name}" ${ownerInfo} updated to the configured value`,
+          );
+        } else {
+          console.log(
+            `✓ ${isPublic ? "Public" : "Private"} API key "${name}" ${ownerInfo} already exists: ${existing.key_preview}`,
+          );
+        }
       }
     } catch (err) {
       console.warn(
+        "%s",
         `⚠️ Failed to bootstrap API key "${apiKeyConfig.name}":`,
         err,
       );
@@ -709,6 +823,9 @@ async function bootstrapNamespaces(
         const uuid = inserted?.[0]?.uuid;
         if (uuid) {
           namespaceMap.set(name, uuid);
+          if (isPublic) {
+            await shareWithEveryone(uuid);
+          }
           const ownerInfo = ownerUserId
             ? `for user ${ownerEmail ?? Array.from(userMap.keys())[0]}`
             : "(public)";
@@ -730,6 +847,9 @@ async function bootstrapNamespaces(
               user_id: ownerUserId,
             })
             .where(eq(namespacesTable.uuid, existing.uuid));
+          if (isPublic) {
+            await shareWithEveryone(existing.uuid);
+          }
 
           console.log(`✓ Updated namespace "${name}"`);
         } else {
@@ -737,11 +857,135 @@ async function bootstrapNamespaces(
         }
       }
     } catch (err) {
-      console.warn(`⚠️ Failed to bootstrap namespace "${nsConfig.name}":`, err);
+      console.warn(
+        "%s",
+        `⚠️ Failed to bootstrap namespace "${nsConfig.name}":`,
+        err,
+      );
     }
   }
 
   return namespaceMap;
+}
+
+/**
+ * "Public" in bootstrap configs means usable by the whole organisation: with
+ * RBAC that is an organisation-owned namespace shared with "Everyone".
+ */
+async function shareWithEveryone(namespaceUuid: string): Promise<void> {
+  const everyone = await groupsRepository.findBySystemKey("everyone");
+  if (!everyone) return;
+  await resourceSharesRepository.upsert({
+    type: "namespace",
+    resourceUuid: namespaceUuid,
+    subject: { groupUuid: everyone.uuid },
+    level: "use",
+    createdBy: null,
+  });
+}
+
+/**
+ * Bootstrap groups (BOOTSTRAP_GROUPS) and the group memberships requested by
+ * BOOTSTRAP_USERS[].groups. Memberships are only ever added, never removed.
+ */
+async function bootstrapGroups(
+  config: EnvConfig,
+  userMap: Map<string, string>,
+): Promise<void> {
+  await groupsRepository.ensureSystemGroups();
+
+  const groupUuids = new Map<string, string>(); // lower(name) -> uuid
+  for (const groupConfig of config.groups) {
+    try {
+      const name = groupConfig.name?.trim();
+      if (!name) {
+        console.warn("⚠️ Group config missing name; skipping");
+        continue;
+      }
+      const roleResult =
+        groupConfig.role === undefined || groupConfig.role === null
+          ? { success: true as const, data: groupConfig.role ?? null }
+          : RoleEnum.safeParse(groupConfig.role);
+      if (!roleResult.success) {
+        console.warn(`⚠️ Unknown role for group "${name}"; skipping`);
+        continue;
+      }
+      const role = roleResult.data;
+      const oidcGroups = (groupConfig.oidc_groups ?? [])
+        .map((value) => String(value).trim())
+        .filter(Boolean);
+
+      let group = await groupsRepository.findByNameInsensitive(name);
+      if (!group) {
+        group = await groupsRepository.create({
+          name,
+          description: groupConfig.description ?? null,
+          role: role ?? null,
+          oidcGroups,
+        });
+        console.log(`✓ Created group "${name}"`);
+      } else if (groupConfig.update ?? true) {
+        const isAdmins = group.system_key === "admins";
+        const isEveryone = group.system_key === "everyone";
+        await groupsRepository.update(group.uuid, {
+          description: groupConfig.description ?? group.description,
+          // System group invariants: Administrators always grants admin,
+          // Everyone never does and cannot be mapped to IdP groups.
+          role: isAdmins
+            ? "admin"
+            : isEveryone && role === "admin"
+              ? group.role
+              : groupConfig.role === undefined
+                ? group.role
+                : role,
+          oidcGroups: isEveryone ? [] : oidcGroups,
+        });
+        console.log(`✓ Updated group "${name}"`);
+      }
+      groupUuids.set(name.toLowerCase(), group.uuid);
+
+      if (group.system_key !== "everyone") {
+        const memberIds = (groupConfig.members ?? [])
+          .map((email) => userMap.get(email) ?? null)
+          .filter((id): id is string => Boolean(id));
+        await groupsRepository.addMembers(group.uuid, memberIds, "manual");
+      }
+    } catch (err) {
+      console.warn(
+        "%s",
+        `⚠️ Failed to bootstrap group "${groupConfig.name}":`,
+        err,
+      );
+    }
+  }
+
+  for (const userConfig of config.users) {
+    const userId = userMap.get(userConfig.email);
+    if (!userId || !userConfig.groups?.length) continue;
+    for (const groupName of userConfig.groups) {
+      try {
+        const uuid =
+          groupUuids.get(groupName.toLowerCase()) ??
+          (await groupsRepository.findByNameInsensitive(groupName))?.uuid;
+        if (!uuid) {
+          console.warn(
+            `⚠️ Group "${groupName}" for user ${userConfig.email} not found`,
+          );
+          continue;
+        }
+        const group = await groupsRepository.findByUuid(uuid);
+        if (group?.system_key === "everyone") continue;
+        await groupsRepository.addMembers(uuid, [userId], "manual");
+      } catch (err) {
+        console.warn(
+          "%s",
+          `⚠️ Failed to add ${userConfig.email} to group "${groupName}":`,
+          err,
+        );
+      }
+    }
+  }
+  accessService.invalidateAll();
 }
 
 /**
@@ -869,7 +1113,11 @@ async function bootstrapEndpoints(
         }
       }
     } catch (err) {
-      console.warn(`⚠️ Failed to bootstrap endpoint "${epConfig.name}":`, err);
+      console.warn(
+        "%s",
+        `⚠️ Failed to bootstrap endpoint "${epConfig.name}":`,
+        err,
+      );
     }
   }
 }
@@ -904,13 +1152,6 @@ function validateConfig(config: EnvConfig): void {
         `⚠️ Password for ${user.email} is less than 8 characters. Consider using a stronger password.`,
       );
     }
-  }
-
-  if (config.recreateDefaultUser && !config.preserveApiKeysOnRecreate) {
-    console.warn(
-      "⚠️ BOOTSTRAP_RECREATE_USER=true and BOOTSTRAP_PRESERVE_API_KEYS=false",
-    );
-    console.warn("     This will delete all API keys for the users!");
   }
 
   if (config.deleteOtherUsers && config.users.length === 0) {
@@ -985,31 +1226,42 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
 
   validateConfig(config);
 
-  // Registration controls (applied every run)
-  console.log("🔧 Setting registration controls...");
-  try {
-    await upsertConfig(
-      ConfigKeyEnum.enum.DISABLE_SIGNUP,
-      config.disableUiRegistration.toString(),
-      "Whether new user signup is disabled",
-    );
-  } catch (err) {
-    console.warn("⚠️ Failed to set UI registration control:", err);
+  // Registration controls: applied at every start when set in the
+  // environment (which then wins); otherwise the setting chosen in the UI is
+  // kept (it used to be reset to "enabled" by every restart).
+  const registrationControls = [
+    {
+      key: ConfigKeyEnum.enum.DISABLE_SIGNUP,
+      value: config.disableUiRegistration,
+      description: "Whether new user signup is disabled",
+      label: "UI",
+    },
+    {
+      key: ConfigKeyEnum.enum.DISABLE_SSO_SIGNUP,
+      value: config.disableSsoRegistration,
+      description: "Whether new user signup via SSO/OAuth is disabled",
+      label: "SSO",
+    },
+  ];
+  for (const control of registrationControls) {
+    if (control.value === undefined) continue;
+    try {
+      await upsertConfig(
+        control.key,
+        String(control.value),
+        control.description,
+      );
+      console.log(
+        `✓ ${control.label} registration ${control.value ? "disabled" : "enabled"} (from the environment)`,
+      );
+    } catch (err) {
+      console.warn(
+        "%s",
+        `⚠️ Failed to set ${control.label} registration control:`,
+        err,
+      );
+    }
   }
-
-  try {
-    await upsertConfig(
-      ConfigKeyEnum.enum.DISABLE_SSO_SIGNUP,
-      config.disableSsoRegistration.toString(),
-      "Whether new user signup via SSO/OAuth is disabled",
-    );
-  } catch (err) {
-    console.warn("⚠️ Failed to set SSO registration control:", err);
-  }
-
-  console.log(
-    `✓ Registration controls set: UI=${!config.disableUiRegistration}, SSO=${!config.disableSsoRegistration}`,
-  );
 
   // One-time bootstrap guard
   const skipBootstrap = await shouldSkipBootstrap(config);
@@ -1033,6 +1285,13 @@ export async function initializeEnvironmentConfiguration(): Promise<void> {
     await maybeDeleteOtherUsers(config, bootstrappedEmails);
   } catch (err) {
     console.warn("⚠️ User cleanup step failed:", err);
+  }
+
+  // Bootstrap groups (roles, IdP mappings, memberships)
+  try {
+    await bootstrapGroups(config, userMap);
+  } catch (err) {
+    console.warn("⚠️ Groups bootstrap failed:", err);
   }
 
   // Bootstrap API keys

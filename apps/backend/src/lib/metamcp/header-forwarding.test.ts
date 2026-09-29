@@ -421,6 +421,19 @@ describe("extractClientHeaders", () => {
   it("should return empty object for empty headers", () => {
     expect(extractClientHeaders({})).toEqual({});
   });
+
+  it("drops the caller's MetaMCP credentials on authenticated endpoints", () => {
+    const headers = {
+      authorization: "Bearer sk_mt_secret",
+      "x-api-key": "sk_mt_secret",
+      "x-github-token": "ghp_forward_me",
+    };
+    expect(extractClientHeaders(headers, { withoutCredentials: true })).toEqual(
+      { "x-github-token": "ghp_forward_me" },
+    );
+    // Endpoints without authentication may pass Authorization through
+    expect(extractClientHeaders(headers)).toEqual(headers);
+  });
 });
 
 describe("ForwardHeadersRecordSchema - deny-list validation", () => {

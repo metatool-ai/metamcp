@@ -169,6 +169,7 @@
     "reconnect": "Reconectar",
     "connect": "Conectar",
     "connectToManageTools": "Conecte al MCP server para administrar tools",
+    "inspectorRequired": "Para explorar las herramientas de este servidor se necesita el permiso del inspector MCP. Solicítelo a un administrador si lo necesita.",
     "connectingToServer": "Conectando al MCP server...",
     "toolsManagement": "Administración de Tools",
     "serverErrorTitle": "Error del Server",

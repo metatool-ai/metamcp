@@ -13,7 +13,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -26,35 +25,45 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       with:
         fetch-depth: 0  # Fetch all history for all branches and tags
+        # The token is not needed after checkout; keep it out of .git/config
+        # (and out of the Docker build context)
+        persist-credentials: false
 
     - name: Check branch for tag
       id: check-branch
+      # Expressions go through the environment, never into the script text
+      # (a ref name would otherwise be interpreted by the shell).
+      env:
+        REF_NAME: ${{ github.ref_name }}
+        COMMIT_SHA: ${{ github.sha }}
+        # Releases come from the default branch (main upstream, ai-dev here)
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
         # Check if the tag name contains -test suffix
-        if [[ "${{ github.ref_name }}" == *"-test" ]]; then
+        if [[ "$REF_NAME" == *"-test" ]]; then
           echo "on-main=false" >> $GITHUB_OUTPUT
           echo "on-test=true" >> $GITHUB_OUTPUT
           echo "on-docker-per-mcp=false" >> $GITHUB_OUTPUT
         # Check if the tag name contains -docker-per-mcp suffix
-        elif [[ "${{ github.ref_name }}" == *"-docker-per-mcp" ]]; then
+        elif [[ "$REF_NAME" == *"-docker-per-mcp" ]]; then
           echo "on-main=false" >> $GITHUB_OUTPUT
           echo "on-test=false" >> $GITHUB_OUTPUT
           echo "on-docker-per-mcp=true" >> $GITHUB_OUTPUT
-        # Check if the current tag is reachable from main branch
-        elif git merge-base --is-ancestor ${{ github.sha }} origin/main; then
+        # Check if the current tag is reachable from the default branch
+        elif git merge-base --is-ancestor "$COMMIT_SHA" "origin/$DEFAULT_BRANCH"; then
           echo "on-main=true" >> $GITHUB_OUTPUT
           echo "on-test=false" >> $GITHUB_OUTPUT
           echo "on-docker-per-mcp=false" >> $GITHUB_OUTPUT
         # Check if the current tag is reachable from test branch
-        elif git merge-base --is-ancestor ${{ github.sha }} origin/test; then
+        elif git merge-base --is-ancestor "$COMMIT_SHA" origin/test; then
           echo "on-main=false" >> $GITHUB_OUTPUT
           echo "on-test=true" >> $GITHUB_OUTPUT
           echo "on-docker-per-mcp=false" >> $GITHUB_OUTPUT
         # Check if the current tag is reachable from docker-per-mcp branch
-        elif git merge-base --is-ancestor ${{ github.sha }} origin/docker-per-mcp; then
+        elif git merge-base --is-ancestor "$COMMIT_SHA" origin/docker-per-mcp; then
           echo "on-main=false" >> $GITHUB_OUTPUT
           echo "on-test=false" >> $GITHUB_OUTPUT
           echo "on-docker-per-mcp=true" >> $GITHUB_OUTPUT
@@ -64,13 +73,23 @@ jobs:
           echo "on-docker-per-mcp=false" >> $GITHUB_OUTPUT
         fi
 
+    - name: Image name
+      id: image
+      # Registry references must be lowercase (the owner may not be)
+      run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+    - name: Set up QEMU
+      if: steps.check-branch.outputs.on-main == 'true' || steps.check-branch.outputs.on-test == 'true' || steps.check-branch.outputs.on-docker-per-mcp == 'true'
+      # Emulates arm64 for the multi-platform build
+      uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
     - name: Set up Docker Buildx
       if: steps.check-branch.outputs.on-main == 'true' || steps.check-branch.outputs.on-test == 'true' || steps.check-branch.outputs.on-docker-per-mcp == 'true'
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
     - name: Log in to Container Registry
       if: steps.check-branch.outputs.on-main == 'true' || steps.check-branch.outputs.on-test == 'true' || steps.check-branch.outputs.on-docker-per-mcp == 'true'
-      uses: docker/login-action@v3
+      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
@@ -79,9 +98,9 @@ jobs:
     - name: Extract metadata for main branch
       if: steps.check-branch.outputs.on-main == 'true'
       id: meta-main
-      uses: docker/metadata-action@v5
+      uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        images: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
         tags: |
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
@@ -91,9 +110,9 @@ jobs:
     - name: Extract metadata for test branch
       if: steps.check-branch.outputs.on-test == 'true'
       id: meta-test
-      uses: docker/metadata-action@v5
+      uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        images: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
         tags: |
           type=raw,value=${{ github.ref_name }}
           type=raw,value=test
@@ -101,9 +120,9 @@ jobs:
     - name: Extract metadata for docker-per-mcp branch
       if: steps.check-branch.outputs.on-docker-per-mcp == 'true'
       id: meta-docker-per-mcp
-      uses: docker/metadata-action@v5
+      uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-docker-per-mcp
+        images: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}-docker-per-mcp
         tags: |
           type=raw,value=${{ github.ref_name }}
           type=raw,value=latest
@@ -111,7 +130,7 @@ jobs:
     - name: Build and push Docker image for main branch
       if: steps.check-branch.outputs.on-main == 'true'
       id: push-main
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
       with:
         context: .
         platforms: linux/amd64,linux/arm64
@@ -124,7 +143,7 @@ jobs:
     - name: Build and push Docker image for test branch
       if: steps.check-branch.outputs.on-test == 'true'
       id: push-test
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
       with:
         context: .
         platforms: linux/amd64,linux/arm64
@@ -137,7 +156,7 @@ jobs:
     - name: Build and push Docker image for docker-per-mcp branch
       if: steps.check-branch.outputs.on-docker-per-mcp == 'true'
       id: push-docker-per-mcp
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
       with:
         context: .
         platforms: linux/amd64,linux/arm64
@@ -149,24 +168,24 @@ jobs:
 
     - name: Generate artifact attestation for main branch
       if: steps.check-branch.outputs.on-main == 'true'
-      uses: actions/attest-build-provenance@v1
+      uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1.4.4
       with:
-        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+        subject-name: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
         subject-digest: ${{ steps.push-main.outputs.digest }}
         push-to-registry: true
 
     - name: Generate artifact attestation for test branch
       if: steps.check-branch.outputs.on-test == 'true'
-      uses: actions/attest-build-provenance@v1
+      uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1.4.4
       with:
-        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+        subject-name: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
         subject-digest: ${{ steps.push-test.outputs.digest }}
         push-to-registry: true
 
     - name: Generate artifact attestation for docker-per-mcp branch
       if: steps.check-branch.outputs.on-docker-per-mcp == 'true'
-      uses: actions/attest-build-provenance@v1
+      uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1.4.4
       with:
-        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}-docker-per-mcp
+        subject-name: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}-docker-per-mcp
         subject-digest: ${{ steps.push-docker-per-mcp.outputs.digest }}
         push-to-registry: true 

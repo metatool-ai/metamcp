@@ -8,6 +8,7 @@ import { ServerParameters } from "@repo/zod-types";
 import logger from "@/utils/logger";
 
 import { oauthSessionsRepository } from "../../db/repositories";
+import { guardedFetch } from "../net/egress-guard";
 import { tryRefreshUpstreamTokens } from "../oauth-upstream/refresh-on-401";
 import { recoverFromPostAuthRace } from "../oauth-upstream/retry-post-auth";
 import { isUpstreamUnauthorizedError } from "../oauth-upstream/token-exchange";
@@ -99,15 +100,19 @@ export const createMetaMcpClient = (
 
     const hasHeaders = Object.keys(headers).length > 0;
 
+    // guardedFetch: no connection to cloud metadata / link-local addresses
     if (!hasHeaders) {
-      transport = new SSEClientTransport(new URL(transformedUrl));
+      transport = new SSEClientTransport(new URL(transformedUrl), {
+        fetch: guardedFetch,
+      });
     } else {
       transport = new SSEClientTransport(new URL(transformedUrl), {
+        fetch: guardedFetch,
         requestInit: {
           headers,
         },
         eventSourceInit: {
-          fetch: (url, init) => fetch(url, { ...init, headers }),
+          fetch: (url, init) => guardedFetch(url, { ...init, headers }),
         },
       });
     }
@@ -130,9 +135,12 @@ export const createMetaMcpClient = (
     const hasHeaders = Object.keys(headers).length > 0;
 
     if (!hasHeaders) {
-      transport = new StreamableHTTPClientTransport(new URL(transformedUrl));
+      transport = new StreamableHTTPClientTransport(new URL(transformedUrl), {
+        fetch: guardedFetch,
+      });
     } else {
       transport = new StreamableHTTPClientTransport(new URL(transformedUrl), {
+        fetch: guardedFetch,
         requestInit: {
           headers,
         },
@@ -289,6 +297,7 @@ export const connectMetaMcpClient = async (
           );
         } catch (cleanupError) {
           console.error(
+            "%s",
             `Error cleaning up transport for ${serverParams.name} (${serverParams.uuid}):`,
             cleanupError,
           );

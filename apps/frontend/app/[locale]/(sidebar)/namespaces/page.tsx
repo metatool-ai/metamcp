@@ -5,11 +5,12 @@ import {
   createNamespaceFormSchema,
   CreateNamespaceRequest,
 } from "@repo/zod-types";
-import { ChevronDown, Package, Plus, Search } from "lucide-react";
+import { Package, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { OwnershipSelect } from "@/components/access/ownership-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,14 +20,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 import { createTranslatedZodResolver } from "@/lib/zod-resolver";
@@ -35,6 +31,7 @@ import { NamespacesList } from "./namespaces-list";
 
 export default function NamespacesPage() {
   const { t } = useTranslations();
+  const { isAdmin, can } = useAccess();
   const [createOpen, setCreateOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedServerUuids, setSelectedServerUuids] = useState<string[]>([]);
@@ -154,178 +151,163 @@ export default function NamespacesPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                {t("namespaces:createNamespace")}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>{t("namespaces:createNamespace")}</DialogTitle>
-                <DialogDescription>
-                  {t("namespaces:createNamespaceDescription")}
-                </DialogDescription>
-              </DialogHeader>
-              <form
-                onSubmit={form.handleSubmit(onSubmit)}
-                className="space-y-4"
-              >
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="name" className="text-sm font-medium">
-                    {t("namespaces:name")}
-                  </label>
-                  <Input
-                    id="name"
-                    {...form.register("name")}
-                    placeholder={t("namespaces:namePlaceholder")}
-                  />
-                  {form.formState.errors.name && (
-                    <p className="text-sm text-red-500">
-                      {form.formState.errors.name.message}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="description" className="text-sm font-medium">
-                    {t("namespaces:description")}
-                  </label>
-                  <Textarea
-                    id="description"
-                    {...form.register("description")}
-                    placeholder={t("namespaces:descriptionPlaceholder")}
-                    className="h-20"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">
-                    {t("namespaces:ownership")}
-                  </label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-between"
-                        type="button"
-                      >
-                        {form.watch("user_id") === null
-                          ? t("namespaces:everyone")
-                          : t("namespaces:forMyself")}
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
-                      <DropdownMenuItem
-                        onClick={() => form.setValue("user_id", undefined)}
-                      >
-                        {t("namespaces:forMyself")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => form.setValue("user_id", null)}
-                      >
-                        {t("namespaces:everyone")}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">
-                    {t("namespaces:mcpServers")}
-                  </label>
-                  {/* Search input for filtering servers */}
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          {can("namespaces.create") && (
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t("namespaces:createNamespace")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>{t("namespaces:createNamespace")}</DialogTitle>
+                  <DialogDescription>
+                    {t("namespaces:createNamespaceDescription")}
+                  </DialogDescription>
+                </DialogHeader>
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-4"
+                >
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="name" className="text-sm font-medium">
+                      {t("namespaces:name")}
+                    </label>
                     <Input
-                      placeholder={t("namespaces:searchServers")}
-                      value={serverSearchQuery}
-                      onChange={(e) => setServerSearchQuery(e.target.value)}
-                      className="pl-8"
-                      disabled={isSubmitting || serversLoading}
+                      id="name"
+                      {...form.register("name")}
+                      placeholder={t("namespaces:namePlaceholder")}
                     />
-                  </div>
-                  <div className="border rounded-md p-3 max-h-48 overflow-y-auto">
-                    {serversLoading ? (
-                      <div className="text-sm text-muted-foreground">
-                        {t("namespaces:loadingServers")}
-                      </div>
-                    ) : availableServers.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">
-                        {t("namespaces:noMcpServersAvailable")}
-                      </div>
-                    ) : filteredServers.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-4 text-center">
-                        <Search className="h-6 w-6 text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground">
-                          {t("namespaces:noServersFound")}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {filteredServers.map((server) => (
-                          <div
-                            key={server.uuid}
-                            className="flex items-center space-x-2"
-                          >
-                            <input
-                              type="checkbox"
-                              id={server.uuid}
-                              checked={selectedServerUuids.includes(
-                                server.uuid,
-                              )}
-                              onChange={() => handleServerToggle(server.uuid)}
-                              className="rounded border-gray-300"
-                            />
-                            <label
-                              htmlFor={server.uuid}
-                              className="text-sm flex-1 cursor-pointer"
-                            >
-                              <div className="font-medium">{server.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {server.type} •{" "}
-                                {server.description || "No description"}
-                              </div>
-                            </label>
-                          </div>
-                        ))}
-                      </div>
+                    {form.formState.errors.name && (
+                      <p className="text-sm text-red-500">
+                        {form.formState.errors.name.message}
+                      </p>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t("namespaces:selectMcpServersDescription")}
-                  </p>
-                </div>
 
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setCreateOpen(false);
-                      form.reset({
-                        name: "",
-                        description: "",
-                        user_id: undefined, // Default to "For myself" (Private)
-                      });
-                      setSelectedServerUuids([]);
-                      setServerSearchQuery("");
-                    }}
-                    disabled={isSubmitting}
-                  >
-                    {t("namespaces:cancel")}
-                  </Button>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting
-                      ? t("namespaces:creating")
-                      : t("namespaces:createNamespace")}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="description"
+                      className="text-sm font-medium"
+                    >
+                      {t("namespaces:description")}
+                    </label>
+                    <Textarea
+                      id="description"
+                      {...form.register("description")}
+                      placeholder={t("namespaces:descriptionPlaceholder")}
+                      className="h-20"
+                    />
+                  </div>
+
+                  {isAdmin && (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-medium">
+                        {t("access:ownership.label")}
+                      </label>
+                      <OwnershipSelect
+                        value={form.watch("user_id")}
+                        onChange={(value) => form.setValue("user_id", value)}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-medium">
+                      {t("namespaces:mcpServers")}
+                    </label>
+                    {/* Search input for filtering servers */}
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder={t("namespaces:searchServers")}
+                        value={serverSearchQuery}
+                        onChange={(e) => setServerSearchQuery(e.target.value)}
+                        className="pl-8"
+                        disabled={isSubmitting || serversLoading}
+                      />
+                    </div>
+                    <div className="border rounded-md p-3 max-h-48 overflow-y-auto">
+                      {serversLoading ? (
+                        <div className="text-sm text-muted-foreground">
+                          {t("namespaces:loadingServers")}
+                        </div>
+                      ) : availableServers.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">
+                          {t("namespaces:noMcpServersAvailable")}
+                        </div>
+                      ) : filteredServers.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-4 text-center">
+                          <Search className="h-6 w-6 text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground">
+                            {t("namespaces:noServersFound")}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {filteredServers.map((server) => (
+                            <div
+                              key={server.uuid}
+                              className="flex items-center space-x-2"
+                            >
+                              <input
+                                type="checkbox"
+                                id={server.uuid}
+                                checked={selectedServerUuids.includes(
+                                  server.uuid,
+                                )}
+                                onChange={() => handleServerToggle(server.uuid)}
+                                className="rounded border-gray-300"
+                              />
+                              <label
+                                htmlFor={server.uuid}
+                                className="text-sm flex-1 cursor-pointer"
+                              >
+                                <div className="font-medium">{server.name}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {server.type} •{" "}
+                                  {server.description || "No description"}
+                                </div>
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t("namespaces:selectMcpServersDescription")}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end space-x-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setCreateOpen(false);
+                        form.reset({
+                          name: "",
+                          description: "",
+                          user_id: undefined, // Default to "For myself" (Private)
+                        });
+                        setSelectedServerUuids([]);
+                        setServerSearchQuery("");
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      {t("namespaces:cancel")}
+                    </Button>
+                    <Button type="submit" disabled={isSubmitting}>
+                      {isSubmitting
+                        ? t("namespaces:creating")
+                        : t("namespaces:createNamespace")}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 

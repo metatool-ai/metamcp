@@ -1,30 +1,27 @@
-import { db } from "../../db/index";
 import { ApiKeysRepository } from "../../db/repositories/api-keys.repo";
-import { usersTable } from "../../db/schema";
 
 const apiKeysRepository = new ApiKeysRepository();
 
-export async function resolveUserIdFromApiKey(key: string): Promise<string> {
+/**
+ * Owner of an API key, used as the identity of admin tool calls.
+ *
+ * Organisation keys (user_id NULL) are not tied to anyone, so they cannot run
+ * admin tools: they used to fall back to an arbitrary user (often the first
+ * administrator), which let anyone holding such a key act as that user.
+ */
+export async function resolveUserIdFromApiKey(
+  key: string,
+): Promise<string | undefined> {
   const validation = await apiKeysRepository.validateApiKey(key);
 
   if (!validation.valid) {
     throw new Error("Invalid or inactive API key");
   }
 
-  if (validation.user_id) {
-    return validation.user_id;
+  // Endpoint-scoped keys never act as their owner for admin tools
+  if (validation.scope === "endpoints") {
+    return undefined;
   }
 
-  const [user] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .limit(1);
-
-  if (!user) {
-    throw new Error(
-      "Public API key requires at least one user in the database. Bootstrap a user first.",
-    );
-  }
-
-  return user.id;
+  return validation.user_id ?? undefined;
 }

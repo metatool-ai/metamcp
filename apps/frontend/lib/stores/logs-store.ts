@@ -72,14 +72,16 @@ export const useLogsStore = create<LogsState>()(
           const errorMessage = String(error.message);
           if (
             errorMessage.includes("UNAUTHORIZED") ||
-            errorMessage.includes("You must be logged in")
+            errorMessage.includes("FORBIDDEN") ||
+            errorMessage.includes("You must be logged in") ||
+            errorMessage.includes("Administrator access")
           ) {
-            // Stop auto-refresh if user is not authenticated
-            const currentState = get();
-            if (currentState.isAutoRefreshing) {
-              currentState.stopAutoRefresh();
-              console.log("Auto-refresh stopped due to authentication error");
+            // Stop polling: not signed in, or not an administrator
+            if (refreshInterval) {
+              clearInterval(refreshInterval);
+              refreshInterval = null;
             }
+            console.log("Auto-refresh stopped: live logs are not available");
           }
         }
       }
@@ -150,17 +152,22 @@ export const useLogsStore = create<LogsState>()(
   })),
 );
 
-// Initialize auto-refresh based on stored preference
-if (typeof window !== "undefined") {
-  // Only start in browser environment and if user previously enabled it
-  setTimeout(() => {
-    const shouldAutoRefresh = getStoredAutoRefreshState();
-    if (shouldAutoRefresh) {
-      useLogsStore.getState().startAutoRefresh();
-    }
-    // Always fetch logs once when the page loads
+let pollingInitialized = false;
+
+/**
+ * Starts live-log polling according to the stored preference. Live logs are
+ * reserved to administrators, so this is only called from admin-only UI
+ * (sidebar entry, live logs page) instead of on module load.
+ */
+export function initializeLogsPolling(): void {
+  if (typeof window === "undefined" || pollingInitialized) return;
+  pollingInitialized = true;
+  if (getStoredAutoRefreshState()) {
+    useLogsStore.getState().startAutoRefresh();
+  } else {
+    // Fetch once so counters are populated
     useLogsStore.getState().fetchLogs();
-  }, 100);
+  }
 }
 
 // Cleanup on page unload

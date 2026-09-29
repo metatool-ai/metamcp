@@ -55,6 +55,7 @@ interface NamespaceServersTableProps {
   namespaceUuid: string;
   onServerStatusChange?: () => void; // Callback for when server status changes
   sessionInitializing?: boolean; // Whether session initialization is in progress
+  canEdit?: boolean; // Only namespace editors can turn servers on/off
 }
 
 export function NamespaceServersTable({
@@ -62,6 +63,7 @@ export function NamespaceServersTable({
   namespaceUuid,
   onServerStatusChange,
   sessionInitializing = false,
+  canEdit = true,
 }: NamespaceServersTableProps) {
   const router = useRouter();
   const { t } = useTranslations();
@@ -191,6 +193,14 @@ export function NamespaceServersTable({
       },
       cell: ({ row }) => {
         const server = row.original;
+        // Using a namespace does not grant access to its servers' own pages.
+        if (!server.access) {
+          return (
+            <div className="space-y-1 px-3 py-2">
+              <div className="font-medium">{server.name}</div>
+            </div>
+          );
+        }
         return (
           <div className="space-y-1 px-3 py-2">
             <div
@@ -242,7 +252,9 @@ export function NamespaceServersTable({
         const server = row.original;
         const isActive = server.status === "ACTIVE";
         const isDisabled =
-          sessionInitializing || updateServerStatusMutation.isPending;
+          !canEdit ||
+          sessionInitializing ||
+          updateServerStatusMutation.isPending;
 
         return (
           <div className="px-3 py-2">
@@ -420,24 +432,31 @@ export function NamespaceServersTable({
                 <Copy className="mr-2 h-4 w-4" />
                 {t("namespaces:serversTable.copyServerUuid")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={copyServerJson}>
-                <FileText className="mr-2 h-4 w-4" />
-                {t("namespaces:serversTable.copyServerJson")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleViewDetails}>
-                <Eye className="mr-2 h-4 w-4" />
-                {t("namespaces:serversTable.viewDetails")}
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link
-                  href={`/mcp-servers/${server.uuid}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  {t("namespaces:serversTable.openInNewTab")}
-                </Link>
-              </DropdownMenuItem>
+              {/* A redacted config would be an incomplete, misleading export. */}
+              {!server.secretsRedacted && (
+                <DropdownMenuItem onClick={copyServerJson}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  {t("namespaces:serversTable.copyServerJson")}
+                </DropdownMenuItem>
+              )}
+              {server.access && (
+                <>
+                  <DropdownMenuItem onClick={handleViewDetails}>
+                    <Eye className="mr-2 h-4 w-4" />
+                    {t("namespaces:serversTable.viewDetails")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href={`/mcp-servers/${server.uuid}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      {t("namespaces:serversTable.openInNewTab")}
+                    </Link>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );

@@ -5,6 +5,8 @@ import express from "express";
 import helmet from "helmet";
 
 import { createContext } from "../trpc";
+import { accessImplementations } from "../trpc/access.impl";
+import { adminImplementations } from "../trpc/admin.impl";
 import { apiKeysImplementations } from "../trpc/api-keys.impl";
 import { configImplementations } from "../trpc/config.impl";
 import { endpointsImplementations } from "../trpc/endpoints.impl";
@@ -13,6 +15,8 @@ import { mcpRequestAuditLogsImplementations } from "../trpc/mcp-request-audit-lo
 import { mcpServersImplementations } from "../trpc/mcp-servers.impl";
 import { namespacesImplementations } from "../trpc/namespaces.impl";
 import { oauthImplementations } from "../trpc/oauth.impl";
+import { oauthConsentImplementations } from "../trpc/oauth-consent.impl";
+import { sharesImplementations } from "../trpc/shares.impl";
 import { toolsImplementations } from "../trpc/tools.impl";
 
 // Create the app router with implementations
@@ -27,6 +31,10 @@ const appRouter = createAppRouter({
     config: configImplementations,
     logs: logsImplementations,
     mcpRequestAuditLogs: mcpRequestAuditLogsImplementations,
+    access: accessImplementations,
+    admin: adminImplementations,
+    shares: sharesImplementations,
+    oauthConsent: oauthConsentImplementations,
   },
 });
 

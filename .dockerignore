@@ -10,10 +10,12 @@ pnpm-debug.log*
 dist
 build
 
-# Environment files
+# Environment files, at any depth (apps/*/.env.local, deploy/kubernetes/.env
+# hold real secrets and must never enter the build context)
 .env
-.env.local
-.env.production
+.env.*
+**/.env
+**/.env.*
 
 # Git
 .git
@@ -37,6 +39,7 @@ Thumbs.db
 # Logs
 logs
 *.log
+**/*.log
 
 # Runtime data
 pids

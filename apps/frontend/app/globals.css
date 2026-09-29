@@ -257,3 +257,32 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* -------------------------------------------------------------------------
+ * Access control tones (roles, access levels, identity sources).
+ * Used as `text-tone-admin bg-tone-admin/10 border-tone-admin/25` etc.
+ * Light values keep >= 4.5:1 contrast on their 10% tinted background.
+ * ------------------------------------------------------------------------- */
+:root {
+  --tone-admin: oklch(0.52 0.15 58);
+  --tone-editor: oklch(0.5 0.19 262);
+  --tone-viewer: oklch(0.48 0.03 256);
+  --tone-sso: oklch(0.5 0.1 192);
+  --tone-danger: oklch(0.52 0.19 27);
+}
+
+.dark {
+  --tone-admin: oklch(0.82 0.13 78);
+  --tone-editor: oklch(0.78 0.12 262);
+  --tone-viewer: oklch(0.78 0.02 256);
+  --tone-sso: oklch(0.8 0.1 190);
+  --tone-danger: oklch(0.75 0.15 27);
+}
+
+@theme inline {
+  --color-tone-admin: var(--tone-admin);
+  --color-tone-editor: var(--tone-editor);
+  --color-tone-viewer: var(--tone-viewer);
+  --color-tone-sso: var(--tone-sso);
+  --color-tone-danger: var(--tone-danger);
+}

@@ -422,16 +422,18 @@ Use bulk import/export for:
 - **Quick setup** (deploying multiple servers at once)
 </Tip>
 
-### Idle Session Management
+### Connection Management
 
-MetaMCP pre-allocates idle sessions for better performance:
+Each client session gets its own connection to the MCP servers it uses (for STDIO servers, a process):
 
-<Card title="Cold Start Optimization" icon="zap">
-- **Default**: 1 idle session per server
-- **Configurable**: Adjust based on usage patterns
-- **Auto-scaling**: Sessions created on demand
-- **Cleanup**: Idle sessions recycled after timeout
+<Card title="Connections on demand" icon="zap">
+- **On first use**: a connection opens when a client first needs the server
+- **Released when unused**: a session that stopped calling a server for `MCP_CONNECTION_IDLE_TTL` (15 minutes) gives its connection back, and gets one again on its next call
+- **Reused**: a released connection is kept as the server's spare for the same time, so the next client gets it at once
+- **Warm pool** (`MCP_WARM_POOL=true`): one started connection per server exposed by an endpoint, replaced as soon as it is taken
 </Card>
+
+See [Memory and sizing](/en/deployment/performance) for the settings and their trade-offs.
 
 ## Custom Dockerfile for Dependencies
 
@@ -476,7 +478,7 @@ Custom dependencies increase the Docker image size and startup time. Consider us
 
   <Accordion icon="clock" title="Slow Performance">
     **Optimization strategies:**
-    - Increase idle session count for frequently used servers
+    - Enable the warm pool (`MCP_WARM_POOL=true`) or raise `MCP_CONNECTION_IDLE_TTL` for instant first calls
     - Use local servers instead of remote when possible
     - Pre-install dependencies in custom Docker image
     - Configure appropriate timeout values

@@ -19,26 +19,107 @@ export interface SessionLifetimeManager<T> {
   stopCleanupTimer(): void;
 }
 
+export type SessionLifetimeOptions = {
+  /**
+   * Expire sessions that saw no request for this long (ms). A session with a
+   * request still open (e.g. a GET notification stream) is never idle. Null
+   * or 0: only SESSION_LIFETIME applies.
+   */
+  idleTimeoutMs?: number | null;
+};
+
+/** Reads a non-negative integer (e.g. a duration in ms) from the environment. */
+export function nonNegativeIntFromEnv(
+  value: string | undefined,
+  fallback: number,
+): number {
+  if (value === undefined || value.trim() === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+}
+
 export class SessionLifetimeManagerImpl<
   T,
 > implements SessionLifetimeManager<T> {
   private sessions: Map<string, T> = new Map();
   private sessionTimestamps: Map<string, number> = new Map();
+  private lastActivity: Map<string, number> = new Map();
+  private openRequests: Map<string, number> = new Map();
   private cleanupTimer: NodeJS.Timeout | null = null;
   private readonly name: string;
+  private readonly idleTimeoutMs: number | null;
 
-  constructor(name: string) {
+  constructor(name: string, options: SessionLifetimeOptions = {}) {
     this.name = name;
+    this.idleTimeoutMs = options.idleTimeoutMs || null;
   }
 
   addSession(sessionId: string, session: T): void {
+    const now = Date.now();
     this.sessions.set(sessionId, session);
-    this.sessionTimestamps.set(sessionId, Date.now());
+    this.sessionTimestamps.set(sessionId, now);
+    this.lastActivity.set(sessionId, now);
   }
 
   removeSession(sessionId: string): void {
     this.sessions.delete(sessionId);
     this.sessionTimestamps.delete(sessionId);
+    this.lastActivity.delete(sessionId);
+    this.openRequests.delete(sessionId);
+  }
+
+  /**
+   * Counts a request on the session as in flight until `res` closes, and
+   * records the activity for the idle timeout.
+   */
+  trackRequest(
+    sessionId: string,
+    res: { once(event: "close", listener: () => void): unknown },
+  ): void {
+    if (!this.sessions.has(sessionId)) return;
+    this.lastActivity.set(sessionId, Date.now());
+    this.openRequests.set(
+      sessionId,
+      (this.openRequests.get(sessionId) ?? 0) + 1,
+    );
+    res.once("close", () => {
+      if (!this.sessions.has(sessionId)) return;
+      const open = (this.openRequests.get(sessionId) ?? 1) - 1;
+      if (open > 0) {
+        this.openRequests.set(sessionId, open);
+      } else {
+        this.openRequests.delete(sessionId);
+      }
+      this.lastActivity.set(sessionId, Date.now());
+    });
+  }
+
+  /** Time since the session was last used; 0 while a request is open. */
+  getIdleTime(sessionId: string): number | undefined {
+    if (!this.sessions.has(sessionId)) return undefined;
+    if (this.openRequests.has(sessionId)) return 0;
+    const last = this.lastActivity.get(sessionId);
+    return last === undefined ? undefined : Date.now() - last;
+  }
+
+  /**
+   * The least recently used session among `sessionIds` that has no request
+   * in flight, i.e. the one that can be dropped with the least disruption.
+   */
+  leastRecentlyUsed(sessionIds: Iterable<string>): string | undefined {
+    let candidate: string | undefined;
+    let oldest = Infinity;
+    for (const sessionId of sessionIds) {
+      if (!this.sessions.has(sessionId) || this.openRequests.has(sessionId)) {
+        continue;
+      }
+      const last = this.lastActivity.get(sessionId) ?? 0;
+      if (last < oldest) {
+        oldest = last;
+        candidate = sessionId;
+      }
+    }
+    return candidate;
   }
 
   getSession(sessionId: string): T | undefined {
@@ -71,17 +152,21 @@ export class SessionLifetimeManagerImpl<
     try {
       const sessionLifetime = await configService.getSessionLifetime();
 
-      // If session lifetime is null, sessions are infinite - skip cleanup
-      if (sessionLifetime === null) {
+      // Without a lifetime nor an idle timeout, sessions never expire
+      if (sessionLifetime === null && this.idleTimeoutMs === null) {
         return;
       }
 
       const now = Date.now();
       const expiredSessions: Array<{ sessionId: string; session: T }> = [];
 
-      // Find expired sessions
+      // Find expired sessions: past their lifetime, or idle for too long
       for (const [sessionId, timestamp] of this.sessionTimestamps.entries()) {
-        if (now - timestamp > sessionLifetime) {
+        const idleTime = this.getIdleTime(sessionId) ?? 0;
+        const expired =
+          (sessionLifetime !== null && now - timestamp > sessionLifetime) ||
+          (this.idleTimeoutMs !== null && idleTime > this.idleTimeoutMs);
+        if (expired) {
           const session = this.sessions.get(sessionId);
           if (session) {
             expiredSessions.push({ sessionId, session });

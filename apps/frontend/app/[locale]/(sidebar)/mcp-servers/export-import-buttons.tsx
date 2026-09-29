@@ -22,7 +22,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 
-export function ExportImportButtons() {
+export function ExportImportButtons({
+  canImport = true,
+}: {
+  /** Importing creates servers: hidden without the matching permission. */
+  canImport?: boolean;
+}) {
   const { t } = useTranslations();
   const [importOpen, setImportOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -92,11 +97,16 @@ export function ExportImportButtons() {
     },
   });
 
+  // Servers shared "for use" come without their secrets (env values, args,
+  // headers, URL path): exporting them would produce broken configurations.
+  const exportableServers = servers.filter((server) => !server.secretsRedacted);
+  const skippedServers = servers.length - exportableServers.length;
+
   // Function to generate export JSON
   const generateExportJson = () => {
     const mcpServersConfig: Record<string, Record<string, unknown>> = {};
 
-    servers.forEach((server) => {
+    exportableServers.forEach((server) => {
       const config: Record<string, unknown> = {
         type: server.type.toUpperCase(),
       };
@@ -184,8 +194,6 @@ export function ExportImportButtons() {
       return;
     }
 
-    console.log("Importing servers:", parsedJson);
-
     // Call the tRPC mutation
     const apiPayload: BulkImportMcpServersRequest = {
       mcpServers: parsedJson.mcpServers,
@@ -212,6 +220,13 @@ export function ExportImportButtons() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {skippedServers > 0 && (
+              <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                {t("mcp-servers:export.skippedRedacted", {
+                  count: skippedServers,
+                })}
+              </p>
+            )}
             <div>
               <label className="text-sm font-medium mb-2 block">
                 {t("mcp-servers:export.preview")}
@@ -240,25 +255,26 @@ export function ExportImportButtons() {
       </Dialog>
 
       {/* Import Button */}
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogTrigger asChild>
-          <Button variant="outline">
-            <Upload className="mr-2 h-4 w-4" />
-            {t("mcp-servers:import.importJson")}
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-[700px] max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{t("mcp-servers:import.title")}</DialogTitle>
-            <DialogDescription>
-              {t("mcp-servers:import.description")}
-            </DialogDescription>
-            <CodeBlock
-              language="json"
-              maxHeight="128px"
-              className="mt-2 text-xs"
-            >
-              {`{
+      {canImport && (
+        <Dialog open={importOpen} onOpenChange={setImportOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline">
+              <Upload className="mr-2 h-4 w-4" />
+              {t("mcp-servers:import.importJson")}
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[700px] max-h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>{t("mcp-servers:import.title")}</DialogTitle>
+              <DialogDescription>
+                {t("mcp-servers:import.description")}
+              </DialogDescription>
+              <CodeBlock
+                language="json"
+                maxHeight="128px"
+                className="mt-2 text-xs"
+              >
+                {`{
   "mcpServers": {
     "CommandBasedServerName": {
       "command": "command",
@@ -288,52 +304,53 @@ export function ExportImportButtons() {
     }
   }
 }`}
-            </CodeBlock>
-          </DialogHeader>
-          <div className="space-y-4 flex-1 overflow-hidden">
-            <div className="flex flex-col h-full p-1">
-              <label className="text-sm font-medium mb-2">
-                {t("mcp-servers:import.jsonContent")}
-              </label>
-              <Textarea
-                value={importJson}
-                onChange={(e) => {
-                  setImportJson(e.target.value);
+              </CodeBlock>
+            </DialogHeader>
+            <div className="space-y-4 flex-1 overflow-hidden">
+              <div className="flex flex-col h-full p-1">
+                <label className="text-sm font-medium mb-2">
+                  {t("mcp-servers:import.jsonContent")}
+                </label>
+                <Textarea
+                  value={importJson}
+                  onChange={(e) => {
+                    setImportJson(e.target.value);
+                    setImportError("");
+                  }}
+                  placeholder={t("mcp-servers:import.placeholder")}
+                  className="font-mono text-sm flex-1 min-h-[200px] max-h-[300px] resize-none overflow-y-auto"
+                />
+                {importError && (
+                  <p className="text-sm text-red-500 mt-1">{importError}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setImportOpen(false);
+                  setImportJson("");
                   setImportError("");
                 }}
-                placeholder={t("mcp-servers:import.placeholder")}
-                className="font-mono text-sm flex-1 min-h-[200px] max-h-[300px] resize-none overflow-y-auto"
-              />
-              {importError && (
-                <p className="text-sm text-red-500 mt-1">{importError}</p>
-              )}
+                disabled={bulkImportMutation.isPending}
+              >
+                {t("common:cancel")}
+              </Button>
+              <Button
+                type="button"
+                disabled={bulkImportMutation.isPending}
+                onClick={handleImport}
+              >
+                {bulkImportMutation.isPending
+                  ? t("mcp-servers:import.importing")
+                  : t("mcp-servers:import.importJson")}
+              </Button>
             </div>
-          </div>
-          <div className="flex justify-end space-x-2 pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setImportOpen(false);
-                setImportJson("");
-                setImportError("");
-              }}
-              disabled={bulkImportMutation.isPending}
-            >
-              {t("common:cancel")}
-            </Button>
-            <Button
-              type="button"
-              disabled={bulkImportMutation.isPending}
-              onClick={handleImport}
-            >
-              {bulkImportMutation.isPending
-                ? t("mcp-servers:import.importing")
-                : t("mcp-servers:import.importJson")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

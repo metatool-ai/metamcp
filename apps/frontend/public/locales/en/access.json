@@ -1,0 +1,111 @@
+{
+  "roles": {
+    "admin": "Admin",
+    "editor": "Editor",
+    "viewer": "Viewer"
+  },
+  "roleDescriptions": {
+    "admin": "Full control: users, groups, settings, logs and every resource.",
+    "editor": "Creates and shares their own MCP servers, namespaces and endpoints.",
+    "viewer": "Uses what is shared with them. Can create personal API keys."
+  },
+  "levels": {
+    "use": "Can use",
+    "edit": "Can edit",
+    "manage": "Can manage"
+  },
+  "levelDescriptions": {
+    "use": "Connect through endpoints and the inspector. Configuration is visible without its secrets.",
+    "edit": "Also change the configuration, tools and credentials.",
+    "manage": "Also delete it and choose who has access."
+  },
+  "reasons": {
+    "owner": "Owner",
+    "admin": "Admin access",
+    "adminTooltip": "You can see and manage this resource because you are an administrator.",
+    "share": "Shared with you"
+  },
+  "source": {
+    "oidc": "SSO",
+    "manual": "Manual",
+    "oidcTooltip": "Synced from the identity provider at each sign-in. Removed automatically when the IdP stops sending the group.",
+    "manualTooltip": "Added by an administrator. Never removed by the SSO sync."
+  },
+  "owner": {
+    "column": "Owner",
+    "you": "You",
+    "organization": "Organisation"
+  },
+  "ownership": {
+    "label": "Owner",
+    "me": "Me",
+    "meHelp": "Private until you share it.",
+    "organization": "Organisation",
+    "organizationHelp": "Managed by administrators. Only visible to the people and groups you share it with."
+  },
+  "organizationKey": "Organisation (not tied to a user)",
+  "organizationKeyHelp": "Organisation keys are not tied to a person and only reach namespaces shared with everyone. Prefer personal keys so calls stay attributable.",
+  "stdioRequiresPermission": "Requires the STDIO servers permission",
+  "stdioLocked": "The command, arguments and environment of a STDIO server can only be changed by people with the STDIO servers permission (it runs on the MetaMCP host).",
+  "endpointAuthRequired": "At least one authentication method must stay enabled. Only administrators can publish an endpoint without authentication.",
+  "share": {
+    "action": "Share",
+    "title": "Share “{{name}}”",
+    "ownedBy": "Owned by",
+    "kind": {
+      "mcp_server": "MCP server",
+      "namespace": "Namespace"
+    },
+    "searchPlaceholder": "Add people or groups…",
+    "levelForNew": "Access level for new people and groups",
+    "levelFor": "Access level for {{name}}",
+    "results": "Matching people and groups",
+    "searching": "Searching…",
+    "noResults": "No matching people or groups.",
+    "subjectType": {
+      "user": "Person",
+      "group": "Group"
+    },
+    "everyone": "Everyone in the organisation",
+    "everyoneHint": "Every signed-in user, now and in the future",
+    "memberCount": {
+      "one": "{{count}} member",
+      "other": "{{count}} members"
+    },
+    "withAccess": "People and groups with access",
+    "organizationHint": "Managed by administrators",
+    "ownerRole": "Owner",
+    "loading": "Loading access…",
+    "notShared": "Not shared yet: only the owner and administrators can see it.",
+    "readOnlyHint": "Only people who manage this resource can see and change who has access.",
+    "remove": "Remove access for {{name}}",
+    "added": "Shared with {{name}}",
+    "error": "Could not update access",
+    "sharedWith": {
+      "one": "Shared with 1",
+      "other": "Shared with {{count}}"
+    },
+    "explain": {
+      "mcp_server": "People who can use this server can add it to their own namespaces and inspect it. They never see its secrets unless they can edit it.",
+      "namespace": "Sharing a namespace lets people use the tools of its MCP servers through its endpoints, without seeing the servers' credentials."
+    }
+  },
+  "readOnly": {
+    "title": {
+      "mcp_server": "Shared with you by {{owner}}",
+      "namespace": "Shared with you by {{owner}}"
+    },
+    "description": {
+      "mcp_server": "You can use and inspect this MCP server. Ask its owner for edit access to change it.",
+      "namespace": "You can use this namespace through its endpoints. Its servers and tools are configured by its owner."
+    },
+    "secretsHidden": "Environment values, headers and tokens are hidden."
+  },
+  "denied": {
+    "title": "This area is restricted",
+    "description": "Your role does not give you access to this page.",
+    "yourRole": "Your role:",
+    "contact": "If you need it, ask a MetaMCP administrator.",
+    "back": "Back to MCP servers"
+  }
+}

@@ -1,10 +1,15 @@
 import { ServerParameters } from "@repo/zod-types";
 
-import { mcpServersRepository, namespacesRepository } from "../db/repositories";
+import {
+  endpointsRepository,
+  mcpServersRepository,
+  namespacesRepository,
+} from "../db/repositories";
+import { groupsRepository } from "../db/repositories/groups.repo";
 import { initializeEnvironmentConfiguration } from "./bootstrap.service";
-import { metaMcpServerPool } from "./metamcp";
+import { mcpServerPool, metaMcpServerPool } from "./metamcp";
+import { getMcpServers } from "./metamcp/fetch-metamcp";
 import { serverErrorTracker } from "./metamcp/server-error-tracker";
-import { convertDbServerToParams } from "./metamcp/utils";
 
 /**
  * Startup initialization that must happen before the HTTP server begins listening.
@@ -22,6 +27,14 @@ export async function initializeOnStartup(): Promise<void> {
 
   const enableEnvBootstrap = parseBool(process.env.BOOTSTRAP_ENABLE, true);
   const failHard = parseBool(process.env.BOOTSTRAP_FAIL_HARD, false);
+
+  // RBAC system groups ("Administrators", "Everyone") are created by the
+  // migration; make sure they exist even if a row was removed manually.
+  try {
+    await groupsRepository.ensureSystemGroups();
+  } catch (err) {
+    console.error("❌ Failed to ensure RBAC system groups:", err);
+  }
 
   if (enableEnvBootstrap) {
     try {
@@ -41,14 +54,13 @@ export async function initializeOnStartup(): Promise<void> {
 }
 
 /**
- * Startup function to initialize idle servers for all namespaces and all MCP servers
+ * Startup (and error reset) initialization of the connection pools. Always
+ * gives servers in ERROR a fresh chance. Only a warm pool (MCP_WARM_POOL)
+ * then starts a spare connection per server, and only for the servers an
+ * endpoint exposes: the others are reached from the inspector alone.
  */
 export async function initializeIdleServers() {
   try {
-    console.log(
-      "Initializing idle servers for all namespaces and all MCP servers...",
-    );
-
     // Reset all ERROR statuses so servers get a fresh chance on restart
     const resetCount = await mcpServersRepository.resetAllErrorStatuses();
     if (resetCount > 0) {
@@ -66,49 +78,41 @@ export async function initializeIdleServers() {
     if (namespaceUuids.length === 0) {
       console.log("No namespaces found in database");
     } else {
-      console.log(
-        `Found ${namespaceUuids.length} namespaces: ${namespaceUuids.join(", ")}`,
-      );
+      console.log(`Found ${namespaceUuids.length} namespaces`);
     }
 
-    // Fetch ALL MCP servers from the database (not just namespace-associated ones)
-    console.log("Fetching all MCP servers from database...");
-    const allDbServers = await mcpServersRepository.findAll();
-    console.log(`Found ${allDbServers.length} total MCP servers in database`);
-
-    // Convert all database servers to ServerParameters format
-    const allServerParams: Record<string, ServerParameters> = {};
-    for (const dbServer of allDbServers) {
-      const serverParams = await convertDbServerToParams(dbServer);
-      if (serverParams) {
-        allServerParams[dbServer.uuid] = serverParams;
+    if (!mcpServerPool.isWarm) {
+      console.log(
+        "MCP connections open on first use (set MCP_WARM_POOL=true to keep one started per server)",
+      );
+    } else {
+      // Servers of the namespaces an endpoint exposes
+      const endpoints = await endpointsRepository.findAll();
+      const exposedNamespaceUuids = [
+        ...new Set(endpoints.map((endpoint) => endpoint.namespace_uuid)),
+      ];
+      const exposedServerParams: Record<string, ServerParameters> = {};
+      for (const namespaceUuid of exposedNamespaceUuids) {
+        Object.assign(exposedServerParams, await getMcpServers(namespaceUuid));
       }
-    }
 
-    console.log(
-      `Successfully converted ${Object.keys(allServerParams).length} MCP servers to ServerParameters format`,
-    );
-
-    // Initialize idle sessions for the underlying MCP server pool with ALL servers
-    if (Object.keys(allServerParams).length > 0) {
-      const { mcpServerPool } = await import("./metamcp");
-      await mcpServerPool.ensureIdleSessions(allServerParams);
+      const count = Object.keys(exposedServerParams).length;
+      if (count > 0) {
+        await mcpServerPool.ensureIdleSessions(exposedServerParams);
+      }
       console.log(
-        "✅ Successfully initialized idle MCP server pool sessions for ALL servers",
+        `✅ Warm MCP pool: started idle connections for ${count} server(s) exposed by ${exposedNamespaceUuids.length} namespace(s)`,
       );
     }
 
-    // Ensure idle servers for all namespaces (MetaMCP server pool)
+    // Ensure idle servers for all namespaces (MetaMCP server pool). These are
+    // in-process objects: no connection to MCP servers until used.
     if (namespaceUuids.length > 0) {
       await metaMcpServerPool.ensureIdleServers(namespaceUuids, true);
       console.log(
         "✅ Successfully initialized idle servers for all namespaces",
       );
     }
-
-    console.log(
-      "✅ Successfully initialized idle servers for all namespaces and all MCP servers",
-    );
   } catch (error) {
     console.log("❌ Error initializing idle servers:", error);
     // Don't exit the process, just log the error

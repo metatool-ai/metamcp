@@ -98,6 +98,7 @@ export class OAuthSessionsRepository {
         }),
         ...(input.tokens && { tokens: input.tokens }),
         ...(input.code_verifier && { code_verifier: input.code_verifier }),
+        ...(input.expected_state && { expected_state: input.expected_state }),
       })
       .onConflictDoUpdate({
         target: oauthSessionsTable.mcp_server_uuid,
@@ -107,6 +108,11 @@ export class OAuthSessionsRepository {
           }),
           ...(input.tokens && { tokens: input.tokens }),
           ...(input.code_verifier && { code_verifier: input.code_verifier }),
+          // CSRF nonce (RFC 6749 §10.12) — previously dropped here, which
+          // silently disabled the state check in oauth.impl exchangeToken.
+          ...(input.expected_state && {
+            expected_state: input.expected_state,
+          }),
           updated_at: sql`NOW()`,
         },
       })

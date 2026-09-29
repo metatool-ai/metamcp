@@ -1,0 +1,516 @@
+{
+  "eyebrow": "Administration",
+  "users": {
+    "title": "Utilisateurs",
+    "description": "Toutes les personnes pouvant se connecter à MetaMCP : leur rôle, leurs groupes, leurs méthodes de connexion et ce qu'elles possèdent.",
+    "add": "Ajouter un utilisateur",
+    "addTitle": "Ajouter un utilisateur",
+    "addDescription": "Créez un compte avec une adresse e-mail et un mot de passe. Les utilisateurs qui se connectent via SSO sont créés automatiquement.",
+    "name": "Nom",
+    "email": "E-mail",
+    "initialPassword": "Mot de passe initial",
+    "passwordHelp": "Au moins 8 caractères. Communiquez-le de manière sécurisée : l'utilisateur pourra le modifier après s'être connecté.",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
+    "baseRole": "Rôle de base",
+    "groups": "Groupes",
+    "create": "Créer l'utilisateur",
+    "creating": "Création…",
+    "created": "{{name}} peut désormais se connecter",
+    "createError": "Impossible de créer l'utilisateur",
+    "searchPlaceholder": "Rechercher par nom ou e-mail",
+    "stats": {
+      "total": "Tous les utilisateurs",
+      "disabled": "Désactivés"
+    },
+    "filters": {
+      "role": "Filtrer par rôle",
+      "status": "Filtrer par statut",
+      "group": "Filtrer par groupe",
+      "allRoles": "Tous les rôles",
+      "allStatuses": "Tous les statuts",
+      "allGroups": "Tous les groupes"
+    },
+    "status": {
+      "active": "Actif",
+      "disabled": "Désactivé"
+    },
+    "columns": {
+      "user": "Utilisateur",
+      "role": "Rôle",
+      "groups": "Groupes",
+      "signIn": "Connexion",
+      "lastSeen": "Dernière activité",
+      "actions": "Actions"
+    },
+    "signIn": {
+      "password": "E-mail et mot de passe",
+      "sso": "Authentification unique",
+      "ssoWith": "Authentification unique ({{providers}})"
+    },
+    "viaGroup": "via un groupe",
+    "never": "Jamais",
+    "count": {
+      "one": "{{count}} utilisateur",
+      "other": "{{count}} utilisateurs"
+    },
+    "previousPage": "Page précédente",
+    "nextPage": "Page suivante",
+    "empty": {
+      "title": "Aucun utilisateur ne correspond",
+      "description": "Essayez une autre recherche ou effacez les filtres."
+    },
+    "actionsFor": "Actions pour {{name}}",
+    "changeRole": "Rôle de base",
+    "roleUpdated": "Rôle mis à jour",
+    "updateError": "Impossible de mettre à jour l'utilisateur",
+    "resetPassword": "Réinitialiser le mot de passe",
+    "addPassword": "Ajouter un mot de passe",
+    "resetPasswordTitle": "Définir un nouveau mot de passe",
+    "resetPasswordDescription": "Les sessions de {{name}} seront fermées sur tous ses appareils ; ce mot de passe lui sera nécessaire pour se connecter par e-mail.",
+    "resetPasswordHelp": "Au moins 8 caractères.",
+    "newPassword": "Nouveau mot de passe",
+    "setPassword": "Définir le mot de passe",
+    "passwordUpdated": "Mot de passe mis à jour. Les sessions existantes ont été fermées.",
+    "passwordError": "Impossible de mettre à jour le mot de passe",
+    "revokeSessions": "Déconnecter partout",
+    "sessionsRevoked": "Toutes les sessions ont été fermées",
+    "disable": "Désactiver le compte",
+    "enable": "Activer le compte",
+    "disableHelp": "La désactivation déconnecte l'utilisateur, révoque ses jetons OAuth MCP et suspend ses clés API. Tout est conservé et rétabli si le compte est réactivé.",
+    "delete": "Supprimer l'utilisateur",
+    "deleting": "Suppression…",
+    "deleted": "L'utilisateur {{name}} a été supprimé",
+    "deleteError": "Impossible de supprimer l'utilisateur",
+    "deleteTitle": "Supprimer {{name}} ?",
+    "deleteDescription": "Cette action est irréversible. Envisagez plutôt de désactiver le compte : tout est conservé et l'opération peut être annulée.",
+    "noOwnedResources": "Cet utilisateur ne possède aucun serveur MCP, namespace ou endpoint.",
+    "deleteKeysNote": {
+      "one": "{{count}} clé API de cet utilisateur sera supprimée.",
+      "other": "Les {{count}} clés API de cet utilisateur seront supprimées."
+    },
+    "transfer": {
+      "legend": "Que faire de ses {{servers}} serveur(s) MCP, {{namespaces}} namespace(s) et {{endpoints}} endpoint(s) ?",
+      "organization": "Les transférer à l'organisation",
+      "organizationHelp": "Recommandé. Les administrateurs les gèrent et les partages existants continuent de fonctionner.",
+      "user": "Les confier à un autre utilisateur",
+      "userHelp": "L'utilisateur choisi en devient le propriétaire.",
+      "delete": "Les supprimer",
+      "deleteHelp": "Les endpoints cessent de fonctionner pour tous ceux qui les utilisaient.",
+      "choose": "Choisir un utilisateur"
+    },
+    "resources": {
+      "mcpServers": "Serveurs MCP",
+      "namespaces": "Namespaces",
+      "endpoints": "Endpoints",
+      "apiKeys": "Clés API"
+    },
+    "details": {
+      "role": "Rôle",
+      "baseRoleHelp": "Le rôle de base s'applique, sauf si un groupe en accorde un plus élevé.",
+      "elevated": "Rôle effectif : {{role}}, accordé par {{groups}}. Le rôle de base ne s'applique que si l'utilisateur quitte ces groupes.",
+      "groups": "Groupes",
+      "noGroups": "N'appartient à aucun groupe.",
+      "identityProvider": "Fournisseur d'identité",
+      "syncedAt": "Groupes reçus {{time}}",
+      "neverSynced": "Aucune connexion SSO pour le moment.",
+      "noExternalGroups": "Le fournisseur d'identité n'a envoyé aucun groupe.",
+      "resources": "Propriétaire de",
+      "actions": "Compte"
+    }
+  },
+  "groups": {
+    "title": "Groupes",
+    "description": "Regroupez des personnes pour leur attribuer un rôle et un accès aux serveurs MCP et aux namespaces. Les groupes peuvent être alimentés automatiquement depuis votre fournisseur d'identité.",
+    "create": "Créer un groupe",
+    "createTitle": "Créer un groupe",
+    "editTitle": "Modifier le groupe",
+    "formDescription": "Les membres obtiennent le rôle ci-dessous (le cas échéant) et tout ce qui est partagé avec le groupe.",
+    "name": "Nom",
+    "descriptionLabel": "Description",
+    "grantedRole": "Rôle accordé aux membres",
+    "grantedRoleHelp": "Les membres obtiennent au moins ce rôle. Utile pour donner les droits d'éditeur à toute une équipe, ou pour associer un groupe de l'IdP aux administrateurs.",
+    "adminsRoleLocked": "Les membres de ce groupe sont toujours administrateurs.",
+    "noRole": "Aucun rôle",
+    "noRoleHelp": "Les membres conservent leur propre rôle ; le groupe sert uniquement au partage.",
+    "idpGroups": "Groupes du fournisseur d'identité",
+    "idpGroupsPlaceholder": "par ex. metamcp-admins ou /engineering/*",
+    "idpGroupsHelp": "À chaque connexion SSO, les utilisateurs dont la revendication des groupes contient l'une de ces valeurs rejoignent ce groupe. Insensible à la casse, * sert de caractère générique.",
+    "removeMapping": "Retirer {{tag}}",
+    "systemNameLocked": "Les groupes système ne peuvent pas être renommés.",
+    "save": "Enregistrer",
+    "saved": "Groupe enregistré",
+    "saveError": "Impossible d'enregistrer le groupe",
+    "created": "Groupe « {{name}} » créé",
+    "searchPlaceholder": "Rechercher des groupes ou des correspondances IdP",
+    "system": "Système",
+    "systemGroups": "Groupes système",
+    "customGroups": "Vos groupes",
+    "noDescription": "Aucune description",
+    "allUsers": "Tous les utilisateurs",
+    "memberCount": {
+      "one": "{{count}} membre",
+      "other": "{{count}} membres"
+    },
+    "shareCount": {
+      "one": "{{count}} partage",
+      "other": "{{count}} partages"
+    },
+    "empty": {
+      "title": "Aucun groupe pour l'instant",
+      "description": "Créez des groupes pour vos équipes, partagez des namespaces avec eux et associez-les à votre fournisseur d'identité pour que leurs membres restent synchronisés."
+    },
+    "back": "Tous les groupes",
+    "notFound": "Ce groupe n'existe plus.",
+    "membersGet": "Les membres obtiennent",
+    "edit": "Modifier",
+    "more": "Plus d'actions",
+    "delete": "Supprimer le groupe",
+    "deleteTitle": "Supprimer « {{name}} » ?",
+    "deleteDescription": "Les membres perdent le rôle et les accès que ce groupe leur accordait. Les ressources ne sont pas supprimées.",
+    "deleted": "Groupe supprimé",
+    "deleteError": "Impossible de supprimer le groupe",
+    "tabs": {
+      "members": "Membres",
+      "idp": "Fournisseur d'identité",
+      "access": "Accès"
+    },
+    "membersSummary": {
+      "one": "{{count}} membre, dont {{oidc}} synchronisé via SSO",
+      "other": "{{count}} membres, dont {{oidc}} synchronisé(s) via SSO"
+    },
+    "addMembers": "Ajouter des membres",
+    "addMembersTitle": "Ajouter des membres à {{name}}",
+    "addMembersDescription": "Les membres ajoutés ici restent dans le groupe même si le fournisseur d'identité ne l'envoie pas.",
+    "candidates": "Utilisateurs",
+    "addSelected": {
+      "one": "Ajouter {{count}} membre",
+      "other": "Ajouter {{count}} membres"
+    },
+    "membersAdded": {
+      "one": "1 membre ajouté",
+      "other": "{{count}} membres ajoutés"
+    },
+    "membersError": "Impossible de mettre à jour les membres",
+    "memberRemoved": "Membre retiré",
+    "removeMember": "Retirer {{name}} du groupe",
+    "noMembers": "Aucun membre pour l'instant",
+    "noMembersSso": "Les membres apparaîtront ici au fil de leurs connexions SSO, ou ajoutez-les manuellement.",
+    "noMembersManual": "Ajoutez des personnes manuellement, ou associez des groupes du fournisseur d'identité pour l'alimenter automatiquement.",
+    "oidcRemovalNote": "Les membres SSO sont retirés automatiquement lorsque le fournisseur d'identité cesse d'envoyer le groupe. Un retrait effectué ici ne dure que jusqu'à leur prochaine connexion.",
+    "everyoneMembersTitle": "Tous les utilisateurs sont membres",
+    "everyoneMembersDescription": "Utilisez ce groupe pour partager un namespace ou un serveur avec toute l'organisation, y compris les personnes qui la rejoindront plus tard.",
+    "everyoneNoMapping": "Tous les utilisateurs font déjà partie de « Tout le monde » : ce groupe ne peut donc pas être associé à des groupes du fournisseur d'identité.",
+    "mappingIntro": "Les valeurs sont comparées à la revendication « {{claim}} » du jeton d'ID à chaque connexion SSO.",
+    "examples": {
+      "exact": "nom de groupe exact",
+      "wildcard": "tous les sous-groupes Keycloak",
+      "guid": "ID d'objet du groupe Entra ID"
+    },
+    "oidcNotConfigured": "Aucun fournisseur OIDC n'est configuré : les correspondances s'appliqueront une fois l'authentification unique activée.",
+    "reset": "Réinitialiser",
+    "saveMappings": "Enregistrer les correspondances",
+    "mappingsSaved": "Correspondances enregistrées. Elles s'appliquent à la prochaine connexion de chaque utilisateur.",
+    "testerIntro": "Collez les groupes d'un utilisateur (un par ligne) pour vérifier s'il rejoindrait ce groupe.",
+    "saveBeforeTest": "Enregistrez vos modifications pour les tester.",
+    "testMatched": "Rejoindrait ce groupe (correspondance : {{values}}).",
+    "testNotMatched": "Ne rejoindrait pas ce groupe.",
+    "noShares": "Rien n'est partagé avec ce groupe",
+    "noSharesDescription": "Ouvrez un serveur MCP ou un namespace et utilisez Partager pour donner accès à ce groupe."
+  },
+  "roles": {
+    "title": "Rôles et permissions",
+    "description": "Choisissez ce que les éditeurs et les lecteurs sont autorisés à faire. Les administrateurs peuvent toujours tout faire.",
+    "matrixTitle": "Permissions",
+    "matrixDescription": "Les modifications s'appliquent immédiatement à tous les utilisateurs ayant ce rôle.",
+    "capability": "Permission",
+    "adminAlways": "Toujours autorisé pour les administrateurs",
+    "highRisk": "Risque élevé",
+    "sections": {
+      "servers": "Serveurs MCP",
+      "publishing": "Namespaces, endpoints et partage",
+      "usage": "Utilisation"
+    },
+    "capabilities": {
+      "mcp_servers.create": {
+        "label": "Ajouter des serveurs MCP distants",
+        "description": "Connecter des serveurs SSE et Streamable HTTP, et importer des configurations de serveurs."
+      },
+      "mcp_servers.create_stdio": {
+        "label": "Ajouter et modifier des serveurs STDIO",
+        "description": "Les serveurs STDIO exécutent une commande sur l'hôte MetaMCP : cela équivaut à un accès shell. Également nécessaire pour installer des serveurs depuis le registre."
+      },
+      "namespaces.create": {
+        "label": "Créer des namespaces",
+        "description": "Regrouper les serveurs MCP qu'ils peuvent utiliser dans leurs propres namespaces."
+      },
+      "endpoints.create": {
+        "label": "Créer des endpoints",
+        "description": "Publier les namespaces qu'ils gèrent sous forme d'endpoints MCP, SSE et OpenAPI (toujours authentifiés)."
+      },
+      "resources.share": {
+        "label": "Partager avec d'autres",
+        "description": "Partager ce qu'ils gèrent avec d'autres personnes, des groupes ou toute l'organisation."
+      },
+      "api_keys.create": {
+        "label": "Créer des clés API",
+        "description": "Clés personnelles utilisées par les clients MCP pour se connecter aux endpoints qu'ils peuvent utiliser."
+      },
+      "inspector.use": {
+        "label": "Utiliser l'inspecteur MCP",
+        "description": "Parcourir et appeler, depuis l'interface web, les outils des serveurs et namespaces partagés avec eux. Toute personne pouvant modifier un serveur ou un namespace peut toujours le tester."
+      }
+    },
+    "toggleLabel": "{{capability}} pour {{role}}",
+    "restoreDefaults": "Rétablir les valeurs par défaut",
+    "unsaved": "Vous avez des modifications non enregistrées.",
+    "discard": "Abandonner",
+    "save": "Enregistrer les modifications",
+    "saved": "Permissions enregistrées",
+    "saveError": "Impossible d'enregistrer les permissions",
+    "defaultRole": {
+      "title": "Rôle des nouveaux utilisateurs",
+      "description": "Attribué à chaque compte créé à partir de maintenant (inscription par e-mail, SSO ou création par un administrateur).",
+      "help": "Les groupes associés à votre fournisseur d'identité peuvent accorder un rôle plus élevé à la connexion."
+    },
+    "defaultRoleSaved": "Rôle par défaut mis à jour",
+    "adminOnly": {
+      "title": "Toujours réservé aux administrateurs",
+      "users": "Gestion des utilisateurs, des groupes, des rôles et de l'authentification unique",
+      "settings": "Paramètres du serveur et options d'inscription",
+      "logs": "Journaux en direct et journaux d'audit de tous les utilisateurs",
+      "organisation": "Ressources appartenant à l'organisation et clés API de l'organisation",
+      "openEndpoints": "Endpoints sans authentification",
+      "adminTools": "Outils d'administration MetaMCP sur les endpoints"
+    }
+  },
+  "sso": {
+    "title": "Authentification unique (SSO)",
+    "description": "Synchronisez les groupes et les rôles avec votre fournisseur d'identité (OIDC).",
+    "configured": "OIDC est configuré",
+    "providerId": "Fournisseur",
+    "notConfigured": "OIDC n'est pas configuré",
+    "notConfiguredHelp": "Définissez OIDC_CLIENT_ID, OIDC_CLIENT_SECRET et OIDC_DISCOVERY_URL pour activer l'authentification unique. Vous pouvez préparer les correspondances de groupes en attendant.",
+    "flow": {
+      "title": "Comment les rôles sont attribués",
+      "step1": "L'IdP envoie les groupes",
+      "step1Help": "Lus dans la revendication « {{claim}} » du jeton d'ID à chaque connexion.",
+      "step2": "Les groupes sont mis en correspondance",
+      "step2Help": "Chaque groupe MetaMCP liste les valeurs de l'IdP qu'il accepte.",
+      "step3": "Le rôle et les accès en découlent",
+      "step3Help": "Les utilisateurs obtiennent le rôle le plus élevé de leurs groupes et tout ce qui est partagé avec eux."
+    },
+    "settings": "Synchronisation",
+    "groupsClaim": "Revendication des groupes",
+    "groupsClaimHelp": "Généralement « groups ». Utilisez un chemin à points pour les revendications imbriquées, par ex. realm_access.roles (rôles Keycloak). Vérifiez que la revendication est bien ajoutée au jeton d'ID.",
+    "save": "Enregistrer",
+    "saved": "Paramètres enregistrés",
+    "saveError": "Impossible d'enregistrer les paramètres",
+    "syncGroups": "Synchroniser les appartenances aux groupes à chaque connexion",
+    "syncGroupsHelp": "Ajoute et retire les appartenances SSO pour s'aligner sur le fournisseur d'identité. Les membres ajoutés manuellement ne sont jamais retirés.",
+    "requireMatch": "N'autoriser que les utilisateurs des groupes associés",
+    "requireMatchHelp": "Refuse les connexions SSO dont les groupes ne correspondent à aucun groupe MetaMCP. Les comptes avec mot de passe ne sont pas concernés.",
+    "tester": {
+      "title": "Tester une correspondance",
+      "description": "Collez les groupes reçus par un utilisateur (un par ligne) pour prévisualiser les groupes et le rôle qu'il obtiendrait.",
+      "placeholder": "metamcp-admins\n/engineering/platform",
+      "run": "Tester",
+      "resultingRole": "Rôle obtenu par un nouvel utilisateur :",
+      "denied": "Cette connexion serait refusée (aucun groupe associé).",
+      "noMatch": "Aucun groupe MetaMCP ne correspond à ces valeurs."
+    },
+    "mappings": {
+      "title": "Correspondances",
+      "description": "Valeurs de groupes de l'IdP et groupes MetaMCP qu'elles alimentent.",
+      "manage": "Gérer les groupes",
+      "empty": "Aucun groupe n'est encore associé à votre fournisseur d'identité. Ouvrez un groupe et ajoutez des groupes de l'IdP dans son onglet Fournisseur d'identité."
+    }
+  },
+  "security": {
+    "title": "Chiffrement au repos",
+    "description": "Les identifiants enregistrés par MetaMCP sont chiffrés avec des clés de données, elles-mêmes protégées par une clé qui n'est jamais stockée en base de données.",
+    "source": {
+      "dedicated": {
+        "title": "Clé locale (SECRETS_ENCRYPTION_KEY)",
+        "description": "Les clés de données sont encapsulées par une clé dédiée fournie par l'environnement. Conservez-la dans votre gestionnaire de secrets : sans elle, les identifiants stockés sont illisibles."
+      },
+      "derived": {
+        "title": "Clé dérivée de BETTER_AUTH_SECRET",
+        "description": "Les secrets sont chiffrés, mais avec une clé dérivée de BETTER_AUTH_SECRET. Définissez une clé SECRETS_ENCRYPTION_KEY dédiée (ou utilisez OpenBao) pour pouvoir faire tourner ces deux secrets indépendamment.",
+        "exampleSecret": "BETTER_AUTH_SECRET a toujours sa valeur d'exemple publique : n'importe qui peut déchiffrer vos secrets. Donnez des valeurs aléatoires à BETTER_AUTH_SECRET et SECRETS_ENCRYPTION_KEY, puis redémarrez."
+      },
+      "openbao": {
+        "title": "OpenBao / Vault Transit",
+        "description": "Les clés de données sont encapsulées par une clé Transit qui ne quitte jamais OpenBao. MetaMCP ne l'appelle qu'au démarrage et lors des rotations : une panne d'OpenBao n'affecte pas les instances en cours d'exécution."
+      }
+    },
+    "details": {
+      "keyId": "Clé",
+      "address": "Adresse",
+      "namespace": "Namespace",
+      "transitKey": "Clé Transit",
+      "auth": "Authentification"
+    },
+    "encryptedTitle": "Chiffrés (AES-256-GCM)",
+    "encryptedList": "URL, arguments, valeurs d'environnement, en-têtes et jetons Bearer des serveurs MCP ; jetons OAuth et secrets client des serveurs amont ; jetons des fournisseurs d'identité.",
+    "hashedTitle": "Stockés sous forme d'empreintes (SHA-256)",
+    "hashedList": "Clés API, ainsi que les jetons d'accès, jetons de rafraîchissement, codes et secrets client OAuth de MetaMCP : ils ne sont affichés qu'une fois et ne peuvent jamais être relus.",
+    "plaintextPending": {
+      "one": "{{count}} valeur est encore stockée en clair ; elle sera chiffrée au prochain redémarrage.",
+      "other": "{{count}} valeurs sont encore stockées en clair ; elles seront chiffrées au prochain redémarrage."
+    },
+    "keysTitle": "Clés de données",
+    "state": {
+      "active": "Active",
+      "pending": "En attente",
+      "retired": "Retirée"
+    },
+    "createdAt": "Créée le {{time}}",
+    "activatesAt": "Active à partir du {{time}}",
+    "values": {
+      "one": "{{count}} valeur",
+      "other": "{{count}} valeurs"
+    },
+    "rotate": "Faire tourner la clé de données",
+    "rotateTitle": "Faire tourner la clé de données ?",
+    "rotateDescription": "Une nouvelle clé de données est créée. Elle devient active dans environ {{minutes}} min, une fois chargée par toutes les instances MetaMCP, puis tous les secrets stockés sont rechiffrés avec elle. Tout continue de fonctionner entre-temps.",
+    "rotateConfirm": "Faire tourner",
+    "rotated": "Nouvelle clé de données créée",
+    "rotatedDescription": "La clé {{key}} deviendra active le {{time}} ; les secrets seront alors rechiffrés.",
+    "rotateError": "La rotation de la clé de données a échoué"
+  },
+  "activity": {
+    "title": "Journal d'activité",
+    "description": "Qui a modifié les accès, la configuration et les ressources, ainsi que chaque connexion. Les entrées ne peuvent pas être modifiées.",
+    "descriptionRetention": "Qui a modifié les accès, la configuration et les ressources, ainsi que chaque connexion. Les entrées ne peuvent pas être modifiées et sont conservées {{days}} jours.",
+    "export": "Exporter en CSV",
+    "exportTruncated": "Seules les 10 000 entrées correspondantes les plus récentes ont été exportées.",
+    "exportError": "Impossible d'exporter le journal d'activité",
+    "searchPlaceholder": "Rechercher des personnes, cibles, adresses IP…",
+    "filters": {
+      "category": "Catégorie",
+      "allCategories": "Toutes les catégories",
+      "outcome": "Résultat",
+      "allOutcomes": "Tous les résultats",
+      "period": "Période"
+    },
+    "periods": {
+      "24h": "Dernières 24 heures",
+      "7d": "7 derniers jours",
+      "30d": "30 derniers jours",
+      "90d": "90 derniers jours",
+      "all": "Toute la période"
+    },
+    "categories": {
+      "auth": "Connexion",
+      "users": "Utilisateurs",
+      "groups": "Groupes",
+      "roles": "Rôles",
+      "sso": "Authentification unique",
+      "settings": "Paramètres",
+      "sharing": "Partage",
+      "resources": "Ressources",
+      "api_keys": "Clés API",
+      "security": "Sécurité"
+    },
+    "outcome": {
+      "success": "Réussi",
+      "denied": "Refusé",
+      "failure": "Échoué"
+    },
+    "actions": {
+      "auth": {
+        "sign_in": "Connexion réussie",
+        "sign_in_denied": "Connexion refusée"
+      },
+      "user": {
+        "created": "Utilisateur créé",
+        "provisioned": "Utilisateur créé via l'authentification unique",
+        "updated": "Utilisateur modifié",
+        "promoted": "Promu administrateur",
+        "password_reset": "Mot de passe réinitialisé",
+        "disabled": "Utilisateur désactivé",
+        "enabled": "Utilisateur activé",
+        "sessions_revoked": "Sessions révoquées",
+        "deleted": "Utilisateur supprimé"
+      },
+      "group": {
+        "created": "Groupe créé",
+        "updated": "Groupe modifié",
+        "deleted": "Groupe supprimé",
+        "members_added": "Membres ajoutés",
+        "member_removed": "Membre retiré",
+        "memberships_synced": "Groupes synchronisés depuis le fournisseur d'identité"
+      },
+      "roles": {
+        "permissions_updated": "Permissions des rôles modifiées"
+      },
+      "sso": {
+        "settings_updated": "Paramètres d'authentification unique modifiés"
+      },
+      "settings": {
+        "updated": "Paramètre modifié"
+      },
+      "share": {
+        "granted": "Accès accordé",
+        "revoked": "Accès retiré"
+      },
+      "mcp_server": {
+        "created": "Serveur MCP ajouté",
+        "updated": "Serveur MCP modifié",
+        "deleted": "Serveur MCP supprimé"
+      },
+      "namespace": {
+        "created": "Namespace créé",
+        "updated": "Namespace modifié",
+        "deleted": "Namespace supprimé"
+      },
+      "endpoint": {
+        "created": "Endpoint créé",
+        "updated": "Endpoint modifié",
+        "deleted": "Endpoint supprimé"
+      },
+      "api_key": {
+        "created": "Clé API créée",
+        "updated": "Clé API modifiée",
+        "deleted": "Clé API supprimée"
+      },
+      "secrets": {
+        "data_key_rotated": "Rotation de la clé de données",
+        "data_key_rewrapped": "Clé de données réencapsulée"
+      }
+    },
+    "system": {
+      "default": "MetaMCP",
+      "Signin": "Connexion",
+      "SSOgroupsync": "Synchronisation SSO des groupes",
+      "SSOprovisioning": "Provisionnement SSO",
+      "ADMINEMAILS": "ADMIN_EMAILS",
+      "Startup": "Démarrage",
+      "Test": "Test"
+    },
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "showing": "{{shown}} sur {{total}} entrées",
+    "loadMore": "Charger plus",
+    "sheetDescription": "Enregistré par MetaMCP. Les valeurs secrètes ne sont jamais conservées dans le journal d'activité.",
+    "fields": {
+      "time": "Date",
+      "actor": "Par",
+      "actorId": "ID utilisateur",
+      "action": "Action",
+      "category": "Catégorie",
+      "outcome": "Résultat",
+      "target": "Cible",
+      "targetType": "Type de cible",
+      "targetId": "ID de la cible",
+      "ipAddress": "Adresse IP",
+      "userAgent": "Agent utilisateur",
+      "details": "Détails"
+    },
+    "empty": {
+      "title": "Aucune activité",
+      "description": "Aucune entrée ne correspond encore à ces filtres. Les modifications des utilisateurs, groupes, rôles, partages, ressources et paramètres apparaissent ici, ainsi que les connexions."
+    }
+  }
+}

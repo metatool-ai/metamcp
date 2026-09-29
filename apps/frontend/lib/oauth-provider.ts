@@ -32,7 +32,11 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   private mcpServerUuid: string;
   protected serverUrl: string;
 
-  constructor(mcpServerUuid: string, serverUrl: string) {
+  constructor(
+    mcpServerUuid: string,
+    serverUrl: string,
+    private readonly confirmRedirect?: (authorizationUrl: URL) => boolean,
+  ) {
     this.mcpServerUuid = mcpServerUuid;
     this.serverUrl = serverUrl;
     // No sessionStorage access here: the constructor runs during Next.js SSR
@@ -186,6 +190,11 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   }
 
   redirectToAuthorization(authorizationUrl: URL) {
+    // The address comes from metadata served by the upstream server: the
+    // user sees where they are sent before leaving the page.
+    if (this.confirmRedirect && !this.confirmRedirect(authorizationUrl)) {
+      throw new Error("Authorization cancelled");
+    }
     this.ensureServerUrlStored();
     window.location.href = authorizationUrl.href;
   }
@@ -333,8 +342,9 @@ export class DebugDbOAuthClientProvider extends DbOAuthClientProvider {
 export function createAuthProvider(
   mcpServerUuid: string,
   serverUrl: string,
+  confirmRedirect?: (authorizationUrl: URL) => boolean,
 ): DbOAuthClientProvider {
-  return new DbOAuthClientProvider(mcpServerUuid, serverUrl);
+  return new DbOAuthClientProvider(mcpServerUuid, serverUrl, confirmRedirect);
 }
 
 // Factory function to create a debug OAuth provider for a specific MCP server

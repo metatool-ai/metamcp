@@ -11,19 +11,65 @@ import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 import { rateLimitMiddleware } from "@/middleware/rate-limit.middleware";
 import logger from "@/utils/logger";
 
+import {
+  bindMcpSession,
+  isMcpSessionOwner,
+  sessionsOfCaller,
+  unbindMcpSession,
+} from "../../lib/access/mcp-session-binding";
 import { buildAdminToolsOptions } from "../../lib/admin-mcp/build-admin-tools-options";
+import { publicErrorMessage } from "../../lib/errors";
 import { extractClientHeaders } from "../../lib/metamcp/header-forwarding";
 import { MetaMCPHandlerContext } from "../../lib/metamcp/metamcp-middleware/functional-middleware";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
-import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
+import {
+  nonNegativeIntFromEnv,
+  SessionLifetimeManagerImpl,
+} from "../../lib/session-lifetime-manager";
 
 const streamableHttpRouter = express.Router();
+
+// Streamable HTTP sessions outlive the requests that use them, and most MCP
+// clients never send DELETE when they exit: without an idle timeout and a
+// per-client cap, abandoned sessions (and their MetaMCP server instances)
+// would pile up for the life of the process.
+const SESSION_IDLE_TIMEOUT_MS = nonNegativeIntFromEnv(
+  process.env.SESSION_IDLE_TIMEOUT,
+  24 * 60 * 60 * 1000,
+);
+const MAX_SESSIONS_PER_CLIENT = nonNegativeIntFromEnv(
+  process.env.MAX_SESSIONS_PER_CLIENT,
+  100,
+);
 
 // Session lifetime manager for StreamableHTTP sessions
 const sessionManager =
   new SessionLifetimeManagerImpl<StreamableHTTPServerTransport>(
     "StreamableHTTP",
+    { idleTimeoutMs: SESSION_IDLE_TIMEOUT_MS },
   );
+
+/**
+ * Makes room for a new session of the caller when it reached
+ * MAX_SESSIONS_PER_CLIENT, by closing its least recently used idle session.
+ * False when every session of the caller is busy.
+ */
+async function reserveSessionSlot(
+  req: ApiKeyAuthenticatedRequest,
+): Promise<boolean> {
+  if (MAX_SESSIONS_PER_CLIENT === 0) return true;
+  const owned = sessionsOfCaller(req);
+  if (owned.length < MAX_SESSIONS_PER_CLIENT) return true;
+  const victim = sessionManager.leastRecentlyUsed(owned);
+  if (!victim) return false;
+  logger.info(
+    `Session cap (${MAX_SESSIONS_PER_CLIENT}) reached for a client of endpoint ${req.endpointName}, closing its least recently used session ${victim}`,
+  );
+  await cleanupSession(victim).catch((error) => {
+    logger.error(`Error closing session ${victim}:`, error);
+  });
+  return true;
+}
 
 function getRequestContext(
   req: ApiKeyAuthenticatedRequest,
@@ -62,6 +108,9 @@ function getSafeHeaders(req: express.Request): Record<string, unknown> {
   if (headers["x-api-key"]) {
     headers["x-api-key"] = "<redacted>";
   }
+  if (headers.cookie) {
+    headers.cookie = "<redacted>";
+  }
   return headers;
 }
 
@@ -86,6 +135,7 @@ const cleanupSession = async (
 
     // Remove from session manager
     sessionManager.removeSession(sessionId);
+    unbindMcpSession(sessionId);
 
     // Clean up MetaMCP server pool session
     await metaMcpServerPool.cleanupSession(sessionId);
@@ -95,6 +145,7 @@ const cleanupSession = async (
     logger.error(`Error during cleanup of session ${sessionId}:`, error);
     // Even if cleanup fails, remove the session from manager to prevent memory leaks
     sessionManager.removeSession(sessionId);
+    unbindMcpSession(sessionId);
     logger.info(`Removed orphaned session ${sessionId} due to cleanup error`);
     throw error;
   }
@@ -105,13 +156,16 @@ streamableHttpRouter.get("/health/sessions", (req, res) => {
   const sessionIds = sessionManager.getSessionIds();
   const poolStatus = metaMcpServerPool.getPoolStatus();
 
+  // Unauthenticated: expose counts only, never session ids.
   res.json({
     timestamp: new Date().toISOString(),
     streamableHttpSessions: {
       count: sessionIds.length,
-      sessionIds: sessionIds,
     },
-    metaMcpPoolStatus: poolStatus,
+    metaMcpPoolStatus: {
+      idle: poolStatus.idle,
+      active: poolStatus.active,
+    },
     totalActiveSessions: sessionIds.length + poolStatus.active,
   });
 });
@@ -132,15 +186,18 @@ streamableHttpRouter.get(
 
     try {
       logger.info(`Looking up existing session: ${sessionId}`);
-      logger.info(`Available sessions:`, sessionManager.getSessionIds());
 
       const transport = sessionManager.getSession(sessionId);
-      if (!transport) {
-        logger.info(`Session ${sessionId} not found in session manager`);
+      if (
+        !transport ||
+        !isMcpSessionOwner(sessionId, req as ApiKeyAuthenticatedRequest)
+      ) {
+        logger.info(`Session ${sessionId} not found for this caller`);
         res.status(404).end("Session not found");
         return;
       } else {
         logger.info(`Found session ${sessionId}, handling request`);
+        sessionManager.trackRequest(sessionId, res);
         normalizeStreamableHttpAcceptHeader(req);
         await transport.handleRequest(req, res);
       }
@@ -180,14 +237,29 @@ streamableHttpRouter.post(
           `New public endpoint StreamableHttp connection request for ${endpointName} -> namespace ${namespaceUuid}`,
         );
 
+        if (!(await reserveSessionSlot(authReq))) {
+          res.status(429).json({
+            error: "too_many_sessions",
+            message:
+              "Too many open MCP sessions for this client. Close unused sessions (DELETE) and retry.",
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
+
         // Generate session ID upfront
         const newSessionId = randomUUID();
         logger.info(
           `Generated new session ID: ${newSessionId} for endpoint: ${endpointName}`,
         );
 
-        // Extract client request headers for per-server header forwarding
-        const clientRequestHeaders = extractClientHeaders(req.headers);
+        // Extract client request headers for per-server header forwarding,
+        // minus the MetaMCP credentials used to authenticate this request
+        const clientRequestHeaders = extractClientHeaders(req.headers, {
+          withoutCredentials:
+            authReq.endpoint.enable_api_key_auth ||
+            authReq.endpoint.enable_oauth,
+        });
 
         const adminTools = await buildAdminToolsOptions(
           authReq.endpoint,
@@ -234,8 +306,10 @@ streamableHttpRouter.post(
           `Session ${newSessionId} will be cleaned up when DELETE request is received`,
         );
 
-        // Store transport reference
+        // Store transport reference, bound to this endpoint + caller
         sessionManager.addSession(newSessionId, transport);
+        bindMcpSession(newSessionId, authReq);
+        sessionManager.trackRequest(newSessionId, res);
 
         logger.info(
           `Public Endpoint Client <-> Proxy sessionId: ${newSessionId} for endpoint ${endpointName} -> namespace ${namespaceUuid}`,
@@ -257,8 +331,7 @@ streamableHttpRouter.post(
         logger.error("Error in public endpoint /mcp POST route:", error);
 
         // Provide more detailed error information
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
+        const errorMessage = publicErrorMessage(error, "Unknown error");
         res.status(500).json({
           error: "Internal server error",
           message: errorMessage,
@@ -270,26 +343,19 @@ streamableHttpRouter.post(
       // logger.info(
       //   `Received POST message for public endpoint ${endpointName} -> namespace ${namespaceUuid} sessionId ${sessionId}`,
       // );
-      logger.info(`Available session IDs:`, sessionManager.getSessionIds());
       logger.info(`Looking for sessionId: ${sessionId}`);
       try {
-        logger.info(`Looking up existing session: ${sessionId}`);
-        logger.info(`Available sessions:`, sessionManager.getSessionIds());
-
         const transport = sessionManager.getSession(sessionId);
-        if (!transport) {
-          logger.error(
-            `Transport not found for sessionId ${sessionId}. Available sessions:`,
-            sessionManager.getSessionIds(),
-          );
+        if (!transport || !isMcpSessionOwner(sessionId, authReq)) {
+          logger.error(`Transport not found for sessionId ${sessionId}`);
           res.status(404).json({
             error: "Session not found",
             message: `Transport not found for sessionId ${sessionId}`,
-            available_sessions: sessionManager.getSessionIds(),
             timestamp: new Date().toISOString(),
           });
         } else {
           logger.info(`Found session ${sessionId}, handling request`);
+          sessionManager.trackRequest(sessionId, res);
           normalizeStreamableHttpAcceptHeader(req);
           res.type("application/json");
           await transport.handleRequest(req, res);
@@ -297,8 +363,7 @@ streamableHttpRouter.post(
       } catch (error) {
         logger.error("Error in public endpoint /mcp route:", error);
 
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
+        const errorMessage = publicErrorMessage(error, "Unknown error");
         res.status(500).json({
           error: "Internal server error",
           message: errorMessage,
@@ -326,33 +391,31 @@ streamableHttpRouter.delete(
     );
 
     if (sessionId) {
+      if (!isMcpSessionOwner(sessionId, authReq)) {
+        res.status(404).json({
+          error: "Session not found",
+          message: `Transport not found for sessionId ${sessionId}`,
+        });
+        return;
+      }
       try {
         logger.info(`Starting cleanup for session ${sessionId}`);
-        logger.info(
-          `Available sessions before cleanup:`,
-          sessionManager.getSessionIds(),
-        );
 
         await cleanupSession(sessionId);
 
         logger.info(
           `Public endpoint session ${sessionId} cleaned up successfully`,
         );
-        logger.info(
-          `Available sessions after cleanup:`,
-          sessionManager.getSessionIds(),
-        );
 
         res.status(200).json({
           message: "Session cleaned up successfully",
           sessionId: sessionId,
-          remainingSessions: sessionManager.getSessionIds(),
         });
       } catch (error) {
         logger.error("Error in public endpoint /mcp DELETE route:", error);
         res.status(500).json({
           error: "Cleanup failed",
-          message: error instanceof Error ? error.message : "Unknown error",
+          message: publicErrorMessage(error, "Unknown error"),
           sessionId: sessionId,
         });
       }

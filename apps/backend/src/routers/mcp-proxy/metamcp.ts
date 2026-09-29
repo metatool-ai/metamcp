@@ -3,10 +3,20 @@ import { randomUUID } from "node:crypto";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { AccessPrincipal } from "@repo/zod-types";
 import express from "express";
 
 import logger from "@/utils/logger";
 
+import { namespacesRepository } from "../../db/repositories";
+import { accessService } from "../../lib/access/access.service";
+import { canInspect } from "../../lib/access/policy";
+import {
+  forgetProxySession,
+  recordProxySessionOwner,
+  requireProxySessionOwner,
+} from "../../lib/access/proxy-session-owners";
+import { hasLevel } from "../../lib/access/resource-guards";
 import { createServer } from "../../lib/metamcp/index";
 import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
@@ -15,6 +25,69 @@ const metamcpRouter = express.Router();
 
 // Apply better auth middleware to all metamcp routes
 metamcpRouter.use(betterAuthMcpMiddleware);
+// Inspector sessions can only be driven by the user who opened them
+metamcpRouter.use(requireProxySessionOwner);
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requestUserId(req: express.Request): string {
+  return (req as express.Request & { principal: AccessPrincipal }).principal
+    .userId;
+}
+
+// Inspecting a namespace requires "use" on it (plus the inspector permission
+// unless the caller can edit it); seeing its inactive servers (namespace tool
+// management) requires "edit".
+metamcpRouter.use("/:uuid", async (req, res, next) => {
+  const namespaceUuid = req.params.uuid;
+  if (!UUID_PATTERN.test(namespaceUuid)) {
+    next();
+    return;
+  }
+  try {
+    const principal = (req as express.Request & { principal?: AccessPrincipal })
+      .principal;
+    const namespace = principal
+      ? await namespacesRepository.findByUuid(namespaceUuid)
+      : undefined;
+    const access =
+      principal && namespace
+        ? await accessService.resolveAccessOne(
+            principal,
+            "namespace",
+            namespace,
+          )
+        : null;
+    if (!principal || !access) {
+      res.status(404).json({ error: "Namespace not found" });
+      return;
+    }
+    // Namespace editors can always test it; for a namespace only shared for
+    // use, calling its tools from the web UI (outside audited endpoints)
+    // requires the inspector permission.
+    if (!canInspect(principal, access)) {
+      res.status(403).json({
+        error:
+          "Access denied: your role does not allow using the MCP inspector.",
+      });
+      return;
+    }
+    if (
+      req.query.includeInactiveServers === "true" &&
+      !hasLevel(access, "edit")
+    ) {
+      res.status(403).json({
+        error: "Access denied: you need edit access to see inactive servers",
+      });
+      return;
+    }
+    next();
+  } catch (error) {
+    logger.error("Error checking namespace access:", error);
+    res.status(500).json({ error: "Failed to check namespace access" });
+  }
+});
 
 const webAppTransports: Map<string, Transport> = new Map<string, Transport>(); // Web app transports by sessionId
 const metamcpServers: Map<
@@ -59,6 +132,7 @@ const cleanupSession = async (sessionId: string) => {
 
   // Clean up session connections
   await mcpServerPool.cleanupSession(sessionId);
+  forgetProxySession(sessionId);
 };
 
 metamcpRouter.get("/:uuid/mcp", async (req, res) => {
@@ -119,6 +193,9 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
 
             webAppTransports.set(newSessionId, webAppTransport);
             metamcpServers.set(newSessionId, mcpServerInstance);
+            recordProxySessionOwner(newSessionId, requestUserId(req), () =>
+              cleanupSession(newSessionId),
+            );
 
             logger.info(
               `MetaMCP Client <-> Proxy sessionId: ${newSessionId} for namespace ${namespaceUuid}`,
@@ -220,6 +297,9 @@ metamcpRouter.get("/:uuid/sse", async (req, res) => {
 
     webAppTransports.set(sessionId, webAppTransport);
     metamcpServers.set(sessionId, mcpServerInstance);
+    recordProxySessionOwner(sessionId, requestUserId(req), () =>
+      cleanupSession(sessionId),
+    );
 
     // Handle cleanup when connection closes
     res.on("close", async () => {

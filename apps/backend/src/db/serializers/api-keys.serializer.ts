@@ -2,43 +2,27 @@ export class ApiKeysSerializer {
   static serializeApiKey(dbApiKey: {
     uuid: string;
     name: string;
-    key: string;
+    key_preview: string;
     created_at: Date;
     is_active: boolean;
+    scope: "user" | "endpoints";
   }) {
     return {
       uuid: dbApiKey.uuid,
       name: dbApiKey.name,
-      key: dbApiKey.key,
+      key_preview: dbApiKey.key_preview,
       created_at: dbApiKey.created_at,
       is_active: dbApiKey.is_active,
+      scope: dbApiKey.scope,
     };
   }
 
-  static serializeApiKeyList(
-    dbApiKeys: Array<{
-      uuid: string;
-      name: string;
-      key: string;
-      created_at: Date;
-      is_active: boolean;
-      user_id: string | null;
-    }>,
-  ) {
-    return dbApiKeys.map((apiKey) => ({
-      uuid: apiKey.uuid,
-      name: apiKey.name,
-      key: apiKey.key,
-      created_at: apiKey.created_at,
-      is_active: apiKey.is_active,
-      user_id: apiKey.user_id,
-    }));
-  }
-
+  /** The only response that carries the full key. */
   static serializeCreateApiKeyResponse(dbApiKey: {
     uuid: string;
     name: string;
     key: string;
+    key_preview: string;
     user_id: string | null;
     created_at: Date;
   }) {
@@ -46,6 +30,7 @@ export class ApiKeysSerializer {
       uuid: dbApiKey.uuid,
       name: dbApiKey.name,
       key: dbApiKey.key,
+      key_preview: dbApiKey.key_preview,
       created_at: dbApiKey.created_at,
     };
   }

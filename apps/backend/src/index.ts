@@ -1,7 +1,16 @@
 import express from "express";
 
 import { auth } from "./auth";
+import { runWithAuthRequestContext } from "./lib/access/auth-request-context";
+import { activityLog } from "./lib/activity/activity-log.service";
+import {
+  clientAddress,
+  requestContextMiddleware,
+  trustProxySetting,
+} from "./lib/request-context";
+import { secretsService } from "./lib/secrets/secrets.service";
 import { initializeIdleServers, initializeOnStartup } from "./lib/startup";
+import { assertSecureConfiguration } from "./lib/startup-checks";
 import mcpProxyRouter from "./routers/mcp-proxy";
 import oauthRouter from "./routers/oauth";
 import publicEndpointsRouter from "./routers/public-metamcp";
@@ -10,13 +19,27 @@ import logger from "./utils/logger";
 
 const app = express();
 
-// Global JSON middleware for non-proxy routes
+// Which proxies may report the client address (X-Forwarded-For) and the
+// public protocol / host: rate limiting and the activity log rely on it.
+app.set("trust proxy", trustProxySetting(process.env.TRUST_PROXY));
+app.disable("x-powered-by");
+
+// Client address / user agent for the activity log
+app.use(requestContextMiddleware);
+
+// Global JSON middleware for non-proxy routes. Bodies are parsed before any
+// authentication, so the limit stays small: 5 MB for the web app's API
+// (tool definitions, bulk imports), 1 MB elsewhere (auth, OAuth).
+const trpcJson = express.json({ limit: "5mb" });
+const defaultJson = express.json({ limit: "1mb" });
 app.use((req, res, next) => {
   if (req.path.startsWith("/mcp-proxy/") || req.path.startsWith("/metamcp/")) {
     // Skip JSON parsing for all MCP proxy routes and public endpoints to allow raw stream access
     next();
+  } else if (req.path.startsWith("/trpc/")) {
+    trpcJson(req, res, next);
   } else {
-    express.json({ limit: "50mb" })(req, res, next);
+    defaultJson(req, res, next);
   }
 });
 
@@ -37,6 +60,15 @@ app.use(async (req, res, next) => {
           headers.set(key, Array.isArray(value) ? value[0] : value);
         }
       });
+      // better-auth keys its sign-in rate limits on X-Forwarded-For. The
+      // incoming header may be client-supplied (Next.js passes it through
+      // untouched), so hand over the address resolved from trusted proxies.
+      const address = clientAddress(req);
+      if (address) {
+        headers.set("x-forwarded-for", address);
+      } else {
+        headers.delete("x-forwarded-for");
+      }
 
       // Create Request object
       const request = new Request(url.toString(), {
@@ -48,26 +80,33 @@ app.use(async (req, res, next) => {
             : undefined,
       });
 
-      // Call better-auth directly
-      const response = await auth.handler(request);
+      // Call better-auth directly. The request context lets OIDC profile
+      // mapping hand the groups claim over to the RBAC database hooks.
+      const response = await runWithAuthRequestContext({}, () =>
+        auth.handler(request),
+      );
 
       // Convert Response back to Express response
       res.status(response.status);
 
-      // Copy headers
+      // Copy headers. Set-Cookie can repeat (session token, cached session
+      // data...): setting it once per value would keep only the last cookie.
       response.headers.forEach((value, key) => {
-        res.setHeader(key, value);
+        if (key.toLowerCase() !== "set-cookie") {
+          res.setHeader(key, value);
+        }
       });
+      const cookies = response.headers.getSetCookie();
+      if (cookies.length > 0) {
+        res.setHeader("set-cookie", cookies);
+      }
 
       // Send body
       const body = await response.text();
       res.send(body);
     } catch (error) {
       logger.error("Auth route error:", error);
-      res.status(500).json({
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error),
-      });
+      res.status(500).json({ error: "Internal server error" });
     }
     return;
   }
@@ -84,10 +123,35 @@ app.use("/mcp-proxy", mcpProxyRouter);
 app.use("/trpc", trpcRouter);
 
 async function start(): Promise<void> {
+  // Placeholder secrets from the example configuration: refuse production
+  assertSecureConfiguration();
+
+  // Encryption keys must be loaded before anything reads or writes secrets.
+  // Without them stored credentials are unusable, so refuse to start.
+  try {
+    await secretsService.initialize();
+  } catch (error) {
+    console.error(
+      "❌ Cannot load the keys protecting stored secrets:",
+      error instanceof Error ? error.message : error,
+    );
+    // eslint-disable-next-line no-process-exit -- intentional: serving without decryption keys would break every stored credential
+    process.exit(1);
+  }
+
   // Startup initialization (must run after DB is reachable/migrations are applied, and before listening)
   await initializeOnStartup();
 
-  app.listen(12009, async () => {
+  // Activity log retention (ACTIVITY_LOG_RETENTION_DAYS, default 365 days)
+  activityLog.startRetention();
+
+  app.listen(12009, async (error?: Error) => {
+    // Express 5 reports listen failures (port in use...) here
+    if (error) {
+      console.error("❌ Cannot listen on port 12009:", error.message);
+      // eslint-disable-next-line no-process-exit -- intentional: a backend that does not listen must not keep running
+      process.exit(1);
+    }
     console.log(`Server is running on port 12009`);
     console.log(`Auth routes available at: http://localhost:12009/api/auth`);
     console.log(
@@ -110,8 +174,12 @@ async function start(): Promise<void> {
 }
 
 start().catch((err) => {
+  // Recoverable problems are handled (and logged) inside start(); what gets
+  // here (e.g. BOOTSTRAP_FAIL_HARD) must stop the process instead of leaving
+  // it running without listening.
   console.error("❌ Fatal startup error:", err);
-  // Do not throw - keep consistent with other startup behavior
+  // eslint-disable-next-line no-process-exit -- intentional: fail fast so the orchestrator restarts or reports the service
+  process.exit(1);
 });
 
 // Graceful shutdown: clean up MCP server pools on SIGTERM/SIGINT

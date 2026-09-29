@@ -31,6 +31,12 @@ export async function buildAdminToolsOptions(
     return undefined;
   }
 
+  // Endpoint-scoped keys are for using the endpoint's MCP servers only,
+  // never for administering MetaMCP.
+  if (authReq.apiKeyScope === "endpoints") {
+    return undefined;
+  }
+
   const userId = await resolveAdminUserIdFromRequest(
     authReq,
     extractAuthToken(authReq),

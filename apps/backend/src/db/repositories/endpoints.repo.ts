@@ -4,10 +4,11 @@ import {
   EndpointCreateInput,
   EndpointUpdateInput,
 } from "@repo/zod-types";
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 
 import { db } from "../index";
 import { endpointsTable, namespacesTable } from "../schema";
+import type { AccessibleFilter } from "./access-filter";
 
 export class EndpointsRepository {
   async create(input: EndpointCreateInput): Promise<DatabaseEndpoint> {
@@ -68,8 +69,29 @@ export class EndpointsRepository {
       .orderBy(desc(endpointsTable.created_at));
   }
 
-  // Find endpoints accessible to a specific user (public + user's own endpoints)
-  async findAllAccessibleToUser(userId: string): Promise<DatabaseEndpoint[]> {
+  /**
+   * Endpoints a principal can see: their own endpoints and every endpoint of a
+   * namespace they can access (owned or shared). `namespaceFilter` is the
+   * principal's namespace access filter.
+   */
+  async findAllWithNamespacesByAccess(
+    namespaceFilter: AccessibleFilter,
+  ): Promise<DatabaseEndpointWithNamespace[]> {
+    const where = namespaceFilter.all
+      ? undefined
+      : or(
+          eq(endpointsTable.user_id, namespaceFilter.ownerId),
+          eq(namespacesTable.user_id, namespaceFilter.ownerId),
+          ...(namespaceFilter.sharedUuids.length > 0
+            ? [
+                inArray(
+                  endpointsTable.namespace_uuid,
+                  namespaceFilter.sharedUuids,
+                ),
+              ]
+            : []),
+        );
+
     return await db
       .select({
         uuid: endpointsTable.uuid,
@@ -92,45 +114,6 @@ export class EndpointsRepository {
         created_at: endpointsTable.created_at,
         updated_at: endpointsTable.updated_at,
         user_id: endpointsTable.user_id,
-      })
-      .from(endpointsTable)
-      .where(
-        or(
-          isNull(endpointsTable.user_id), // Public endpoints
-          eq(endpointsTable.user_id, userId), // User's own endpoints
-        ),
-      )
-      .orderBy(desc(endpointsTable.created_at));
-  }
-
-  // Find endpoints accessible to a specific user with namespace data (public + user's own endpoints)
-  async findAllAccessibleToUserWithNamespaces(
-    userId: string,
-  ): Promise<DatabaseEndpointWithNamespace[]> {
-    const endpointsData = await db
-      .select({
-        // Endpoint fields
-        uuid: endpointsTable.uuid,
-        name: endpointsTable.name,
-        description: endpointsTable.description,
-        namespace_uuid: endpointsTable.namespace_uuid,
-        enable_api_key_auth: endpointsTable.enable_api_key_auth,
-        enable_oauth: endpointsTable.enable_oauth,
-        enable_max_rate: endpointsTable.enable_max_rate,
-        enable_client_max_rate: endpointsTable.enable_client_max_rate,
-        max_rate: endpointsTable.max_rate,
-        client_max_rate: endpointsTable.client_max_rate,
-        max_rate_seconds: endpointsTable.max_rate_seconds,
-        client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
-        client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key:
-          endpointsTable.client_max_rate_strategy_key,
-        use_query_param_auth: endpointsTable.use_query_param_auth,
-        enable_metamcp_admin_tools: endpointsTable.enable_metamcp_admin_tools,
-        created_at: endpointsTable.created_at,
-        updated_at: endpointsTable.updated_at,
-        user_id: endpointsTable.user_id,
-        // Namespace fields
         namespace: {
           uuid: namespacesTable.uuid,
           name: namespacesTable.name,
@@ -145,44 +128,17 @@ export class EndpointsRepository {
         namespacesTable,
         eq(endpointsTable.namespace_uuid, namespacesTable.uuid),
       )
-      .where(
-        or(
-          isNull(endpointsTable.user_id), // Public endpoints
-          eq(endpointsTable.user_id, userId), // User's own endpoints
-        ),
-      )
+      .where(where)
       .orderBy(desc(endpointsTable.created_at));
-
-    return endpointsData;
   }
 
-  // Find only public endpoints (no user ownership)
-  async findPublicEndpoints(): Promise<DatabaseEndpoint[]> {
+  async findByNamespaceUuid(
+    namespaceUuid: string,
+  ): Promise<DatabaseEndpoint[]> {
     return await db
-      .select({
-        uuid: endpointsTable.uuid,
-        name: endpointsTable.name,
-        description: endpointsTable.description,
-        namespace_uuid: endpointsTable.namespace_uuid,
-        enable_api_key_auth: endpointsTable.enable_api_key_auth,
-        enable_oauth: endpointsTable.enable_oauth,
-        enable_max_rate: endpointsTable.enable_max_rate,
-        enable_client_max_rate: endpointsTable.enable_client_max_rate,
-        max_rate: endpointsTable.max_rate,
-        client_max_rate: endpointsTable.client_max_rate,
-        max_rate_seconds: endpointsTable.max_rate_seconds,
-        client_max_rate_seconds: endpointsTable.client_max_rate_seconds,
-        client_max_rate_strategy: endpointsTable.client_max_rate_strategy,
-        client_max_rate_strategy_key:
-          endpointsTable.client_max_rate_strategy_key,
-        use_query_param_auth: endpointsTable.use_query_param_auth,
-        enable_metamcp_admin_tools: endpointsTable.enable_metamcp_admin_tools,
-        created_at: endpointsTable.created_at,
-        updated_at: endpointsTable.updated_at,
-        user_id: endpointsTable.user_id,
-      })
+      .select()
       .from(endpointsTable)
-      .where(isNull(endpointsTable.user_id))
+      .where(eq(endpointsTable.namespace_uuid, namespaceUuid))
       .orderBy(desc(endpointsTable.created_at));
   }
 
@@ -214,6 +170,32 @@ export class EndpointsRepository {
       .from(endpointsTable)
       .where(eq(endpointsTable.user_id, userId))
       .orderBy(desc(endpointsTable.created_at));
+  }
+
+  /** Endpoints with the uuid and owner of their namespace (access checks). */
+  async findByUuidsWithNamespaceOwner(uuids: string[]): Promise<
+    Array<{
+      uuid: string;
+      name: string;
+      namespace: { uuid: string; user_id: string | null };
+    }>
+  > {
+    if (uuids.length === 0) return [];
+    return await db
+      .select({
+        uuid: endpointsTable.uuid,
+        name: endpointsTable.name,
+        namespace: {
+          uuid: namespacesTable.uuid,
+          user_id: namespacesTable.user_id,
+        },
+      })
+      .from(endpointsTable)
+      .innerJoin(
+        namespacesTable,
+        eq(endpointsTable.namespace_uuid, namespacesTable.uuid),
+      )
+      .where(inArray(endpointsTable.uuid, uuids));
   }
 
   async findAllWithNamespaces(): Promise<DatabaseEndpointWithNamespace[]> {

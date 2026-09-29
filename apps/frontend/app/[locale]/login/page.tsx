@@ -13,6 +13,22 @@ import { useTranslations } from "@/hooks/useTranslations";
 import { authClient } from "@/lib/auth-client";
 import { vanillaTrpcClient } from "@/lib/trpc";
 
+// Codes a failed SSO callback redirects back with (`/login?error=<code>`).
+const KNOWN_LOGIN_ERRORS = new Set([
+  "account_disabled",
+  "sso_no_matching_group",
+  "sso_signup_disabled",
+]);
+const LOGIN_ERROR_ALIASES: Record<string, string> = {
+  // better-auth's own code when sign-up through the provider is disabled
+  signup_disabled: "sso_signup_disabled",
+};
+
+/** A local path to go to after signing in (never another site). */
+function safeCallbackUrl(value: string | null): string {
+  return value && /^\/(?![/\\])/.test(value) ? value : "/";
+}
+
 function LoginForm() {
   const { t } = useTranslations();
   const [email, setEmail] = useState("");
@@ -27,7 +43,16 @@ function LoginForm() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
+  const errorParam = searchParams.get("error");
+  const errorCode = errorParam
+    ? (LOGIN_ERROR_ALIASES[errorParam] ?? errorParam)
+    : null;
+  const isKnownError = errorCode ? KNOWN_LOGIN_ERRORS.has(errorCode) : false;
+  // The code comes from the URL: only echo it back when it looks like one,
+  // so a crafted link cannot display arbitrary text on the login page.
+  const showErrorCode =
+    !isKnownError && errorCode !== null && /^[\w'-]{1,64}$/.test(errorCode);
 
   // Check if signup is disabled
   useEffect(() => {
@@ -129,10 +154,26 @@ function LoginForm() {
         </p>
       </div>
 
-      {error && (
+      {error ? (
         <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
           {error}
         </div>
+      ) : (
+        errorCode && (
+          <div
+            role="alert"
+            className="space-y-1 rounded-md bg-destructive/15 p-3 text-sm text-destructive"
+          >
+            <p>
+              {t(`auth:loginErrors.${isKnownError ? errorCode : "generic"}`)}
+            </p>
+            {showErrorCode && (
+              <p className="font-mono text-xs opacity-80">
+                {t("auth:loginErrors.code", { code: errorCode })}
+              </p>
+            )}
+          </div>
+        )
       )}
 
       {!isBasicAuthDisabled && (

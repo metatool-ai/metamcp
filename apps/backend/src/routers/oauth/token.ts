@@ -3,6 +3,7 @@ import express from "express";
 import logger from "@/utils/logger";
 
 import { oauthRepository } from "../../db/repositories";
+import { matchesTokenHash } from "../../lib/secrets/token-hash";
 import {
   generateSecureAccessToken,
   generateSecureRefreshToken,
@@ -13,6 +14,94 @@ const tokenRouter = express.Router();
 
 const ACCESS_TOKEN_EXPIRY = 3600; // 1 hour
 const REFRESH_TOKEN_EXPIRY = 7 * 24 * 3600; // 7 days
+
+type ClientAuthFailure = {
+  status: 400 | 401;
+  error: "invalid_client" | "invalid_request";
+  error_description: string;
+};
+
+/** Client id and secret of an `Authorization: Basic` header (RFC 6749 §2.3.1). */
+function basicCredentials(
+  req: express.Request,
+): { clientId: string; clientSecret: string } | null {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Basic ")) return null;
+  const decoded = Buffer.from(header.substring(6), "base64").toString("utf8");
+  const separator = decoded.indexOf(":");
+  if (separator < 0) return null;
+  try {
+    return {
+      clientId: decodeURIComponent(decoded.slice(0, separator)),
+      clientSecret: decodeURIComponent(decoded.slice(separator + 1)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Identifies the calling client (Basic credentials or `client_id` in the
+ * body) and checks its secret when it is a confidential client.
+ */
+async function authenticateClient(req: express.Request): Promise<
+  | {
+      ok: true;
+      client: NonNullable<
+        Awaited<ReturnType<typeof oauthRepository.getClient>>
+      >;
+    }
+  | ({ ok: false } & ClientAuthFailure)
+> {
+  const basic = basicCredentials(req);
+  const bodyClientId =
+    typeof req.body?.client_id === "string" ? req.body.client_id : undefined;
+  const clientId = basic?.clientId ?? bodyClientId;
+  if (!clientId) {
+    return {
+      ok: false,
+      status: 401,
+      error: "invalid_client",
+      error_description: "Client authentication required",
+    };
+  }
+  if (basic && bodyClientId && bodyClientId !== basic.clientId) {
+    return {
+      ok: false,
+      status: 400,
+      error: "invalid_request",
+      error_description: "Conflicting client identifiers",
+    };
+  }
+  const client = await oauthRepository.getClient(clientId);
+  if (!client) {
+    return {
+      ok: false,
+      status: 401,
+      error: "invalid_client",
+      error_description: "Client not found or not registered",
+    };
+  }
+  const method = client.token_endpoint_auth_method;
+  if (method === "client_secret_basic" || method === "client_secret_post") {
+    const secret =
+      method === "client_secret_basic"
+        ? basic?.clientSecret
+        : typeof req.body?.client_secret === "string"
+          ? req.body.client_secret
+          : undefined;
+    // Only the digest of the client secret is stored.
+    if (!secret || !matchesTokenHash(secret, client.client_secret)) {
+      return {
+        ok: false,
+        status: 401,
+        error: "invalid_client",
+        error_description: "Invalid client credentials",
+      };
+    }
+  }
+  return { ok: true, client };
+}
 
 /**
  * Issue a new access token + refresh token pair and store them.
@@ -86,7 +175,7 @@ async function handleAuthorizationCodeGrant(
   req: express.Request,
   res: express.Response,
 ) {
-  const { code, redirect_uri, client_id, code_verifier } = req.body;
+  const { code, redirect_uri, code_verifier } = req.body;
 
   // Validate authorization code
   if (!code) {
@@ -114,8 +203,18 @@ async function handleAuthorizationCodeGrant(
     });
   }
 
+  // Authenticate the client with its registered method (Basic credentials
+  // or client_id in the body), then check the code was issued to it
+  const clientAuth = await authenticateClient(req);
+  if (!clientAuth.ok) {
+    return res.status(clientAuth.status).json({
+      error: clientAuth.error,
+      error_description: clientAuth.error_description,
+    });
+  }
+
   // Validate client_id and redirect_uri match the original request
-  if (codeData.client_id !== client_id) {
+  if (codeData.client_id !== clientAuth.client.client_id) {
     return res.status(400).json({
       error: "invalid_client",
       error_description: "Client ID does not match",
@@ -128,51 +227,6 @@ async function handleAuthorizationCodeGrant(
       error_description: "Redirect URI does not match",
     });
   }
-
-  // Validate client_id against registered clients
-  const clientData = await oauthRepository.getClient(client_id);
-  if (!clientData) {
-    return res.status(400).json({
-      error: "invalid_client",
-      error_description: "Client not found or not registered",
-    });
-  }
-
-  // Validate client authentication based on registered auth method
-  if (clientData.token_endpoint_auth_method === "client_secret_basic") {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Basic ")) {
-      return res.status(401).json({
-        error: "invalid_client",
-        error_description: "Client authentication required via Basic auth",
-      });
-    }
-
-    const credentials = Buffer.from(
-      authHeader.substring(6),
-      "base64",
-    ).toString();
-    const [authClientId, authClientSecret] = credentials.split(":");
-
-    if (
-      authClientId !== client_id ||
-      authClientSecret !== clientData.client_secret
-    ) {
-      return res.status(401).json({
-        error: "invalid_client",
-        error_description: "Invalid client credentials",
-      });
-    }
-  } else if (clientData.token_endpoint_auth_method === "client_secret_post") {
-    const { client_secret } = req.body;
-    if (!client_secret || client_secret !== clientData.client_secret) {
-      return res.status(401).json({
-        error: "invalid_client",
-        error_description: "Invalid client secret",
-      });
-    }
-  }
-  // For "none" auth method, no additional validation needed
 
   // OAuth 2.1 Security: PKCE is mandatory for all clients
   if (!codeData.code_challenge) {
@@ -194,11 +248,10 @@ async function handleAuthorizationCodeGrant(
   const crypto = await import("crypto");
   let challengeFromVerifier: string;
 
+  // Only S256 is accepted ("plain" makes the challenge equal the verifier)
   if (codeData.code_challenge_method === "S256") {
     const hash = crypto.createHash("sha256").update(code_verifier).digest();
     challengeFromVerifier = hash.toString("base64url");
-  } else if (codeData.code_challenge_method === "plain") {
-    challengeFromVerifier = code_verifier;
   } else {
     return res.status(400).json({
       error: "invalid_grant",
@@ -263,7 +316,7 @@ async function handleRefreshTokenGrant(
     tokenData.refresh_token_expires_at &&
     Date.now() > tokenData.refresh_token_expires_at.getTime()
   ) {
-    await oauthRepository.deleteAccessToken(tokenData.access_token);
+    await oauthRepository.deleteAccessTokenByHash(tokenData.access_token);
     return res.status(400).json({
       error: "invalid_grant",
       error_description: "Refresh token has expired",
@@ -278,8 +331,29 @@ async function handleRefreshTokenGrant(
     });
   }
 
+  // Confidential clients must authenticate to refresh (RFC 6749 §6)
+  const tokenClient = await oauthRepository.getClient(tokenData.client_id);
+  if (!tokenClient) {
+    return res.status(400).json({
+      error: "invalid_grant",
+      error_description: "The client of this refresh token no longer exists",
+    });
+  }
+  if (tokenClient.token_endpoint_auth_method !== "none") {
+    const clientAuth = await authenticateClient(req);
+    if (
+      !clientAuth.ok ||
+      clientAuth.client.client_id !== tokenClient.client_id
+    ) {
+      return res.status(401).json({
+        error: "invalid_client",
+        error_description: "Client authentication required",
+      });
+    }
+  }
+
   // Delete old token row (rotation: old refresh token is single-use)
-  await oauthRepository.deleteAccessToken(tokenData.access_token);
+  await oauthRepository.deleteAccessTokenByHash(tokenData.access_token);
 
   // Issue new access token + refresh token
   const { accessToken, refreshToken } = await issueTokenPair(
@@ -301,7 +375,7 @@ async function handleRefreshTokenGrant(
  * OAuth 2.0 Token Introspection Endpoint
  * Allows clients to introspect access tokens
  */
-tokenRouter.post("/oauth/introspect", async (req, res) => {
+tokenRouter.post("/oauth/introspect", rateLimitToken, async (req, res) => {
   try {
     // Check if body was parsed correctly
     if (!req.body || typeof req.body !== "object") {
@@ -313,25 +387,28 @@ tokenRouter.post("/oauth/introspect", async (req, res) => {
 
     const { token } = req.body;
 
-    if (!token) {
+    if (!token || typeof token !== "string") {
       return res.status(400).json({
         error: "invalid_request",
         error_description: "Missing token parameter",
       });
     }
 
-    // Check if token exists and is valid
-    const tokenData = await oauthRepository.getAccessToken(token);
-
-    if (!tokenData || !token.startsWith("mcp_token_")) {
-      return res.json({
-        active: false,
+    // RFC 7662 §2.1: the caller must authenticate; it only learns about
+    // tokens issued to itself.
+    const clientAuth = await authenticateClient(req);
+    if (!clientAuth.ok) {
+      return res.status(clientAuth.status).json({
+        error: clientAuth.error,
+        error_description: clientAuth.error_description,
       });
     }
 
-    // Check if token has expired
-    if (Date.now() > tokenData.expires_at.getTime()) {
-      await oauthRepository.deleteAccessToken(token);
+    // Unknown and expired tokens are both simply inactive. An expired access
+    // token must not delete its row, which still holds the refresh token.
+    const tokenData = await oauthRepository.getActiveAccessToken(token);
+
+    if (!tokenData || tokenData.client_id !== clientAuth.client.client_id) {
       return res.json({
         active: false,
       });
@@ -360,7 +437,7 @@ tokenRouter.post("/oauth/introspect", async (req, res) => {
  * OAuth 2.0 Token Revocation Endpoint
  * Allows clients to revoke access tokens or refresh tokens
  */
-tokenRouter.post("/oauth/revoke", async (req, res) => {
+tokenRouter.post("/oauth/revoke", rateLimitToken, async (req, res) => {
   try {
     // Check if body was parsed correctly
     if (!req.body || typeof req.body !== "object") {
@@ -372,24 +449,30 @@ tokenRouter.post("/oauth/revoke", async (req, res) => {
 
     const { token } = req.body;
 
-    if (!token) {
+    if (!token || typeof token !== "string") {
       return res.status(400).json({
         error: "invalid_request",
         error_description: "Missing token parameter",
       });
     }
 
-    // Try revoking as access token
-    if (await oauthRepository.getAccessToken(token)) {
-      await oauthRepository.deleteAccessToken(token);
-    } else {
-      // Try revoking as refresh token
-      const tokenData = await oauthRepository.getByRefreshToken(token);
-      if (tokenData) {
-        await oauthRepository.deleteAccessToken(tokenData.access_token);
-      }
-      // RFC 7009: return success even if token doesn't exist
+    // RFC 7009 §2.1: a client may only revoke its own tokens
+    const clientAuth = await authenticateClient(req);
+    if (!clientAuth.ok) {
+      return res.status(clientAuth.status).json({
+        error: clientAuth.error,
+        error_description: clientAuth.error_description,
+      });
     }
+
+    const tokenData =
+      (await oauthRepository.getAccessToken(token)) ??
+      (await oauthRepository.getByRefreshToken(token));
+    if (tokenData && tokenData.client_id === clientAuth.client.client_id) {
+      // Revoking either token of a pair revokes the whole grant
+      await oauthRepository.deleteAccessTokenByHash(tokenData.access_token);
+    }
+    // RFC 7009: unknown tokens are not an error
 
     // RFC 7009 specifies that revocation endpoint should return 200 OK
     res.status(200).send();

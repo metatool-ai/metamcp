@@ -3,6 +3,7 @@ import express from "express";
 
 import logger from "@/utils/logger";
 
+import { mcpServerPool } from "../../../lib/metamcp/mcp-server-pool";
 import { MetaMCPHandlerContext } from "../../../lib/metamcp/metamcp-middleware/functional-middleware";
 import { metaMcpServerPool } from "../../../lib/metamcp/metamcp-server-pool";
 import { createMiddlewareEnabledHandlers } from "./handlers";
@@ -59,9 +60,8 @@ export const executeToolWithMiddleware = async (
       },
     };
 
-    const result = await callToolWithMiddleware(
-      callToolRequest,
-      handlerContext,
+    const result = await mcpServerPool.trackRequest(sessionId, () =>
+      callToolWithMiddleware(callToolRequest, handlerContext),
     );
 
     // Check if the result indicates an error (from middleware)

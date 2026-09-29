@@ -74,11 +74,12 @@ export default function AuditLogsPage() {
   const pageEnd = Math.min(totalCount, pageIndex * PAGE_SIZE + logs.length);
 
   const handleRefresh = async () => {
-    try {
-      await auditLogsQuery.refetch();
-      toast.success(t("audit-logs:refreshSuccess"));
-    } catch (_error) {
+    // refetch() reports failures in its result instead of throwing
+    const result = await auditLogsQuery.refetch();
+    if (result.isError) {
       toast.error(t("audit-logs:refreshError"));
+    } else {
+      toast.success(t("audit-logs:refreshSuccess"));
     }
   };
 

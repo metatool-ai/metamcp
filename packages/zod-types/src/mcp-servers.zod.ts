@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { ResourceAccessSchema, ResourceOwnerSchema } from "./access.zod";
+
 export const McpServerTypeEnum = z.enum(["STDIO", "SSE", "STREAMABLE_HTTP"]);
 export const McpServerStatusEnum = z.enum(["ACTIVE", "INACTIVE"]);
 
@@ -440,6 +442,12 @@ export const McpServerSchema = z.object({
   forward_headers: z.record(z.string(), z.string()),
   user_id: z.string().nullable(),
   error_status: McpServerErrorStatusEnum.optional(),
+  // RBAC (present on list/get responses): the caller's access, the owner
+  // (null = organisation) and whether secrets were redacted ("use" level).
+  access: ResourceAccessSchema.optional(),
+  owner: ResourceOwnerSchema.nullable().optional(),
+  shareCount: z.number().optional(),
+  secretsRedacted: z.boolean().optional(),
 });
 
 export const CreateMcpServerResponseSchema = z.object({

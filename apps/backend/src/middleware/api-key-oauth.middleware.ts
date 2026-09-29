@@ -1,13 +1,18 @@
-import { DatabaseEndpoint } from "@repo/zod-types";
+import { type ApiKeyScope, DatabaseEndpoint } from "@repo/zod-types";
 import express from "express";
 
 import logger from "@/utils/logger";
 
+import { oauthRepository } from "../db/repositories";
 import { ApiKeysRepository } from "../db/repositories/api-keys.repo";
+import { namespacesRepository } from "../db/repositories/namespaces.repo";
+import { accessService } from "../lib/access/access.service";
+import { endpointAccessCache } from "../lib/access/endpoint-access-cache";
 import {
   authRateLimiter,
   getAuthRateLimitIdentifier,
 } from "../lib/auth-rate-limiter";
+import { getBaseUrl } from "../routers/oauth/utils";
 
 // Extend Express Request interface for our custom properties
 export interface ApiKeyAuthenticatedRequest extends express.Request {
@@ -16,6 +21,11 @@ export interface ApiKeyAuthenticatedRequest extends express.Request {
   endpoint: DatabaseEndpoint;
   apiKeyUserId?: string;
   apiKeyUuid?: string;
+  /**
+   * "endpoints": the key is limited to MCP traffic on some endpoints; it
+   * must not reach the admin tools nor the endpoint administration routes.
+   */
+  apiKeyScope?: ApiKeyScope;
   oauthUserId?: string; // For OAuth-authenticated requests
   authMethod?: "api_key" | "oauth"; // Track which auth method was used
 }
@@ -23,91 +33,30 @@ export interface ApiKeyAuthenticatedRequest extends express.Request {
 const apiKeysRepository = new ApiKeysRepository();
 
 /**
- * Helper function to get the correct base URL from request
- * Prioritizes APP_URL environment variable, then checks proxy headers
+ * Validates a MetaMCP OAuth access token against the token store, in
+ * process: going through the public /oauth/introspect URL would make the
+ * backend call itself through the proxy chain (or through an address derived
+ * from client-controlled forwarding headers when APP_URL is unset).
  */
-function getBaseUrl(req: express.Request): string {
-  // Prioritize APP_URL environment variable
-  if (process.env.APP_URL) {
-    return process.env.APP_URL;
-  }
-
-  // Check for forwarded headers from Next.js proxy
-  const forwardedHost = req.headers["x-forwarded-host"] as string;
-  const forwardedProto = req.headers["x-forwarded-proto"] as string;
-
-  if (forwardedHost) {
-    const protocol = forwardedProto || "http";
-    return `${protocol}://${forwardedHost}`;
-  }
-
-  // Fallback to request host
-  return `${req.protocol}://${req.get("host")}`;
-}
-
-/**
- * Validates OAuth bearer token using MCP token introspection
- * @param token OAuth bearer token
- * @param req Express request object
- * @returns OAuth validation result
- */
-async function validateOAuthToken(
-  token: string,
-  req: express.Request,
-): Promise<{
+async function validateOAuthToken(token: string): Promise<{
   valid: boolean;
   user_id?: string;
   scopes?: string[];
   error?: string;
 }> {
-  try {
-    // Check if this is our MCP OAuth token format
-    if (token.startsWith("mcp_token_")) {
-      // For MCP tokens, use introspection endpoint to validate
-      // This allows us to check against the stored token data
-      try {
-        const baseUrl = getBaseUrl(req);
-        const introspectUrl = new URL("/oauth/introspect", baseUrl);
-
-        const introspectRequest = new Request(introspectUrl.toString(), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ token }),
-        });
-
-        const introspectResponse = await fetch(introspectRequest);
-
-        if (!introspectResponse.ok) {
-          return { valid: false, error: "Token introspection failed" };
-        }
-
-        const introspectData = (await introspectResponse.json()) as {
-          active?: boolean;
-          sub?: string;
-          scope?: string;
-        };
-
-        if (!introspectData.active) {
-          return { valid: false, error: "Token is not active" };
-        }
-
-        return {
-          valid: true,
-          user_id: introspectData.sub,
-          scopes: introspectData.scope
-            ? introspectData.scope.split(" ")
-            : ["admin"],
-        };
-      } catch (error) {
-        logger.error("Error introspecting MCP token:", error);
-        return { valid: false, error: "Token validation failed" };
-      }
-    }
-
-    // Token is not a recognized MCP token format
+  if (!token.startsWith("mcp_token_")) {
     return { valid: false, error: "Unsupported token format" };
+  }
+  try {
+    const tokenData = await oauthRepository.getActiveAccessToken(token);
+    if (!tokenData) {
+      return { valid: false, error: "Token is not active" };
+    }
+    return {
+      valid: true,
+      user_id: tokenData.user_id,
+      scopes: tokenData.scope ? tokenData.scope.split(" ") : ["admin"],
+    };
   } catch (error) {
     logger.error("Error validating OAuth token:", error);
     return { valid: false, error: "OAuth validation failed" };
@@ -182,6 +131,10 @@ export const authenticateApiKey = async (
     return next(); // Pass through without authentication
   }
 
+  // Failed attempts are counted per client address (auth-rate-limiter). A
+  // valid credential is always accepted, even from an address over the
+  // limit: without a reverse proxy every client may share one address, and
+  // refusing early would let anyone lock legitimate users out.
   try {
     // ===== CONDITION 2: API key ON, OAuth OFF =====
     if (endpoint.enable_api_key_auth && !endpoint.enable_oauth) {
@@ -197,9 +150,13 @@ export const authenticateApiKey = async (
         // API key valid - perform access control and pass
         authReq.apiKeyUserId = apiKeyResult.user_id || undefined;
         authReq.apiKeyUuid = apiKeyResult.key_uuid;
+        authReq.apiKeyScope = apiKeyResult.scope;
         authReq.authMethod = "api_key";
 
-        const accessCheckResult = checkApiKeyAccess(apiKeyResult, endpoint);
+        const accessCheckResult = await checkApiKeyAccess(
+          apiKeyResult,
+          endpoint,
+        );
         if (!accessCheckResult.allowed) {
           return res.status(403).json({
             error: "Access denied",
@@ -215,12 +172,7 @@ export const authenticateApiKey = async (
         authRateLimiter.recordFailedAttempt(rateLimitId);
 
         if (authRateLimiter.isRateLimited(rateLimitId)) {
-          return res.status(429).json({
-            error: "too_many_requests",
-            error_description:
-              "Too many failed authentication attempts. Please try again later.",
-            timestamp: new Date().toISOString(),
-          });
+          return sendTooManyAttemptsResponse(res);
         }
 
         return res.status(401).json({
@@ -240,14 +192,17 @@ export const authenticateApiKey = async (
 
       // If token looks like OAuth token or came from Authorization header, try OAuth first
       if (isOAuthLikeToken || source === "authorization") {
-        const oauthResult = await validateOAuthToken(token, req);
+        const oauthResult = await validateOAuthToken(token);
 
         if (oauthResult.valid) {
           // OAuth token valid - perform access control and pass
           authReq.oauthUserId = oauthResult.user_id;
           authReq.authMethod = "oauth";
 
-          const accessCheckResult = checkOAuthAccess(oauthResult, endpoint);
+          const accessCheckResult = await checkOAuthAccess(
+            oauthResult,
+            endpoint,
+          );
           if (!accessCheckResult.allowed) {
             return res.status(403).json({
               error: "access_denied",
@@ -267,9 +222,13 @@ export const authenticateApiKey = async (
         // API key valid - perform access control and pass
         authReq.apiKeyUserId = apiKeyResult.user_id || undefined;
         authReq.apiKeyUuid = apiKeyResult.key_uuid;
+        authReq.apiKeyScope = apiKeyResult.scope;
         authReq.authMethod = "api_key";
 
-        const accessCheckResult = checkApiKeyAccess(apiKeyResult, endpoint);
+        const accessCheckResult = await checkApiKeyAccess(
+          apiKeyResult,
+          endpoint,
+        );
         if (!accessCheckResult.allowed) {
           return res.status(403).json({
             error: "Access denied",
@@ -285,12 +244,7 @@ export const authenticateApiKey = async (
         authRateLimiter.recordFailedAttempt(rateLimitId);
 
         if (authRateLimiter.isRateLimited(rateLimitId)) {
-          return res.status(429).json({
-            error: "too_many_requests",
-            error_description:
-              "Too many failed authentication attempts. Please try again later.",
-            timestamp: new Date().toISOString(),
-          });
+          return sendTooManyAttemptsResponse(res);
         }
 
         return res.status(401).json({
@@ -310,14 +264,14 @@ export const authenticateApiKey = async (
       }
 
       // Validate OAuth token
-      const oauthResult = await validateOAuthToken(token, req);
+      const oauthResult = await validateOAuthToken(token);
 
       if (oauthResult.valid) {
         // OAuth token valid - perform access control and pass
         authReq.oauthUserId = oauthResult.user_id;
         authReq.authMethod = "oauth";
 
-        const accessCheckResult = checkOAuthAccess(oauthResult, endpoint);
+        const accessCheckResult = await checkOAuthAccess(oauthResult, endpoint);
         if (!accessCheckResult.allowed) {
           return res.status(403).json({
             error: "access_denied",
@@ -333,12 +287,7 @@ export const authenticateApiKey = async (
         authRateLimiter.recordFailedAttempt(rateLimitId);
 
         if (authRateLimiter.isRateLimited(rateLimitId)) {
-          return res.status(429).json({
-            error: "too_many_requests",
-            error_description:
-              "Too many failed authentication attempts. Please try again later.",
-            timestamp: new Date().toISOString(),
-          });
+          return sendTooManyAttemptsResponse(res);
         }
 
         return res.status(401).json({
@@ -366,45 +315,119 @@ export const authenticateApiKey = async (
   }
 };
 
-/**
- * Check if API key has access to the endpoint
- */
-function checkApiKeyAccess(
-  validation: { user_id?: string | null },
-  endpoint: DatabaseEndpoint,
-): { allowed: boolean; message?: string } {
-  const isPublicApiKey = validation.user_id === null;
-  const isPrivateEndpoint = endpoint.user_id !== null;
+type AccessCheckResult = { allowed: boolean; message?: string };
 
-  if (isPublicApiKey && isPrivateEndpoint) {
-    return {
-      allowed: false,
-      message:
-        "Public API keys cannot access private endpoints. Use a private API key owned by the endpoint owner.",
-    };
+/**
+ * RBAC check for a caller identified by an API key or OAuth token. Access to
+ * an endpoint is the access to its namespace: admins, the namespace owner and
+ * anyone the namespace is shared with (directly, via a group or "Everyone").
+ * Owning the endpoint itself grants nothing more. Disabled users are always
+ * denied. Decisions are cached for a few seconds.
+ */
+async function checkUserEndpointAccess(
+  userId: string,
+  endpoint: DatabaseEndpoint,
+): Promise<AccessCheckResult> {
+  const cacheKey = `user:${userId}:${endpoint.uuid}:${endpoint.namespace_uuid}`;
+  const cached = endpointAccessCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached
+      ? { allowed: true }
+      : {
+          allowed: false,
+          message: "You don't have access to this endpoint's namespace.",
+        };
   }
 
+  const principal = await accessService.getPrincipal(userId);
+  if (!principal) {
+    return { allowed: false, message: "This account is disabled." };
+  }
+
+  // Owning the endpoint is not enough: the namespace behind it must still be
+  // reachable (a revoked share or group membership must cut the access).
+  let allowed = principal.isAdmin;
+  if (!allowed) {
+    const namespace = await namespacesRepository.findByUuid(
+      endpoint.namespace_uuid,
+    );
+    allowed = Boolean(
+      namespace &&
+      (await accessService.resolveAccessOne(principal, "namespace", namespace)),
+    );
+  }
+
+  endpointAccessCache.set(cacheKey, allowed);
+  return allowed
+    ? { allowed: true }
+    : {
+        allowed: false,
+        message: "You don't have access to this endpoint's namespace.",
+      };
+}
+
+/**
+ * Check if API key has access to the endpoint.
+ *
+ * An endpoint-scoped key only works on its endpoints; a personal one must
+ * also still be allowed there by its owner's access, re-checked on every
+ * request (shares, groups and roles change). An organisation key dedicated
+ * to endpoints by an administrator works on them; other organisation keys
+ * (not tied to a user) only reach namespaces shared with everyone.
+ */
+async function checkApiKeyAccess(
+  validation: {
+    user_id?: string | null;
+    scope?: ApiKeyScope;
+    endpoint_uuids?: string[];
+  },
+  endpoint: DatabaseEndpoint,
+): Promise<AccessCheckResult> {
   if (
-    !isPublicApiKey &&
-    isPrivateEndpoint &&
-    endpoint.user_id !== validation.user_id
+    validation.scope === "endpoints" &&
+    !validation.endpoint_uuids?.includes(endpoint.uuid)
   ) {
     return {
       allowed: false,
-      message: "You can only access endpoints you own or public endpoints.",
+      message: "This API key is not valid for this endpoint.",
     };
   }
 
-  return { allowed: true };
+  if (validation.user_id) {
+    return checkUserEndpointAccess(validation.user_id, endpoint);
+  }
+
+  if (validation.scope === "endpoints") {
+    return { allowed: true };
+  }
+
+  const cacheKey = `org-key:${endpoint.namespace_uuid}`;
+  let allowed = endpointAccessCache.get(cacheKey);
+  if (allowed === undefined) {
+    allowed = Boolean(
+      await accessService.resolveEveryoneAccess(
+        "namespace",
+        endpoint.namespace_uuid,
+      ),
+    );
+    endpointAccessCache.set(cacheKey, allowed);
+  }
+  return allowed
+    ? { allowed: true }
+    : {
+        allowed: false,
+        message:
+          "Organisation API keys can only access namespaces shared with everyone. Use a personal API key.",
+      };
 }
 
 /**
  * Check if OAuth token user has access to the endpoint
  */
-function checkOAuthAccess(
+async function checkOAuthAccess(
   oauthResult: { user_id?: string; scopes?: string[] },
   endpoint: DatabaseEndpoint,
-): { allowed: boolean; message?: string } {
+): Promise<AccessCheckResult> {
   // If no user_id in token, deny access
   if (!oauthResult.user_id) {
     return {
@@ -412,26 +435,7 @@ function checkOAuthAccess(
       message: "OAuth token missing user information",
     };
   }
-
-  // Check endpoint access based on user permissions:
-  // 1. Public endpoints (user_id is null) - accessible to all authenticated users
-  // 2. Private endpoints (user_id is not null) - only accessible to the owner
-
-  if (endpoint.user_id === null) {
-    // Public endpoint - any authenticated user can access
-    return { allowed: true };
-  }
-
-  if (endpoint.user_id === oauthResult.user_id) {
-    // Private endpoint owned by the user - allowed
-    return { allowed: true };
-  }
-
-  // Private endpoint owned by someone else - denied
-  return {
-    allowed: false,
-    message: `Access denied. This is a private endpoint owned by another user. You can only access public endpoints or endpoints you own.`,
-  };
+  return checkUserEndpointAccess(oauthResult.user_id, endpoint);
 }
 
 /**
@@ -445,6 +449,16 @@ function sendApiKeyRequiredResponse(res: express.Response): express.Response {
       "X-API-Key header",
       "query parameter (api_key or apikey)",
     ],
+    timestamp: new Date().toISOString(),
+  });
+}
+
+function sendTooManyAttemptsResponse(res: express.Response): express.Response {
+  res.set("Retry-After", "60");
+  return res.status(429).json({
+    error: "too_many_requests",
+    error_description:
+      "Too many failed authentication attempts. Please try again later.",
     timestamp: new Date().toISOString(),
   });
 }

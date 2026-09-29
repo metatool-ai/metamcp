@@ -152,6 +152,7 @@
     "shttpUrlWithApiKeyCopied": "SHTTP URL with API key parameter copied to clipboard",
     "openApiUrlWithApiKeyCopied": "OpenAPI URL with API key parameter copied to clipboard",
     "openApiSchemaUrlWithApiKeyCopied": "OpenAPI Schema URL with API key parameter copied to clipboard",
-    "noResults": "No results."
+    "noResults": "No results.",
+    "replaceApiKeyPlaceholder": "Replace YOUR_API_KEY with one of your API keys (they are only shown when created)."
   }
 }

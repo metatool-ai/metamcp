@@ -8,6 +8,7 @@ import {
 } from "@repo/zod-types";
 import { and, eq, isNull, lt } from "drizzle-orm";
 
+import { hashToken } from "../../lib/secrets/token-hash";
 import { db } from "../index";
 import {
   oauthAccessTokensTable,
@@ -15,6 +16,12 @@ import {
   oauthClientsTable,
 } from "../schema";
 
+/**
+ * MetaMCP's OAuth authorization server. Authorization codes, access tokens,
+ * refresh tokens and client secrets are stored as SHA-256 digests: methods
+ * take the values presented by clients and hash them. Rows read back hold
+ * digests (see deleteAccessTokenByHash).
+ */
 export class OAuthRepository {
   // ===== Registered Clients =====
 
@@ -27,10 +34,16 @@ export class OAuthRepository {
     return result[0] || null;
   }
 
+  /** `client_secret` is the clear-text secret returned to the client once. */
   async upsertClient(clientData: OAuthClientCreateInput): Promise<void> {
     await db
       .insert(oauthClientsTable)
-      .values(clientData)
+      .values({
+        ...clientData,
+        client_secret: clientData.client_secret
+          ? hashToken(clientData.client_secret)
+          : clientData.client_secret,
+      })
       .onConflictDoUpdate({
         target: oauthClientsTable.client_id,
         set: {
@@ -46,7 +59,7 @@ export class OAuthRepository {
     const result = await db
       .select()
       .from(oauthAuthorizationCodesTable)
-      .where(eq(oauthAuthorizationCodesTable.code, code))
+      .where(eq(oauthAuthorizationCodesTable.code, hashToken(code)))
       .limit(1);
     return result[0] || null;
   }
@@ -56,7 +69,7 @@ export class OAuthRepository {
     data: OAuthAuthorizationCodeCreateInput,
   ): Promise<void> {
     await db.insert(oauthAuthorizationCodesTable).values({
-      code,
+      code: hashToken(code),
       client_id: data.client_id,
       redirect_uri: data.redirect_uri,
       scope: data.scope,
@@ -70,7 +83,7 @@ export class OAuthRepository {
   async deleteAuthCode(code: string): Promise<void> {
     await db
       .delete(oauthAuthorizationCodesTable)
-      .where(eq(oauthAuthorizationCodesTable.code, code));
+      .where(eq(oauthAuthorizationCodesTable.code, hashToken(code)));
   }
 
   // ===== Access Tokens =====
@@ -79,9 +92,25 @@ export class OAuthRepository {
     const result = await db
       .select()
       .from(oauthAccessTokensTable)
-      .where(eq(oauthAccessTokensTable.access_token, token))
+      .where(eq(oauthAccessTokensTable.access_token, hashToken(token)))
       .limit(1);
     return result[0] || null;
+  }
+
+  /**
+   * The stored row of a live MetaMCP access token, or null. An expired access
+   * token row is left in place: it also carries the refresh token, which
+   * stays usable until its own expiry (rows go in `cleanupExpired`).
+   */
+  async getActiveAccessToken(token: string): Promise<OAuthAccessToken | null> {
+    if (!token.startsWith("mcp_token_")) {
+      return null;
+    }
+    const tokenData = await this.getAccessToken(token);
+    if (!tokenData || Date.now() > tokenData.expires_at.getTime()) {
+      return null;
+    }
+    return tokenData;
   }
 
   async setAccessToken(
@@ -92,12 +121,12 @@ export class OAuthRepository {
     },
   ): Promise<void> {
     await db.insert(oauthAccessTokensTable).values({
-      access_token: token,
+      access_token: hashToken(token),
       client_id: data.client_id,
       user_id: data.user_id,
       scope: data.scope,
       expires_at: new Date(data.expires_at),
-      refresh_token: data.refresh_token ?? null,
+      refresh_token: data.refresh_token ? hashToken(data.refresh_token) : null,
       refresh_token_expires_at: data.refresh_token_expires_at
         ? new Date(data.refresh_token_expires_at)
         : null,
@@ -105,9 +134,14 @@ export class OAuthRepository {
   }
 
   async deleteAccessToken(token: string): Promise<void> {
+    await this.deleteAccessTokenByHash(hashToken(token));
+  }
+
+  /** Deletes a token row read from the database (which holds the digest). */
+  async deleteAccessTokenByHash(tokenHash: string): Promise<void> {
     await db
       .delete(oauthAccessTokensTable)
-      .where(eq(oauthAccessTokensTable.access_token, token));
+      .where(eq(oauthAccessTokensTable.access_token, tokenHash));
   }
 
   // ===== Refresh Tokens =====
@@ -116,7 +150,7 @@ export class OAuthRepository {
     const result = await db
       .select()
       .from(oauthAccessTokensTable)
-      .where(eq(oauthAccessTokensTable.refresh_token, refreshToken))
+      .where(eq(oauthAccessTokensTable.refresh_token, hashToken(refreshToken)))
       .limit(1);
     return result[0] || null;
   }

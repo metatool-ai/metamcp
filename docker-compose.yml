@@ -1,7 +1,9 @@
 services:
   app:
     container_name: metamcp
-    image: ghcr.io/metatool-ai/metamcp:latest
+    # This fork's image (RBAC, encrypted secrets, activity log). Pin a
+    # version (or digest) in production.
+    image: ${METAMCP_IMAGE:-ghcr.io/sixmon/metamcp:latest}
     pull_policy: always
     env_file:
       - .env
@@ -23,7 +25,8 @@ services:
       NEXT_PUBLIC_APP_URL: ${APP_URL:-http://localhost:12008}
       
       # Auth configuration
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-your-super-secret-key-change-this-in-production}
+      # Required: generate it with `openssl rand -base64 32`
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env (openssl rand -base64 32)}
       
       # Docker networking fix
       TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL:-true}
@@ -161,7 +164,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: "no"
+    # The Node.js heaps are capped (BACKEND_NODE_OPTIONS...): come back after a crash
+    restart: unless-stopped
     volumes:
       # Persist the uv cache across container recreates. Without this, every
       # `docker compose up -d`/recreate wipes the writable layer and the next
@@ -170,6 +174,10 @@ services:
       # in error_status=ERROR. The image ships /home/nextjs/.cache/uv owned by
       # nextjs (uid 1001) so a fresh named volume inherits correct ownership.
       - uv_cache:/home/nextjs/.cache/uv
+      # Same for the npm cache of `npx` servers. Connections open on demand,
+      # so a cold npx install would delay every first call (and npm holds
+      # about twice the memory while it installs).
+      - npm_cache:/home/nextjs/.npm
     networks:
       - metamcp-network
 
@@ -177,14 +185,16 @@ services:
     image: postgres:16-alpine
     container_name: metamcp-pg
     restart: unless-stopped
-    env_file:
-      - .env
+    # Only the database settings: the whole .env (encryption key, auth
+    # secret, OIDC secret...) must not reach the database server, where any
+    # superuser session could read its environment.
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-metamcp_db}
       POSTGRES_USER: ${POSTGRES_USER:-metamcp_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-m3t4mcp}
     ports:
-      - "${POSTGRES_EXTERNAL_PORT:-9433}:5432"
+      # Local access only (docker publishes ports past host firewalls)
+      - "127.0.0.1:${POSTGRES_EXTERNAL_PORT:-9433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -200,6 +210,8 @@ volumes:
   postgres_data:
     driver: local
   uv_cache:
+    driver: local
+  npm_cache:
     driver: local
 
 networks:

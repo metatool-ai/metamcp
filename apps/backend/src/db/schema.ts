@@ -8,16 +8,25 @@ import {
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+import {
+  encryptedJson,
+  encryptedStringMap,
+  encryptedText,
+} from "./encrypted-columns";
 
 // zod v4 types `ZodEnum.options` as a plain array, but drizzle's pgEnum requires
 // a non-empty tuple. Re-assert the shape while preserving the literal union so
@@ -42,6 +51,25 @@ export const mcpRequestAuditStatusEnum = pgEnum("mcp_request_audit_status", [
   "SUCCESS",
   "ERROR",
 ]);
+export const userRoleEnum = pgEnum("user_role", ["admin", "editor", "viewer"]);
+export const shareLevelEnum = pgEnum("share_level", ["use", "edit", "manage"]);
+export const groupMembershipSourceEnum = pgEnum("group_membership_source", [
+  "manual",
+  "oidc",
+]);
+export const activityActorTypeEnum = pgEnum("activity_actor_type", [
+  "user",
+  "api_key",
+  "system",
+]);
+export const activityOutcomeEnum = pgEnum("activity_outcome", [
+  "success",
+  "denied",
+  "failure",
+]);
+// What an API key may be used for: everything its owner can do ("user"), or
+// only the MCP traffic of a list of endpoints ("endpoints").
+export const apiKeyScopeEnum = pgEnum("api_key_scope", ["user", "endpoints"]);
 
 export const mcpServersTable = pgTable(
   "mcp_servers",
@@ -53,24 +81,25 @@ export const mcpServersTable = pgTable(
       .notNull()
       .default(McpServerTypeEnum.enum.STDIO),
     command: text("command"),
-    args: text("args")
+    // Secrets are encrypted at rest (see lib/secrets): arguments often carry
+    // connection strings, URLs can embed tokens, env and header values hold
+    // credentials. Names (env keys, header names) stay readable.
+    args: encryptedText("args", "mcp_servers.args")
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    env: jsonb("env")
-      .$type<{ [key: string]: string }>()
+    env: encryptedStringMap("env", "mcp_servers.env")
       .notNull()
       .default(sql`'{}'::jsonb`),
-    url: text("url"),
+    url: encryptedText("url", "mcp_servers.url"),
     error_status: mcpServerErrorStatusEnum("error_status")
       .notNull()
       .default(McpServerErrorStatusEnum.enum.NONE),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    bearerToken: text("bearer_token"),
-    headers: jsonb("headers")
-      .$type<{ [key: string]: string }>()
+    bearerToken: encryptedText("bearer_token", "mcp_servers.bearer_token"),
+    headers: encryptedStringMap("headers", "mcp_servers.headers")
       .notNull()
       .default(sql`'{}'::jsonb`),
     forward_headers: jsonb("forward_headers")
@@ -105,8 +134,11 @@ export const oauthSessionsTable = pgTable(
     mcp_server_uuid: uuid("mcp_server_uuid")
       .notNull()
       .references(() => mcpServersTable.uuid, { onDelete: "cascade" }),
-    client_information: jsonb("client_information")
-      .$type<OAuthClientInformation>()
+    // Upstream OAuth client registration and tokens, encrypted at rest.
+    client_information: encryptedJson<OAuthClientInformation>(
+      "client_information",
+      "oauth_sessions.client_information",
+    )
       .notNull()
       .default(sql`'{}'::jsonb`),
     // Typed as UpstreamTokenResponse (RFC 6749 + .passthrough()) rather
@@ -114,8 +146,14 @@ export const oauthSessionsTable = pgTable(
     // fields (Salesforce `instance_url`, OIDC `id_token`, Microsoft
     // `ext_expires_in`, ...) round-trip without `as unknown as` casts at
     // the call sites.
-    tokens: jsonb("tokens").$type<UpstreamTokenResponse>(),
-    code_verifier: text("code_verifier"),
+    tokens: encryptedJson<UpstreamTokenResponse>(
+      "tokens",
+      "oauth_sessions.tokens",
+    ),
+    code_verifier: encryptedText(
+      "code_verifier",
+      "oauth_sessions.code_verifier",
+    ),
     // CSRF defence (RFC 6749 §10.12). Generated server-side at the
     // authorize-redirect step (`DbOAuthClientProvider.state()`), compared
     // against the upstream's echoed `state` at token exchange, and cleared
@@ -181,6 +219,20 @@ export const usersTable = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // RBAC: base role. The effective role is the highest of this and the roles
+  // granted by the user's groups (see lib/access).
+  role: userRoleEnum("role").notNull().default("viewer"),
+  // Disabled users cannot sign in, and their API keys / OAuth tokens stop working.
+  disabled: boolean("disabled").notNull().default(false),
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  // Last groups claim received from the OIDC provider (for admin visibility).
+  externalGroups: text("external_groups")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  externalGroupsSyncedAt: timestamp("external_groups_synced_at", {
+    withTimezone: true,
+  }),
 });
 
 export const sessionsTable = pgTable("sessions", {
@@ -397,7 +449,10 @@ export const apiKeysTable = pgTable(
   {
     uuid: uuid("uuid").primaryKey().defaultRandom(),
     name: text("name").notNull(),
-    key: text("key").notNull().unique(),
+    // SHA-256 of the key: MetaMCP never stores API keys in clear text.
+    key_hash: text("key_hash").notNull().unique(),
+    // First and last characters, to recognise a key without revealing it.
+    key_preview: text("key_preview").notNull(),
     user_id: text("user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),
@@ -405,12 +460,29 @@ export const apiKeysTable = pgTable(
       .notNull()
       .defaultNow(),
     is_active: boolean("is_active").notNull().default(true),
+    scope: apiKeyScopeEnum("scope").notNull().default("user"),
   },
   (table) => [
     index("api_keys_user_id_idx").on(table.user_id),
-    index("api_keys_key_idx").on(table.key),
     index("api_keys_is_active_idx").on(table.is_active),
     unique("api_keys_name_per_user_idx").on(table.user_id, table.name),
+  ],
+);
+
+/** Endpoints an API key of scope "endpoints" is limited to. */
+export const apiKeyEndpointsTable = pgTable(
+  "api_key_endpoints",
+  {
+    api_key_uuid: uuid("api_key_uuid")
+      .notNull()
+      .references(() => apiKeysTable.uuid, { onDelete: "cascade" }),
+    endpoint_uuid: uuid("endpoint_uuid")
+      .notNull()
+      .references(() => endpointsTable.uuid, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.api_key_uuid, table.endpoint_uuid] }),
+    index("api_key_endpoints_endpoint_idx").on(table.endpoint_uuid),
   ],
 );
 
@@ -505,6 +577,23 @@ export const configTable = pgTable("config", {
     .defaultNow(),
 });
 
+// Data encryption keys (see lib/secrets), wrapped by a key encryption key
+// that never touches the database (SECRETS_ENCRYPTION_KEY or OpenBao Transit).
+// The most recent key whose activated_at has passed encrypts new values;
+// older keys stay available for decryption until everything is re-encrypted.
+export const encryptionKeysTable = pgTable("encryption_keys", {
+  id: text("id").primaryKey(),
+  wrapped_key: text("wrapped_key").notNull(),
+  kek_provider: text("kek_provider").notNull(),
+  kek_id: text("kek_id").notNull(),
+  created_at: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  activated_at: timestamp("activated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // OAuth Registered Clients table
 export const oauthClientsTable = pgTable("oauth_clients", {
   client_id: text("client_id").primaryKey(),
@@ -594,5 +683,171 @@ export const oauthAccessTokensTable = pgTable(
     index("oauth_access_tokens_user_id_idx").on(table.user_id),
     index("oauth_access_tokens_expires_at_idx").on(table.expires_at),
     index("oauth_access_tokens_refresh_token_idx").on(table.refresh_token),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// RBAC: groups, memberships and resource shares
+// ---------------------------------------------------------------------------
+
+// User groups. A group can grant a role to its members, can be mapped to IdP
+// groups (OIDC claim values, `*` wildcards allowed) and can receive shares.
+// System groups (system_key = 'admins' | 'everyone') cannot be deleted;
+// "everyone" implicitly contains every user and has no stored memberships.
+export const groupsTable = pgTable(
+  "groups",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    role: userRoleEnum("role"),
+    system_key: text("system_key"),
+    oidc_groups: text("oidc_groups")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("groups_name_lower_unique_idx").on(sql`lower(${table.name})`),
+    unique("groups_system_key_unique").on(table.system_key),
+    check(
+      "groups_system_key_check",
+      sql`${table.system_key} IS NULL OR ${table.system_key} IN ('admins', 'everyone')`,
+    ),
+  ],
+);
+
+export const groupMembersTable = pgTable(
+  "group_members",
+  {
+    group_uuid: uuid("group_uuid")
+      .notNull()
+      .references(() => groupsTable.uuid, { onDelete: "cascade" }),
+    user_id: text("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    // "oidc" memberships are managed by the SSO sync and removed when the IdP
+    // stops sending the matching group; "manual" ones are never auto-removed.
+    source: groupMembershipSourceEnum("source").notNull().default("manual"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.group_uuid, table.user_id] }),
+    index("group_members_user_id_idx").on(table.user_id),
+  ],
+);
+
+// A grant of `level` on one resource (MCP server or namespace) to one subject
+// (user or group). Endpoints inherit the access of their namespace.
+export const resourceSharesTable = pgTable(
+  "resource_shares",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    mcp_server_uuid: uuid("mcp_server_uuid").references(
+      () => mcpServersTable.uuid,
+      { onDelete: "cascade" },
+    ),
+    namespace_uuid: uuid("namespace_uuid").references(
+      () => namespacesTable.uuid,
+      { onDelete: "cascade" },
+    ),
+    user_id: text("user_id").references(() => usersTable.id, {
+      onDelete: "cascade",
+    }),
+    group_uuid: uuid("group_uuid").references(() => groupsTable.uuid, {
+      onDelete: "cascade",
+    }),
+    level: shareLevelEnum("level").notNull().default("use"),
+    created_by: text("created_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("resource_shares_mcp_server_uuid_idx").on(table.mcp_server_uuid),
+    index("resource_shares_namespace_uuid_idx").on(table.namespace_uuid),
+    index("resource_shares_user_id_idx").on(table.user_id),
+    index("resource_shares_group_uuid_idx").on(table.group_uuid),
+    uniqueIndex("resource_shares_server_user_unique_idx")
+      .on(table.mcp_server_uuid, table.user_id)
+      .where(
+        sql`${table.mcp_server_uuid} IS NOT NULL AND ${table.user_id} IS NOT NULL`,
+      ),
+    uniqueIndex("resource_shares_server_group_unique_idx")
+      .on(table.mcp_server_uuid, table.group_uuid)
+      .where(
+        sql`${table.mcp_server_uuid} IS NOT NULL AND ${table.group_uuid} IS NOT NULL`,
+      ),
+    uniqueIndex("resource_shares_namespace_user_unique_idx")
+      .on(table.namespace_uuid, table.user_id)
+      .where(
+        sql`${table.namespace_uuid} IS NOT NULL AND ${table.user_id} IS NOT NULL`,
+      ),
+    uniqueIndex("resource_shares_namespace_group_unique_idx")
+      .on(table.namespace_uuid, table.group_uuid)
+      .where(
+        sql`${table.namespace_uuid} IS NOT NULL AND ${table.group_uuid} IS NOT NULL`,
+      ),
+    check(
+      "resource_shares_one_resource_check",
+      sql`num_nonnulls(${table.mcp_server_uuid}, ${table.namespace_uuid}) = 1`,
+    ),
+    check(
+      "resource_shares_one_subject_check",
+      sql`num_nonnulls(${table.user_id}, ${table.group_uuid}) = 1`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Administrative activity log
+// ---------------------------------------------------------------------------
+
+// Who changed access, configuration or resources, plus security events.
+// Append-only (a trigger rejects updates); old entries are removed by the
+// retention job. Actor and target labels are snapshots so history survives
+// deletions; no foreign keys on purpose. Never store secret values here.
+export const activityLogsTable = pgTable(
+  "activity_logs",
+  {
+    uuid: uuid("uuid").primaryKey().defaultRandom(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    actor_type: activityActorTypeEnum("actor_type").notNull(),
+    actor_id: text("actor_id"),
+    actor_email: text("actor_email"),
+    actor_name: text("actor_name"),
+    action: text("action").notNull(),
+    category: text("category").notNull(),
+    target_type: text("target_type"),
+    target_id: text("target_id"),
+    target_label: text("target_label"),
+    details: jsonb("details")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    outcome: activityOutcomeEnum("outcome").notNull().default("success"),
+    ip_address: text("ip_address"),
+    user_agent: text("user_agent"),
+  },
+  (table) => [
+    index("activity_logs_created_at_idx").on(table.created_at),
+    index("activity_logs_actor_id_idx").on(table.actor_id, table.created_at),
+    index("activity_logs_category_idx").on(table.category, table.created_at),
+    index("activity_logs_target_id_idx").on(table.target_id),
   ],
 );

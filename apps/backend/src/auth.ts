@@ -1,9 +1,17 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { genericOAuth, GenericOAuthConfig } from "better-auth/plugins";
 
 import { db } from "./db/index";
+import { usersRepository } from "./db/repositories/users.repo";
 import * as schema from "./db/schema";
+import { accessService } from "./lib/access/access.service";
+import { accessSettings } from "./lib/access/access-settings";
+import { getAuthRequestStore } from "./lib/access/auth-request-context";
+import { extractGroupsFromClaims } from "./lib/access/oidc-groups";
+import { oidcSyncService } from "./lib/access/oidc-sync.service";
+import { activityLog } from "./lib/activity/activity-log.service";
 import { configService } from "./lib/config.service";
 import logger from "./utils/logger";
 
@@ -18,18 +26,15 @@ if (!process.env.APP_URL) {
 const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET;
 const BETTER_AUTH_URL = process.env.APP_URL;
 
-// Helper function to create basic auth middleware
-const createBasicAuthCheckMiddleware = () => {
-  return async (request: unknown) => {
-    const isBasicAuthDisabled = await configService.isBasicAuthDisabled();
-    if (isBasicAuthDisabled) {
-      throw new Error(
-        "Basic email/password authentication is currently disabled. Please use SSO/OIDC authentication instead.",
-      );
-    }
-    return { request };
-  };
-};
+// Email/password endpoints, refused while basic authentication is disabled
+// (SSO only). Trusted internal calls (bootstrap) are not affected.
+const PASSWORD_AUTH_PATHS = new Set([
+  "/sign-in/email",
+  "/sign-up/email",
+  "/forgot-password",
+  "/request-password-reset",
+  "/reset-password",
+]);
 
 // OIDC Provider configuration - optional, only if environment variables are provided
 const oidcProviders: GenericOAuthConfig[] = [];
@@ -44,6 +49,23 @@ if (process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET) {
     pkce: process.env.OIDC_PKCE !== "false", // Enable PKCE by default for security
     discoveryUrl: process.env.OIDC_DISCOVERY_URL,
     authorizationUrl: process.env.OIDC_AUTHORIZATION_URL, //this is required due to a bug in better-auth: https://github.com/better-auth/better-auth/issues/3278
+    // Called on every OIDC callback (sign-up and sign-in) with all ID token /
+    // userinfo claims. Capture the groups claim for the database hooks below,
+    // which apply role/group mappings once the user and session exist.
+    mapProfileToUser: async (profile) => {
+      const store = getAuthRequestStore();
+      if (store) {
+        const claimName = await accessSettings.getOidcGroupsClaim();
+        store.oidc = {
+          groups: extractGroupsFromClaims(
+            profile as Record<string, unknown>,
+            claimName,
+          ),
+          email: typeof profile.email === "string" ? profile.email : null,
+        };
+      }
+      return {};
+    },
   };
 
   oidcProviders.push(oidcConfig);
@@ -96,6 +118,8 @@ export const auth = betterAuth({
     requireEmailVerification: false, // Set to true if you want email verification
   },
   account: {
+    // Tokens returned by the identity provider are stored encrypted.
+    encryptOAuthTokens: true,
     accountLinking: {
       enabled: true,
       // Allow linking accounts with the same email address
@@ -127,9 +151,20 @@ export const auth = betterAuth({
   },
   user: {
     additionalFields: {
+      // Never user input: better-auth only links an SSO identity to an
+      // existing local account whose email is verified, so a writable flag
+      // let anyone pre-register a victim's email and capture their SSO login.
       emailVerified: {
         type: "boolean",
         defaultValue: false,
+        input: false,
+      },
+      // RBAC base role. Never accepted from sign-up input: it is computed in
+      // databaseHooks.user.create.before and managed by administrators.
+      role: {
+        type: "string",
+        defaultValue: "viewer",
+        input: false,
       },
     },
   },
@@ -138,60 +173,224 @@ export const auth = betterAuth({
       enabled: true,
     },
   },
+  // Follows LOG_LEVEL ('all' | 'info' | 'errors-only' | 'none')
   logger: {
-    level: "debug", // Enable debug logging
+    disabled: process.env.LOG_LEVEL === "none",
+    level:
+      process.env.LOG_LEVEL === "all"
+        ? "debug"
+        : process.env.LOG_LEVEL === "info"
+          ? "info"
+          : "error",
+  },
+  // Failed OAuth/OIDC callbacks land on the login page (?error=<code>).
+  onAPIError: {
+    errorURL: `${BETTER_AUTH_URL}/login`,
   },
   databaseHooks: {
     user: {
       create: {
         before: async (user, context) => {
-          // Check if signup is disabled based on the registration method
-          const isSignupDisabled = await configService.isSignupDisabled();
-          const isSsoSignupDisabled = await configService.isSsoSignupDisabled();
+          const store = getAuthRequestStore();
+          const isOidcLogin = Boolean(store?.oidc);
+          const refuse = async (reason: string) =>
+            activityLog.record({
+              actor: { kind: "system", label: "Sign-in" },
+              action: "auth.sign_in_denied",
+              outcome: "denied",
+              target: { type: "user", id: null, label: user.email ?? null },
+              details: { reason, method: isOidcLogin ? "sso" : "password" },
+            });
 
-          // Determine if this is an SSO/OAuth registration by checking the request path
-          // OAuth/SSO registrations typically come through callback endpoints
-          const isSsoRegistration =
-            context?.path?.includes("/callback/") ||
-            context?.path?.includes("/oauth/") ||
-            context?.path?.includes("/oidc/");
+          if (!store?.bypassSignupRestrictions) {
+            // Check if signup is disabled based on the registration method
+            const isSignupDisabled = await configService.isSignupDisabled();
+            const isSsoSignupDisabled =
+              await configService.isSsoSignupDisabled();
 
-          if (isSsoRegistration) {
-            if (isSsoSignupDisabled) {
-              throw new Error(
-                "New user registration via SSO/OAuth is currently disabled.",
-              );
-            }
-          } else {
-            if (isSignupDisabled) {
-              throw new Error("New user registration is currently disabled.");
+            // Determine if this is an SSO/OAuth registration by checking the request path
+            // OAuth/SSO registrations typically come through callback endpoints
+            const isSsoRegistration =
+              isOidcLogin ||
+              context?.path?.includes("/callback/") ||
+              context?.path?.includes("/oauth/") ||
+              context?.path?.includes("/oidc/");
+
+            if (isSsoRegistration) {
+              if (isSsoSignupDisabled) {
+                await refuse("sso_signup_disabled");
+                throw new APIError("FORBIDDEN", {
+                  message: "sso_signup_disabled",
+                });
+              }
+            } else {
+              if (isSignupDisabled) {
+                await refuse("signup_disabled");
+                throw new Error("New user registration is currently disabled.");
+              }
             }
           }
 
-          return { data: user };
+          if (
+            store?.oidc &&
+            !(await oidcSyncService.isLoginAllowed(store.oidc.groups))
+          ) {
+            await refuse("sso_no_matching_group");
+            throw new APIError("FORBIDDEN", {
+              message: "sso_no_matching_group",
+            });
+          }
+
+          // Initial base role: the very first account and ADMIN_EMAILS are
+          // administrators, everyone else gets the configured default role.
+          // ADMIN_EMAILS only counts when the address is vouched for (SSO,
+          // bootstrap / administrator, verified): anyone can self-register
+          // with an address listed there but not registered yet.
+          const email = String(user.email ?? "").toLowerCase();
+          const isFirstUser = (await usersRepository.count()) === 0;
+          const emailIsTrusted =
+            isOidcLogin ||
+            Boolean(store?.bypassSignupRestrictions) ||
+            user.emailVerified === true;
+          const role =
+            isFirstUser ||
+            (emailIsTrusted && accessSettings.getAdminEmails().includes(email))
+              ? "admin"
+              : await accessSettings.getDefaultRole();
+
+          return { data: { ...user, role } };
+        },
+        after: async (user) => {
+          const store = getAuthRequestStore();
+          // Accounts created by administrators or the bootstrap are
+          // recorded by the code that creates them.
+          if (store?.bypassSignupRestrictions) return;
+          const created = await usersRepository.findById(user.id);
+          await activityLog.record(
+            store?.oidc
+              ? {
+                  actor: { kind: "system", label: "SSO provisioning" },
+                  action: "user.provisioned",
+                  target: { type: "user", id: user.id, label: user.email },
+                  details: { baseRole: created?.role ?? null },
+                }
+              : {
+                  actor: { kind: "user", userId: user.id },
+                  action: "user.created",
+                  target: { type: "user", id: user.id, label: user.email },
+                  details: { via: "sign-up", baseRole: created?.role ?? null },
+                },
+          );
+        },
+      },
+    },
+    session: {
+      create: {
+        before: async (session, context) => {
+          const store = getAuthRequestStore();
+          const user = await usersRepository.findById(session.userId);
+
+          const deny = async (
+            code: string,
+            message: string,
+          ): Promise<never> => {
+            await activityLog.record({
+              actor: { kind: "user", userId: session.userId },
+              action: "auth.sign_in_denied",
+              outcome: "denied",
+              target: {
+                type: "user",
+                id: session.userId,
+                label: user?.email ?? null,
+              },
+              details: {
+                reason: code,
+                method: store?.oidc ? "sso" : "password",
+              },
+            });
+            // OIDC callbacks are browser navigations: redirect to the login
+            // page instead of returning a JSON error.
+            if (store?.oidc && context && "redirect" in context) {
+              throw context.redirect(`${BETTER_AUTH_URL}/login?error=${code}`);
+            }
+            throw new APIError("FORBIDDEN", { message });
+          };
+
+          if (user?.disabled) {
+            await deny(
+              "account_disabled",
+              "Your account has been disabled. Contact an administrator.",
+            );
+          }
+          if (
+            store?.oidc &&
+            !(await oidcSyncService.isLoginAllowed(store.oidc.groups))
+          ) {
+            await deny(
+              "sso_no_matching_group",
+              "Your identity provider groups do not grant access to MetaMCP.",
+            );
+          }
+          return { data: session };
+        },
+        after: async (session) => {
+          const store = getAuthRequestStore();
+          try {
+            const user = await usersRepository.findById(session.userId);
+            if (user && !store?.bypassSignupRestrictions) {
+              await activityLog.record({
+                actor: { kind: "user", userId: user.id },
+                action: "auth.sign_in",
+                target: { type: "user", id: user.id, label: user.email },
+                details: { method: store?.oidc ? "sso" : "password" },
+              });
+            }
+            if (
+              user &&
+              user.role !== "admin" &&
+              (user.emailVerified || store?.oidc) &&
+              accessSettings.getAdminEmails().includes(user.email.toLowerCase())
+            ) {
+              await usersRepository.setRole(user.id, "admin");
+              await activityLog.record({
+                actor: { kind: "system", label: "ADMIN_EMAILS" },
+                action: "user.promoted",
+                target: { type: "user", id: user.id, label: user.email },
+                details: {
+                  changes: { baseRole: { from: user.role, to: "admin" } },
+                },
+              });
+            }
+            if (store?.oidc && user) {
+              await oidcSyncService.syncUser(user.id, store.oidc.groups);
+            }
+          } catch (error) {
+            // Never block a login because of a sync failure.
+            logger.error("Post-login RBAC sync failed:", error);
+          } finally {
+            accessService.invalidateUser(session.userId);
+          }
         },
       },
     },
   },
-  // Add middleware to check basic auth setting
-  middleware: [
-    {
-      path: "/sign-in/email",
-      middleware: createBasicAuthCheckMiddleware(),
-    },
-    {
-      path: "/sign-up/email",
-      middleware: createBasicAuthCheckMiddleware(),
-    },
-    {
-      path: "/forgot-password",
-      middleware: createBasicAuthCheckMiddleware(),
-    },
-    {
-      path: "/reset-password",
-      middleware: createBasicAuthCheckMiddleware(),
-    },
-  ],
+  hooks: {
+    // "Disable basic authentication" (SSO only) must hold on the API, not
+    // only in the login form. (A top-level `middleware` option used for this
+    // is not a better-auth option and was silently ignored.)
+    before: createAuthMiddleware(async (ctx) => {
+      if (
+        PASSWORD_AUTH_PATHS.has(ctx.path) &&
+        !getAuthRequestStore()?.bypassSignupRestrictions &&
+        (await configService.isBasicAuthDisabled())
+      ) {
+        throw new APIError("FORBIDDEN", {
+          message:
+            "Basic email/password authentication is currently disabled. Please use SSO/OIDC authentication instead.",
+        });
+      }
+    }),
+  },
 });
 
 console.log("✓ Better Auth instance created successfully");

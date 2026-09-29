@@ -52,9 +52,18 @@ const OAuthCallback = () => {
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
       const state = params.get("state") ?? undefined;
-      const upstreamError = params.get("error");
+      // Both come from the URL: an error code must look like one, and the
+      // description is shortened, so a crafted link cannot put arbitrary
+      // text on this page.
+      const errorParam = params.get("error");
+      const upstreamError =
+        errorParam === null
+          ? null
+          : /^[\w.-]{1,64}$/.test(errorParam)
+            ? errorParam
+            : "invalid_callback";
       const upstreamErrorDescription =
-        params.get("error_description") ?? undefined;
+        params.get("error_description")?.slice(0, 300) ?? undefined;
       const serverUrl = sessionStorage.getItem(SESSION_KEYS.SERVER_URL);
       const mcpServerUuid = sessionStorage.getItem(
         SESSION_KEYS.MCP_SERVER_UUID,

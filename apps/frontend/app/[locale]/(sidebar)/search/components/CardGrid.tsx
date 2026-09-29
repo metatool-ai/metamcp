@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { OwnershipSelect } from "@/components/access/ownership-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +45,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
+import {
+  formatArgs,
+  parseArgs,
+  parseKeyValueLines,
+} from "@/lib/server-config-text";
 import { trpc } from "@/lib/trpc";
 import { createTranslatedZodResolver } from "@/lib/zod-resolver";
 import type { SearchIndex } from "@/types/search";
@@ -62,6 +69,7 @@ function CreateServerDialog({
 }: CreateServerDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { t } = useTranslations();
+  const { isAdmin } = useAccess();
 
   // Get the tRPC query client for cache invalidation
   const utils = trpc.useUtils();
@@ -177,29 +185,11 @@ function CreateServerDialog({
   const onSubmit = async (data: CreateServerFormData) => {
     setIsSubmitting(true);
     try {
-      // Parse args string into array by splitting on spaces
-      const argsArray = data.args
-        ? data.args
-            .trim()
-            .split(/\s+/)
-            .filter((arg) => arg.length > 0)
-        : [];
+      // Quotes group words: "/data/My Files" stays one argument
+      const argsArray = parseArgs(data.args ?? "");
 
-      // Parse env string into object
-      const envObject: Record<string, string> = {};
-      if (data.env) {
-        const envLines = data.env.trim().split("\n");
-        for (const line of envLines) {
-          const trimmedLine = line.trim();
-          if (trimmedLine && trimmedLine.includes("=")) {
-            const [key, ...valueParts] = trimmedLine.split("=");
-            const value = valueParts.join("="); // Handle values that contain '='
-            if (key?.trim()) {
-              envObject[key.trim()] = value;
-            }
-          }
-        }
-      }
+      // KEY=VALUE lines, values kept as typed
+      const envObject = parseKeyValueLines(data.env ?? "");
 
       // Create the API request payload
       const apiPayload: CreateMcpServerRequest = {
@@ -331,47 +321,22 @@ function CreateServerDialog({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="user_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    {t("search:dialog.form.ownershipLabel")}
-                  </FormLabel>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-between"
-                      >
-                        {field.value === null
-                          ? t("search:dialog.form.ownership.public")
-                          : t("search:dialog.form.ownership.private")}
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]"
-                      align="start"
-                    >
-                      <DropdownMenuItem
-                        onClick={() => field.onChange(undefined)}
-                      >
-                        {t("search:dialog.form.ownership.private")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => field.onChange(null)}>
-                        {t("search:dialog.form.ownership.public")}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t("search:dialog.form.ownership.helpText")}
-                  </p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {isAdmin && (
+              <FormField
+                control={form.control}
+                name="user_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("access:ownership.label")}</FormLabel>
+                    <OwnershipSelect
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {form.watch("type") === McpServerTypeEnum.enum.STDIO && (
               <>
@@ -512,6 +477,9 @@ export default function CardGrid({ items }: { items: SearchIndex }) {
     null,
   );
   const { t } = useTranslations();
+  const { can } = useAccess();
+  // Registry servers run through a local command (STDIO)
+  const canInstall = can("mcp_servers.create_stdio");
 
   const handleAddServer = (item: SearchIndex[string]) => {
     // Prepare default values for the form
@@ -526,7 +494,7 @@ export default function CardGrid({ items }: { items: SearchIndex }) {
       description: item.description,
       type: McpServerTypeEnum.enum.STDIO,
       command: item.command,
-      args: item.args?.join(" ") || "",
+      args: formatArgs(item.args ?? []),
       url: "",
       bearerToken: "",
       env: envString,
@@ -624,6 +592,10 @@ export default function CardGrid({ items }: { items: SearchIndex }) {
                 variant="default"
                 size="sm"
                 onClick={() => handleAddServer(item)}
+                disabled={!canInstall}
+                title={
+                  canInstall ? undefined : t("access:stdioRequiresPermission")
+                }
               >
                 <Plus className="w-4 h-4 mr-2" />
                 {t("search:card.addServer")}

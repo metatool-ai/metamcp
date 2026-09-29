@@ -33,11 +33,14 @@ interface ToolsListResponse {
 interface ToolManagementProps {
   mcpServerUuid: string;
   makeRequest: MakeRequestFn;
+  /** Tool definitions are only saved by people who can edit the server. */
+  canSaveTools?: boolean;
 }
 
 export function ToolManagement({
   mcpServerUuid,
   makeRequest,
+  canSaveTools = true,
 }: ToolManagementProps) {
   const [mcpTools, setMcpTools] = useState<MCPTool[]>([]);
   const [loading, setLoading] = useState(false);
@@ -86,8 +89,10 @@ export function ToolManagement({
       const allTools: MCPTool[] = [];
       let cursor: string | undefined = undefined;
       let hasMore = true;
+      // Bounded, and stops if the server repeats a cursor
+      const seenCursors = new Set<string>();
 
-      while (hasMore) {
+      while (hasMore && seenCursors.size < 100) {
         const response = (await makeRequest(
           {
             method: "tools/list" as const,
@@ -102,23 +107,26 @@ export function ToolManagement({
         }
 
         cursor = response?.nextCursor;
-        hasMore = !!response?.nextCursor;
+        hasMore = !!cursor && !seenCursors.has(cursor);
+        if (cursor) seenCursors.add(cursor);
       }
 
       if (allTools.length > 0) {
         setMcpTools(allTools);
 
-        // Automatically save tools to database
-        const toolsToSave = allTools.map((tool) => ({
-          name: tool.name,
-          description: tool.description || undefined,
-          inputSchema: tool.inputSchema || { type: "object" as const },
-        }));
+        // Automatically save tools to database (editors only)
+        if (canSaveTools) {
+          const toolsToSave = allTools.map((tool) => ({
+            name: tool.name,
+            description: tool.description || undefined,
+            inputSchema: tool.inputSchema || { type: "object" as const },
+          }));
 
-        saveToolsMutation.mutate({
-          mcpServerUuid,
-          tools: toolsToSave,
-        });
+          saveToolsMutation.mutate({
+            mcpServerUuid,
+            tools: toolsToSave,
+          });
+        }
       } else {
         setMcpTools([]);
         toast.info(t("mcp-servers:tools.noToolsFromMcp"));
@@ -132,7 +140,7 @@ export function ToolManagement({
     } finally {
       setLoading(false);
     }
-  }, [makeRequest, mcpServerUuid, saveToolsMutation, t]);
+  }, [makeRequest, mcpServerUuid, saveToolsMutation, t, canSaveTools]);
 
   // Auto-fetch tools when component mounts - but only once
   useEffect(() => {

@@ -30,18 +30,23 @@ setInterval(
   5 * 60 * 1000,
 );
 
-// Enable CORS for all OAuth endpoints with wildcard origin
+// OAuth and discovery paths. This router is mounted at the root of the
+// app: its middlewares must not leak onto the other routes.
+const OAUTH_PATHS = ["/oauth", "/.well-known"];
+
+// Any origin may call the OAuth endpoints (browser-based MCP clients), but
+// without cookies: they authenticate with client credentials and tokens.
 oauthRouter.use(
+  OAUTH_PATHS,
   cors({
-    origin: "*", // Allow all origins for OAuth endpoints
-    credentials: true,
+    origin: "*",
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   }),
 );
 
 // Apply middleware for OAuth-specific routes
-oauthRouter.use(securityHeaders);
+oauthRouter.use(OAUTH_PATHS, securityHeaders);
 oauthRouter.use(jsonParsingMiddleware);
 oauthRouter.use(urlencodedParsingMiddleware);
 

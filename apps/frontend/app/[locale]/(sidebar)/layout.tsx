@@ -1,20 +1,29 @@
 "use client";
 
+import type { Capability } from "@repo/zod-types";
 import {
   FileTerminal,
+  Fingerprint,
   History,
   Key,
   Link as LinkIcon,
+  LucideIcon,
   Package,
+  ScrollText,
   Search,
   SearchCode,
   Server,
   Settings,
+  ShieldHalf,
+  UserCog,
+  Users,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
+import { RoleBadge } from "@/components/access/access-badges";
+import { UserAvatar } from "@/components/access/user-avatar";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { LogsStatusIndicator } from "@/components/logs-status-indicator";
 import { Button } from "@/components/ui/button";
@@ -35,60 +44,55 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
 import { authClient } from "@/lib/auth-client";
-import { getLocalizedPath, SupportedLocale } from "@/lib/i18n";
+import { getLocalizedPath, getPathnameWithoutLocale } from "@/lib/i18n";
 
-// Menu items function - now takes locale parameter
-const getMenuItems = (t: (key: string) => string, locale: SupportedLocale) => [
-  {
-    title: t("navigation:exploreMcpServers"),
-    url: getLocalizedPath("/search", locale),
-    icon: Search,
-  },
-  {
-    title: t("navigation:mcpServers"),
-    url: getLocalizedPath("/mcp-servers", locale),
-    icon: Server,
-  },
-  {
-    title: t("navigation:metamcpNamespaces"),
-    url: getLocalizedPath("/namespaces", locale),
-    icon: Package,
-  },
-  {
-    title: t("navigation:metamcpEndpoints"),
-    url: getLocalizedPath("/endpoints", locale),
-    icon: LinkIcon,
-  },
-  {
-    title: t("navigation:mcpInspector"),
-    url: getLocalizedPath("/mcp-inspector", locale),
-    icon: SearchCode,
-  },
-  {
-    title: t("navigation:apiKeys"),
-    url: getLocalizedPath("/api-keys", locale),
-    icon: Key,
-  },
-  {
-    title: t("navigation:auditLogs"),
-    url: getLocalizedPath("/audit-logs", locale),
-    icon: History,
-  },
-  {
-    title: t("navigation:settings"),
-    url: getLocalizedPath("/settings", locale),
-    icon: Settings,
-  },
-];
+type MenuItem = {
+  title: string;
+  path: string;
+  icon: LucideIcon;
+  /** Hidden unless the user holds this capability (admins hold them all). */
+  capability?: Capability;
+};
+
+function isActivePath(current: string, path: string): boolean {
+  return current === path || current.startsWith(`${path}/`);
+}
+
+function NavItems({ items }: { items: MenuItem[] }) {
+  const { locale } = useTranslations();
+  const pathname = getPathnameWithoutLocale(usePathname() ?? "/");
+  return (
+    <>
+      {items.map((item) => (
+        <SidebarMenuItem key={item.path}>
+          <SidebarMenuButton
+            asChild
+            isActive={isActivePath(pathname, item.path)}
+          >
+            <Link href={getLocalizedPath(item.path, locale)}>
+              <item.icon />
+              <span>{item.title}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ))}
+    </>
+  );
+}
 
 function LiveLogsMenuItem() {
   const { t, locale } = useTranslations();
+  const pathname = getPathnameWithoutLocale(usePathname() ?? "/");
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild>
+      <SidebarMenuButton
+        asChild
+        isActive={isActivePath(pathname, "/live-logs")}
+      >
         <Link href={getLocalizedPath("/live-logs", locale)}>
           <FileTerminal />
           <span>{t("navigation:liveLogs")}</span>
@@ -101,19 +105,7 @@ function LiveLogsMenuItem() {
 
 function UserInfoFooter() {
   const { t } = useTranslations();
-  const [user, setUser] = useState<{
-    name?: string | null;
-    email?: string | null;
-  } | null>(null);
-
-  // Get user info
-  useEffect(() => {
-    authClient.getSession().then((session) => {
-      if (session?.data?.user) {
-        setUser(session.data.user);
-      }
-    });
-  }, []);
+  const { me } = useAccess();
 
   const handleSignOut = async () => {
     await authClient.signOut();
@@ -131,15 +123,38 @@ function UserInfoFooter() {
           <p className="text-xs text-muted-foreground">v2.5-ai-dev</p>
         </div>
         <Separator />
-        {user && (
+        {me && (
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium">
-                {user.name || user.email}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {user.email}
-              </span>
+            <div className="flex items-center gap-3">
+              <UserAvatar
+                name={me.name}
+                email={me.email}
+                image={me.image}
+                seed={me.userId}
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate text-sm font-medium">
+                  {me.name || me.email}
+                </span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {me.email}
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <RoleBadge role={me.role} />
+              {me.groups
+                .filter((group) => group.systemKey !== "everyone")
+                .slice(0, 2)
+                .map((group) => (
+                  <span
+                    key={group.uuid}
+                    className="inline-flex h-6 max-w-[9rem] items-center truncate rounded-md border px-2 text-xs text-muted-foreground"
+                    title={group.name}
+                  >
+                    {group.name}
+                  </span>
+                ))}
             </div>
             <Button
               variant="outline"
@@ -161,8 +176,49 @@ export default function SidebarLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { t, locale } = useTranslations();
-  const items = getMenuItems(t, locale);
+  const { t } = useTranslations();
+  const { isAdmin, can } = useAccess();
+
+  const applicationItems: MenuItem[] = [
+    {
+      title: t("navigation:exploreMcpServers"),
+      path: "/search",
+      icon: Search,
+      capability: "mcp_servers.create" as const,
+    },
+    { title: t("navigation:mcpServers"), path: "/mcp-servers", icon: Server },
+    {
+      title: t("navigation:metamcpNamespaces"),
+      path: "/namespaces",
+      icon: Package,
+    },
+    {
+      title: t("navigation:metamcpEndpoints"),
+      path: "/endpoints",
+      icon: LinkIcon,
+    },
+    {
+      title: t("navigation:mcpInspector"),
+      path: "/mcp-inspector",
+      icon: SearchCode,
+      capability: "inspector.use" as const,
+    },
+    { title: t("navigation:apiKeys"), path: "/api-keys", icon: Key },
+    { title: t("navigation:auditLogs"), path: "/audit-logs", icon: History },
+  ].filter((item) => !item.capability || can(item.capability));
+
+  const adminItems: MenuItem[] = [
+    { title: t("navigation:users"), path: "/admin/users", icon: UserCog },
+    { title: t("navigation:groups"), path: "/admin/groups", icon: Users },
+    { title: t("navigation:roles"), path: "/admin/roles", icon: ShieldHalf },
+    { title: t("navigation:sso"), path: "/admin/sso", icon: Fingerprint },
+    {
+      title: t("navigation:activity"),
+      path: "/admin/activity",
+      icon: ScrollText,
+    },
+    { title: t("navigation:settings"), path: "/settings", icon: Settings },
+  ];
 
   return (
     <SidebarProvider>
@@ -187,20 +243,24 @@ export default function SidebarLayout({
             <SidebarGroupLabel>{t("navigation:application")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {items.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
-                      <Link href={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-                <LiveLogsMenuItem />
+                <NavItems items={applicationItems} />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+
+          {isAdmin && (
+            <SidebarGroup>
+              <SidebarGroupLabel>
+                {t("navigation:administration")}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <NavItems items={adminItems} />
+                  <LiveLogsMenuItem />
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
         </SidebarContent>
 
         <UserInfoFooter />

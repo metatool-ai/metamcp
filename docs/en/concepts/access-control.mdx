@@ -1,0 +1,187 @@
+---
+title: "Users, roles & permissions"
+description: "Roles, groups, sharing and OIDC group mapping"
+---
+
+MetaMCP controls access in three layers:
+
+1. **Role**: what someone may do in general (create servers, publish endpoints, administer the instance).
+2. **Groups**: who belongs together. A group can grant a role and receive shares.
+3. **Ownership and shares**: which MCP servers and namespaces someone can use, edit or manage.
+
+Every rule is enforced by the backend (tRPC API, MCP endpoints, inspector proxy and admin MCP tools). The UI only hides what you cannot do.
+
+## Roles
+
+| Role | Intended for | What it can do |
+|------|--------------|----------------|
+| **Admin** | Platform owners | Everything: users, groups, roles, single sign-on, settings, live logs, organisation-owned resources. Admins can open and manage every resource. |
+| **Editor** | Teams publishing MCP servers | Adds MCP servers, builds namespaces, publishes endpoints and shares what they manage (configurable). |
+| **Viewer** | Consumers | Uses what is shared with them, through endpoints and API keys (configurable). |
+
+A user's **effective role** is the highest of their own role and the roles granted by their groups. For example, a viewer who belongs to a group that grants *editor* is an editor.
+
+### Permissions of editors and viewers
+
+Administrators adjust what editors and viewers may do in **Administration → Roles & permissions**. Admins always hold every permission.
+
+| Permission | Editor (default) | Viewer (default) | Gates |
+|------------|:---:|:---:|-------|
+| Add remote MCP servers | ✅ | — | Creating SSE / Streamable HTTP servers, importing configurations |
+| Add and edit STDIO servers | — | — | STDIO servers run a command on the MetaMCP host, which amounts to shell access. Also needed to install servers from the registry. |
+| Create namespaces | ✅ | — | Combining the servers you can use into your own namespaces |
+| Create endpoints | ✅ | — | Publishing namespaces you **manage** as MCP, SSE and OpenAPI endpoints |
+| Share with others | ✅ | — | Sharing what you manage with people, groups or everyone |
+| Create API keys | ✅ | ✅ | Personal keys used by MCP clients |
+| Use the MCP inspector | ✅ | ✅ | Calling the tools of servers and namespaces shared with you from the web UI. Anyone who can edit a server or namespace can always test it. |
+
+<Warning>
+Granting "Add and edit STDIO servers" to non-administrators lets them run arbitrary commands on the MetaMCP host. Keep it for administrators unless every editor is trusted with that host.
+</Warning>
+
+### Always reserved to administrators
+
+- Users, groups, roles and single sign-on settings
+- Server settings (including registration switches) and live logs
+- Every user's audit logs (other users only see calls made with their own keys or OAuth tokens)
+- Organisation-owned resources and organisation API keys
+- Endpoints without authentication
+- The MetaMCP admin tools on endpoints
+
+Opening an admin page without the admin role shows an *access restricted* page.
+
+## Groups
+
+Administrators manage groups in **Administration → Groups**. A group has a name, an optional role, members, and optionally the identity provider groups mapped to it (see [SSO group mapping](#sso-oidc-group-mapping)).
+
+Two **system groups** always exist:
+
+- **Administrators**: grants the admin role. It can be mapped to an IdP group so admins come from your directory.
+- **Everyone**: every signed-in user, implicitly. It cannot grant the admin role and cannot be mapped to IdP groups. Share a resource with *Everyone* to make it available to the whole organisation.
+
+Memberships are either **manual** (added by an administrator) or **SSO** (synchronised from the identity provider). SSO synchronisation never removes manual memberships.
+
+## Ownership
+
+Every MCP server, namespace and endpoint has an owner:
+
+- **A user**. The resource is private until its owner shares it.
+- **The organisation**. The resource is managed by administrators, and non-admins only see it once it is shared with them.
+
+Only administrators can create organisation resources, create resources on behalf of someone else, or transfer ownership.
+
+## Sharing
+
+MCP servers and namespaces can be shared with a **user**, a **group** or **Everyone**, with one of three levels:
+
+| Level | Grants |
+|-------|--------|
+| **Can use** | Connect through endpoints and the inspector. The configuration is visible **without its secrets**: environment values, bearer tokens, header values and arguments are hidden, and only the origin of the URL is shown (many hosted MCP services put their secret in the URL path). The server's error output is not shown either. |
+| **Can edit** | Also change the configuration, tools and credentials. |
+| **Can manage** | Also delete it and choose who has access. |
+
+The owner and administrators always have *manage* access. When several grants apply (direct, groups, Everyone), the highest level wins.
+
+Rules worth knowing:
+
+- **Endpoints follow their namespace.** Anyone who can use a namespace can connect to its endpoints. Publishing a namespace through an endpoint requires managing that namespace. Owning an endpoint grants nothing more: its owner loses it with the access to its namespace.
+- **Namespaces grant their tools, not their servers.** Using a namespace does not give access to the pages or configuration of its servers.
+- **No redistribution.** You cannot share a namespace, or add servers to a shared namespace, if it contains servers you do not manage, unless those servers are shared with Everyone. Administrators are exempt. An endpoint without authentication counts as sharing its namespace, and a server whose configuration holds a MetaMCP credential (such as the server generated for an endpoint) counts as the namespaces that credential reaches; one holding a *full* personal key or OAuth token cannot be shared at all.
+- **Access is checked continuously.** When a share, a group membership or a role is removed, the servers concerned leave the namespaces built on them, and the next request of an open MCP session is refused.
+- **Everyone is use-only for non-admins.** Only administrators can give edit or manage access to the whole organisation.
+
+## API keys
+
+- A key is **shown once**, when it is created: MetaMCP only stores its SHA-256 fingerprint and a preview (`sk_mt_AbCd…wxyz`). See [secrets encryption](/en/deployment/secrets-encryption).
+- **Personal keys** act as their owner. They stop working as soon as the owner is disabled.
+- **Organisation keys** (admins only) are not tied to a person. Prefer personal keys so that calls stay attributable in the audit logs.
+
+Each key also has a **scope**, chosen when it is created and editable afterwards:
+
+| Scope | The key can |
+|-------|-------------|
+| **Full account access** | Do everything its owner can do: use every endpoint of the namespaces the owner can use, and the MetaMCP admin tools on endpoints where an administrator enabled them. An organisation key with this scope reaches the namespaces shared with Everyone. |
+| **Specific endpoints** | Only **use the MCP servers** of the endpoints listed: MCP (Streamable HTTP and SSE) and REST tool calls. It never gets the MetaMCP admin tools nor the endpoint administration routes. A personal key can only list endpoints its owner can use, and stops working on an endpoint as soon as the owner loses access to it. An organisation key can be dedicated to any endpoint by an administrator (a service account for that endpoint). |
+
+Prefer endpoint-scoped keys for MCP clients and integrations: a leaked key then exposes the tools of a few endpoints, not the whole account.
+
+The MCP server that MetaMCP can generate with a new endpoint ("*&lt;endpoint&gt;-endpoint*") receives such a key, limited to that endpoint and owned by the endpoint's owner.
+
+In **API keys**, administrators can also display **the keys of all users**, to disable or delete a leaked one.
+
+## Managing users
+
+In **Administration → Users**, administrators can:
+
+- invite users with a password (even when self-registration is disabled) and choose their role and groups;
+- change a user's role and group memberships;
+- reset passwords and revoke sessions;
+- **disable** a user. Their sessions and MetaMCP OAuth tokens are revoked, their API keys are rejected and sign-in is refused. Re-enabling them makes their API keys work again; they simply sign in again;
+- **delete** a user, transferring their resources to someone else or to the organisation, or deleting them.
+
+MetaMCP refuses any change that would leave the instance without an active administrator.
+
+Every change made here, every sign-in and every refused sign-in is recorded in the [activity log](/en/concepts/activity-log).
+
+## SSO (OIDC) group mapping
+
+When OIDC single sign-on is configured (`OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_DISCOVERY_URL`), MetaMCP can read the user's groups from the ID token at every sign-in and keep group memberships in sync.
+
+1. Release a groups claim from your identity provider in the ID token, and add the scope that releases it to `OIDC_SCOPES` (for example `openid email profile groups`).
+2. In **Administration → Single sign-on**, check the claim name (`groups` by default). Nested claims use a dot path, for example `realm_access.roles` for Keycloak realm roles.
+3. On each group, list the **IdP groups** that map to it. Matching is case-insensitive, `*` is a wildcard and a leading `/` is ignored (Keycloak group paths). For example, `/engineering/*` matches `/engineering/platform`.
+4. Use the **mapping tester** on the Single sign-on page to see which groups and role a sample set of IdP groups would produce.
+
+At each SSO sign-in:
+
+- users are created automatically on first sign-in (unless SSO registration is disabled) with the default role (`viewer` unless configured otherwise);
+- SSO memberships are added and removed to match the claim, and manual memberships are kept;
+- if the claim is **missing** (or Microsoft Entra ID reports a groups overage), memberships are left unchanged rather than removed.
+
+With **Require a group match** enabled, a sign-in whose groups match no MetaMCP group is refused and no account is created. A missing claim is refused too. The login page explains why the sign-in failed.
+
+<Tip>
+Map your directory's admin group to the **Administrators** system group so administrator rights follow your directory. Keep one `ADMIN_EMAILS` entry (or a local admin account) as break-glass access.
+</Tip>
+
+## Initial roles and provisioning
+
+- The **first account** ever created is an administrator.
+- Emails listed in `ADMIN_EMAILS` are always administrators, and are promoted at their next sign-in, as long as the address is vouched for: an SSO account, an account created by an administrator or the bootstrap, or a verified email. Someone registering with a listed address that nobody has registered yet does not become an administrator.
+- Everyone else starts with the **default role** (`DEFAULT_USER_ROLE`, also editable in the UI).
+- `BOOTSTRAP_USERS` entries accept `role` (default `admin`) and `groups`, and `BOOTSTRAP_GROUPS` declares groups with their role, IdP mappings and members. Both work even when registration is disabled.
+
+```bash
+ADMIN_EMAILS=admin@example.com
+DEFAULT_USER_ROLE=viewer
+OIDC_SCOPES=openid email profile groups
+OIDC_GROUPS_CLAIM=groups
+OIDC_SYNC_GROUPS=true
+OIDC_REQUIRE_GROUP_MATCH=false
+BOOTSTRAP_GROUPS=[{"name":"Administrators","oidc_groups":["metamcp-admins"]},{"name":"Platform team","role":"editor","oidc_groups":["/engineering/platform"]}]
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ADMIN_EMAILS` | | Comma-separated emails that are always administrators |
+| `DEFAULT_USER_ROLE` | `viewer` | Role of new users (`admin`, `editor` or `viewer`) |
+| `OIDC_GROUPS_CLAIM` | `groups` | Claim (or dot path) holding the user's groups |
+| `OIDC_SYNC_GROUPS` | `true` | Synchronise SSO memberships at each sign-in |
+| `OIDC_REQUIRE_GROUP_MATCH` | `false` | Refuse SSO sign-ins that match no group |
+| `BOOTSTRAP_GROUPS` | | JSON array of groups to create at startup |
+
+Settings changed in the UI take precedence over these variables.
+
+## Upgrading from an earlier version
+
+The database migration keeps existing deployments working:
+
+- the **Administrators** and **Everyone** groups are created;
+- existing users become **editors**, and the oldest account becomes an **administrator**;
+- former *public* MCP servers and namespaces become **organisation-owned** and are shared with **Everyone** at the *Can use* level, so everybody keeps using them but only administrators can change them;
+- former *public* API keys become **organisation keys**: they keep reaching the former public namespaces;
+- private resources stay private to their owners.
+
+<Note>
+After upgrading, review **Administration → Users** and the shares of your organisation resources: former public resources could be edited by anyone, and are now read-only for non-admins.
+</Note>

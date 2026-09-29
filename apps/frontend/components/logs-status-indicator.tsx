@@ -3,15 +3,17 @@
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { useLogsStore } from "@/lib/stores/logs-store";
+import { initializeLogsPolling, useLogsStore } from "@/lib/stores/logs-store";
 
 export function LogsStatusIndicator() {
   const { totalCount, isAutoRefreshing } = useLogsStore();
   const [mounted, setMounted] = useState(false);
 
-  // Only render after component mounts to avoid hydration mismatch
+  // Only render after component mounts to avoid hydration mismatch.
+  // This indicator is only shown to administrators: start live-log polling.
   useEffect(() => {
     setMounted(true);
+    initializeLogsPolling();
   }, []);
 
   // Return empty div during SSR to avoid hydration mismatch

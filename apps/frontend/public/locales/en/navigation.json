@@ -10,5 +10,11 @@
   "liveLogs": "Live Logs",
   "application": "Application",
   "logout": "Logout",
-  "profile": "Profile"
+  "profile": "Profile",
+  "administration": "Administration",
+  "users": "Users",
+  "groups": "Groups",
+  "roles": "Roles & permissions",
+  "sso": "Single sign-on",
+  "activity": "Activity log"
 }

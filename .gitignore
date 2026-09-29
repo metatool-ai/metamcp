@@ -45,3 +45,7 @@ yarn-error.log*
 # Docker Files
 docker-compose.override.yml
 compose.override.yml
+
+# backend log files (written to the working directory)
+/app.log
+/error.log

@@ -58,6 +58,8 @@ English | [简体中文](./README_cn.md)
 - [❄️ Cold Start Problem and Custom Dockerfile](#️-cold-start-problem-and-custom-dockerfile)
 - [🧾 Log Levels](#-log-levels)
 - [🔐 Authentication](#-authentication)
+- [👥 Users, Roles \& Permissions](#-users-roles--permissions)
+- [🔒 Secrets Encryption \& Activity Log](#-secrets-encryption--activity-log)
 - [🚦 Traffic Management](#-traffic-management)
   - [🚧 **MCP Rate Limit**](#-mcp-rate-limit)
 - [🔗 OpenID Connect (OIDC) Provider Support](#-openid-connect-oidc-provider-support)
@@ -293,11 +295,11 @@ For more details and alternative approaches, see [issue #76](https://github.com/
 
 ## ❄️ Cold Start Problem and Custom Dockerfile
 
-- MetaMCP pre-allocate idle sessions for each configured MCP servers and MetaMCPs. The default idle session for each is 1 and that can help reduce cold start time.
+- Connections to MCP servers open on first use and close after 15 minutes without use (`MCP_CONNECTION_IDLE_TTL`): each STDIO connection is a process, so an idle instance keeps none. `MCP_WARM_POOL=true` instead keeps one started connection per server exposed by an endpoint, for instant first calls. See [Memory and sizing](docs/en/deployment/performance.mdx).
 - If your MCP requires dependencies other than `uvx` or `npx`, you need to customize the Dockerfile to install dependencies on your own.
 - Check [invalidation.md](invalidation.md) for a seq diagram about how idle session invalidates during updates.
 
-🛠️ **Solution**: Customize the Dockerfile to add dependencies or pre-install packages to reduce cold start time.
+🛠️ **Solution**: Customize the Dockerfile to add dependencies or pre-install packages to reduce cold start time (and the memory of the `npx`/`uvx` launchers).
 
 ## 🧾 Log Levels
 
@@ -327,8 +329,47 @@ MetaMCP’s backend writes logs to files and optionally mirrors selected levels 
 - 🍪 **Session cookies** enforce secure internal MCP proxy connections
 - 🔑 **API key authentication** for external access via `Authorization: Bearer <api-key>` header
 - 🪪 **MCP OAuth**: Exposed endpoints have options to use standard OAuth in MCP Spec 2025-06-18, easy to connect.
-- 🏢 **Multi-tenancy**: Designed for organizations to deploy on their own machines. Supports both private and public access scopes. Users can create MCPs, namespaces, endpoints, and API keys for themselves or for everyone. Public API keys cannot access private MetaMCPs.
+- 🏢 **Multi-tenancy**: Designed for organizations to deploy on their own machines, with roles, groups and per-resource sharing (see below).
 - ⚙️ **Separate Registration Controls**: Administrators can independently control UI registration and SSO/OAuth registration through the settings page, allowing for flexible enterprise deployment scenarios.
+
+## 👥 Users, Roles & Permissions
+
+- 🧑‍💼 **Roles**: `admin` (users, groups, settings, logs, everything), `editor` (adds, builds and shares its own MCP servers, namespaces and endpoints) and `viewer` (uses what is shared with it). What editors and viewers may do is configurable in **Administration → Roles & permissions**.
+- 👪 **Groups**: grant a role and receive shares. **Administrators** and **Everyone** always exist.
+- 🔗 **Sharing**: share an MCP server or a namespace with a user, a group or everyone, with the *Can use*, *Can edit* or *Can manage* level. *Can use* never reveals secrets (env values, tokens, headers). Endpoints follow the access to their namespace.
+- 🏛️ **Organisation resources**: owned by the organisation, managed by administrators and only visible to the people and groups they are shared with.
+- 🪪 **SSO group mapping**: OIDC groups from the ID token are mapped to MetaMCP groups at every sign-in (wildcards supported). Optionally refuse sign-ins that match no group.
+- 🛡️ **Admin-only areas**: users, groups, roles, single sign-on, settings, live logs and every user's audit logs.
+
+```bash
+ADMIN_EMAILS=admin@example.com        # always administrators (break-glass access)
+DEFAULT_USER_ROLE=viewer              # role of new users
+OIDC_SCOPES=openid email profile groups
+OIDC_GROUPS_CLAIM=groups              # e.g. realm_access.roles for Keycloak
+OIDC_SYNC_GROUPS=true
+OIDC_REQUIRE_GROUP_MATCH=false
+```
+
+Upgrading keeps existing deployments working: existing users become editors, the oldest account becomes an administrator, and former public resources become organisation resources shared with everyone (read-only for non-admins). See **[Users, roles & permissions](docs/en/concepts/access-control.mdx)** for the full model.
+
+## 🔒 Secrets Encryption & Activity Log
+
+- 🔐 **Encryption at rest**: MCP server URLs, arguments, environment values, headers, bearer tokens and upstream OAuth tokens are encrypted (AES-256-GCM, envelope encryption). The key protecting them never touches the database: `SECRETS_ENCRYPTION_KEY`, or optionally an **OpenBao / Vault Transit** key.
+- 🧾 **Fingerprints only**: API keys and the tokens of MetaMCP's OAuth server are stored as SHA-256 fingerprints. An API key is shown once, when it is created.
+- 🔁 **Rotation without downtime**: rotate the data key from **Settings → Encryption at rest**; rotate or switch the key encryption key with a restart (data keys are re-wrapped automatically).
+- 📜 **Activity log** (**Administration → Activity log**): who changed users, groups, roles, sharing, resources, API keys and settings, every sign-in and refused sign-in, with before/after values, IP address and CSV export. Append-only, secret values are never recorded.
+
+```bash
+SECRETS_ENCRYPTION_KEY=$(openssl rand -base64 32)   # back it up separately from the database
+# Optional: keep the master key in OpenBao / Vault Transit
+SECRETS_PROVIDER=openbao
+OPENBAO_ADDR=https://openbao.example.com:8200
+OPENBAO_ROLE_ID=...
+OPENBAO_SECRET_ID_FILE=/run/secrets/openbao-secret-id
+ACTIVITY_LOG_RETENTION_DAYS=365
+```
+
+See **[Secrets encryption](docs/en/deployment/secrets-encryption.mdx)** and **[Activity log](docs/en/concepts/activity-log.mdx)**.
 
 ## 🚦 Traffic Management
 
@@ -375,6 +416,10 @@ OIDC_DISCOVERY_URL=https://your-provider.com/.well-known/openid-configuration
 OIDC_PROVIDER_ID=oidc
 OIDC_SCOPES=openid email profile
 OIDC_PKCE=true
+
+# Optional: map IdP groups to MetaMCP groups (add "groups" to OIDC_SCOPES)
+OIDC_GROUPS_CLAIM=groups
+OIDC_REQUIRE_GROUP_MATCH=false
 ```
 
 ### 🏢 **Supported Providers**
@@ -420,7 +465,7 @@ This separation enables common enterprise scenarios:
 
 ### 🛠️ **Configuration**
 
-Access the **Settings** page in the MetaMCP admin interface to configure these controls:
+Administrators configure these controls on the **Settings** page:
 
 1. Navigate to **Settings** → **Authentication Settings**
 2. Toggle **"Disable UI Registration"** to control form-based signups

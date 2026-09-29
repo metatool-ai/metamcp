@@ -1,0 +1,516 @@
+{
+  "eyebrow": "Administration",
+  "users": {
+    "title": "Users",
+    "description": "Everyone who can sign in to MetaMCP: their role, groups, sign-in methods and what they own.",
+    "add": "Add user",
+    "addTitle": "Add a user",
+    "addDescription": "Create an account with an email and password. Users signing in with SSO are created automatically.",
+    "name": "Name",
+    "email": "Email",
+    "initialPassword": "Initial password",
+    "passwordHelp": "At least 8 characters. Share it securely: the user can change it after signing in.",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "baseRole": "Base role",
+    "groups": "Groups",
+    "create": "Create user",
+    "creating": "Creating…",
+    "created": "{{name}} can now sign in",
+    "createError": "Could not create the user",
+    "searchPlaceholder": "Search by name or email",
+    "stats": {
+      "total": "All users",
+      "disabled": "Disabled"
+    },
+    "filters": {
+      "role": "Filter by role",
+      "status": "Filter by status",
+      "group": "Filter by group",
+      "allRoles": "All roles",
+      "allStatuses": "All statuses",
+      "allGroups": "All groups"
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "columns": {
+      "user": "User",
+      "role": "Role",
+      "groups": "Groups",
+      "signIn": "Sign-in",
+      "lastSeen": "Last active",
+      "actions": "Actions"
+    },
+    "signIn": {
+      "password": "Email and password",
+      "sso": "Single sign-on",
+      "ssoWith": "Single sign-on ({{providers}})"
+    },
+    "viaGroup": "via a group",
+    "never": "Never",
+    "count": {
+      "one": "1 user",
+      "other": "{{count}} users"
+    },
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "empty": {
+      "title": "No users match",
+      "description": "Try another search or clear the filters."
+    },
+    "actionsFor": "Actions for {{name}}",
+    "changeRole": "Base role",
+    "roleUpdated": "Role updated",
+    "updateError": "Could not update the user",
+    "resetPassword": "Reset password",
+    "addPassword": "Add a password",
+    "resetPasswordTitle": "Set a new password",
+    "resetPasswordDescription": "{{name}} will be signed out of every device and will need this password to sign in with email.",
+    "resetPasswordHelp": "At least 8 characters.",
+    "newPassword": "New password",
+    "setPassword": "Set password",
+    "passwordUpdated": "Password updated. Existing sessions were signed out.",
+    "passwordError": "Could not update the password",
+    "revokeSessions": "Sign out everywhere",
+    "sessionsRevoked": "All sessions were signed out",
+    "disable": "Disable account",
+    "enable": "Enable account",
+    "disableHelp": "Disabling signs the user out, revokes their MCP OAuth tokens and suspends their API keys. Everything is kept and comes back if the account is enabled again.",
+    "delete": "Delete user",
+    "deleting": "Deleting…",
+    "deleted": "{{name}} was deleted",
+    "deleteError": "Could not delete the user",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteDescription": "This cannot be undone. Consider disabling the account instead: it keeps everything and can be reverted.",
+    "noOwnedResources": "This user owns no MCP servers, namespaces or endpoints.",
+    "deleteKeysNote": {
+      "one": "Their API key will be deleted.",
+      "other": "Their {{count}} API keys will be deleted."
+    },
+    "transfer": {
+      "legend": "What should happen to their {{servers}} MCP server(s), {{namespaces}} namespace(s) and {{endpoints}} endpoint(s)?",
+      "organization": "Move them to the organisation",
+      "organizationHelp": "Recommended. Administrators manage them and existing shares keep working.",
+      "user": "Give them to another user",
+      "userHelp": "The chosen user becomes the owner.",
+      "delete": "Delete them",
+      "deleteHelp": "Endpoints stop working for everyone who used them.",
+      "choose": "Choose a user"
+    },
+    "resources": {
+      "mcpServers": "MCP servers",
+      "namespaces": "Namespaces",
+      "endpoints": "Endpoints",
+      "apiKeys": "API keys"
+    },
+    "details": {
+      "role": "Role",
+      "baseRoleHelp": "The base role applies unless a group grants a higher one.",
+      "elevated": "Effective role: {{role}}, granted by {{groups}}. The base role only applies if they leave those groups.",
+      "groups": "Groups",
+      "noGroups": "Not a member of any group.",
+      "identityProvider": "Identity provider",
+      "syncedAt": "Groups received {{time}}",
+      "neverSynced": "Has not signed in with SSO yet.",
+      "noExternalGroups": "The identity provider sent no groups.",
+      "resources": "Owns",
+      "actions": "Account"
+    }
+  },
+  "groups": {
+    "title": "Groups",
+    "description": "Group people to give them a role and access to MCP servers and namespaces. Groups can be filled automatically from your identity provider.",
+    "create": "Create group",
+    "createTitle": "Create a group",
+    "editTitle": "Edit group",
+    "formDescription": "Members get the role below (if any) and everything shared with the group.",
+    "name": "Name",
+    "descriptionLabel": "Description",
+    "grantedRole": "Role granted to members",
+    "grantedRoleHelp": "Members get at least this role. Useful to give a whole team editor rights, or to map an IdP group to administrators.",
+    "adminsRoleLocked": "Members of Administrators are always administrators.",
+    "noRole": "No role",
+    "noRoleHelp": "Members keep their own role; the group is only used for sharing.",
+    "idpGroups": "Identity provider groups",
+    "idpGroupsPlaceholder": "e.g. metamcp-admins or /engineering/*",
+    "idpGroupsHelp": "At each SSO login, users whose groups claim contains one of these values join this group. Case-insensitive, * is a wildcard.",
+    "removeMapping": "Remove {{tag}}",
+    "systemNameLocked": "System groups cannot be renamed.",
+    "save": "Save",
+    "saved": "Group saved",
+    "saveError": "Could not save the group",
+    "created": "Group “{{name}}” created",
+    "searchPlaceholder": "Search groups or IdP mappings",
+    "system": "System",
+    "systemGroups": "System groups",
+    "customGroups": "Your groups",
+    "noDescription": "No description",
+    "allUsers": "All users",
+    "memberCount": {
+      "one": "1 member",
+      "other": "{{count}} members"
+    },
+    "shareCount": {
+      "one": "1 share",
+      "other": "{{count}} shares"
+    },
+    "empty": {
+      "title": "No groups yet",
+      "description": "Create groups for your teams, share namespaces with them, and map them to your identity provider so membership stays in sync."
+    },
+    "back": "All groups",
+    "notFound": "This group does not exist anymore.",
+    "membersGet": "Members get",
+    "edit": "Edit",
+    "more": "More actions",
+    "delete": "Delete group",
+    "deleteTitle": "Delete “{{name}}”?",
+    "deleteDescription": "Members lose the role and the access this group gave them. Resources are not deleted.",
+    "deleted": "Group deleted",
+    "deleteError": "Could not delete the group",
+    "tabs": {
+      "members": "Members",
+      "idp": "Identity provider",
+      "access": "Access"
+    },
+    "membersSummary": {
+      "one": "1 member, {{oidc}} synced from SSO",
+      "other": "{{count}} members, {{oidc}} synced from SSO"
+    },
+    "addMembers": "Add members",
+    "addMembersTitle": "Add members to {{name}}",
+    "addMembersDescription": "Members added here stay in the group even if the identity provider does not send it.",
+    "candidates": "Users",
+    "addSelected": {
+      "one": "Add 1 member",
+      "other": "Add {{count}} members"
+    },
+    "membersAdded": {
+      "one": "1 member added",
+      "other": "{{count}} members added"
+    },
+    "membersError": "Could not update the members",
+    "memberRemoved": "Member removed",
+    "removeMember": "Remove {{name}} from the group",
+    "noMembers": "No members yet",
+    "noMembersSso": "Members will appear here as they sign in with SSO, or add them manually.",
+    "noMembersManual": "Add people manually, or map identity provider groups to fill it automatically.",
+    "oidcRemovalNote": "SSO members are removed automatically when the identity provider stops sending the group. Removing them here only lasts until their next sign-in.",
+    "everyoneMembersTitle": "Every user is a member",
+    "everyoneMembersDescription": "Use this group to share a namespace or a server with the whole organisation, including people who join later.",
+    "everyoneNoMapping": "Every user already belongs to “Everyone”, so it cannot be mapped to identity provider groups.",
+    "mappingIntro": "Values are compared with the “{{claim}}” claim of the ID token at each SSO login.",
+    "examples": {
+      "exact": "exact group name",
+      "wildcard": "every Keycloak sub-group",
+      "guid": "Entra ID group object ID"
+    },
+    "oidcNotConfigured": "No OIDC provider is configured: mappings apply once single sign-on is enabled.",
+    "reset": "Reset",
+    "saveMappings": "Save mappings",
+    "mappingsSaved": "Mappings saved. They apply at each user's next sign-in.",
+    "testerIntro": "Paste the groups of a user (one per line) to check whether they would join this group.",
+    "saveBeforeTest": "Save your changes to test them.",
+    "testMatched": "Would join this group (matched {{values}}).",
+    "testNotMatched": "Would not join this group.",
+    "noShares": "Nothing is shared with this group",
+    "noSharesDescription": "Open an MCP server or a namespace and use Share to give this group access."
+  },
+  "roles": {
+    "title": "Roles & permissions",
+    "description": "Choose what editors and viewers are allowed to do. Administrators can always do everything.",
+    "matrixTitle": "Permissions",
+    "matrixDescription": "Changes apply immediately to every user holding the role.",
+    "capability": "Permission",
+    "adminAlways": "Always allowed for administrators",
+    "highRisk": "High risk",
+    "sections": {
+      "servers": "MCP servers",
+      "publishing": "Namespaces, endpoints & sharing",
+      "usage": "Usage"
+    },
+    "capabilities": {
+      "mcp_servers.create": {
+        "label": "Add remote MCP servers",
+        "description": "Connect SSE and Streamable HTTP servers, and import server configurations."
+      },
+      "mcp_servers.create_stdio": {
+        "label": "Add and edit STDIO servers",
+        "description": "STDIO servers run a command on the MetaMCP host: this is equivalent to shell access. Also needed to install servers from the registry."
+      },
+      "namespaces.create": {
+        "label": "Create namespaces",
+        "description": "Combine the MCP servers they can use into their own namespaces."
+      },
+      "endpoints.create": {
+        "label": "Create endpoints",
+        "description": "Publish namespaces they manage as MCP, SSE and OpenAPI endpoints (always authenticated)."
+      },
+      "resources.share": {
+        "label": "Share with others",
+        "description": "Share what they manage with other people, groups or the whole organisation."
+      },
+      "api_keys.create": {
+        "label": "Create API keys",
+        "description": "Personal keys used by MCP clients to connect to the endpoints they can use."
+      },
+      "inspector.use": {
+        "label": "Use the MCP inspector",
+        "description": "Browse and call, from the web UI, the tools of servers and namespaces shared with them. Anyone who can edit a server or namespace can always test it."
+      }
+    },
+    "toggleLabel": "{{capability}} for {{role}}",
+    "restoreDefaults": "Restore defaults",
+    "unsaved": "You have unsaved changes.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "saved": "Permissions saved",
+    "saveError": "Could not save the permissions",
+    "defaultRole": {
+      "title": "Role of new users",
+      "description": "Given to every account created from now on (email sign-up, SSO or admin).",
+      "help": "Groups mapped from your identity provider can grant a higher role at sign-in."
+    },
+    "defaultRoleSaved": "Default role updated",
+    "adminOnly": {
+      "title": "Always reserved to administrators",
+      "users": "Managing users, groups, roles and single sign-on",
+      "settings": "Server settings and registration switches",
+      "logs": "Live logs and the audit logs of every user",
+      "organisation": "Organisation-owned resources and organisation API keys",
+      "openEndpoints": "Endpoints without authentication",
+      "adminTools": "MetaMCP admin tools on endpoints"
+    }
+  },
+  "sso": {
+    "title": "Single sign-on",
+    "description": "Keep groups and roles in sync with your identity provider (OIDC).",
+    "configured": "OIDC is configured",
+    "providerId": "Provider",
+    "notConfigured": "OIDC is not configured",
+    "notConfiguredHelp": "Set OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_DISCOVERY_URL to enable single sign-on. You can prepare group mappings in the meantime.",
+    "flow": {
+      "title": "How roles are assigned",
+      "step1": "The IdP sends groups",
+      "step1Help": "Read from the “{{claim}}” claim of the ID token at each login.",
+      "step2": "Groups are matched",
+      "step2Help": "Each MetaMCP group lists the IdP values it accepts.",
+      "step3": "Role and access follow",
+      "step3Help": "Users get the highest role of their groups and everything shared with them."
+    },
+    "settings": "Synchronisation",
+    "groupsClaim": "Groups claim",
+    "groupsClaimHelp": "Usually “groups”. Use a dot path for nested claims, e.g. realm_access.roles (Keycloak roles). Make sure the claim is added to the ID token.",
+    "save": "Save",
+    "saved": "Settings saved",
+    "saveError": "Could not save the settings",
+    "syncGroups": "Sync group memberships at each login",
+    "syncGroupsHelp": "Adds and removes SSO memberships to match the identity provider. Members added manually are never removed.",
+    "requireMatch": "Only allow users from mapped groups",
+    "requireMatchHelp": "Refuse SSO logins whose groups match no MetaMCP group. Accounts with a password are not affected.",
+    "tester": {
+      "title": "Test a mapping",
+      "description": "Paste the groups a user receives (one per line) to preview the groups and role they would get.",
+      "placeholder": "metamcp-admins\n/engineering/platform",
+      "run": "Test",
+      "resultingRole": "Resulting role for a new user:",
+      "denied": "This login would be refused (no mapped group).",
+      "noMatch": "No MetaMCP group matches these values."
+    },
+    "mappings": {
+      "title": "Mappings",
+      "description": "IdP group values and the MetaMCP groups they fill.",
+      "manage": "Manage groups",
+      "empty": "No group is mapped to your identity provider yet. Open a group and add IdP groups in its Identity provider tab."
+    }
+  },
+  "security": {
+    "title": "Encryption at rest",
+    "description": "Credentials stored by MetaMCP are encrypted with data keys, themselves protected by a key that never touches the database.",
+    "source": {
+      "dedicated": {
+        "title": "Local key (SECRETS_ENCRYPTION_KEY)",
+        "description": "Data keys are wrapped by a dedicated key from the environment. Keep it in your secret store: without it, stored credentials cannot be read."
+      },
+      "derived": {
+        "title": "Key derived from BETTER_AUTH_SECRET",
+        "description": "Secrets are encrypted, but with a key derived from BETTER_AUTH_SECRET. Set a dedicated SECRETS_ENCRYPTION_KEY (or use OpenBao) so both secrets can be rotated independently.",
+        "exampleSecret": "BETTER_AUTH_SECRET still has its public example value: anyone can decrypt your secrets. Set BETTER_AUTH_SECRET and SECRETS_ENCRYPTION_KEY to random values, then restart."
+      },
+      "openbao": {
+        "title": "OpenBao / Vault Transit",
+        "description": "Data keys are wrapped by a Transit key that never leaves OpenBao. MetaMCP only calls it at startup and during rotations: an OpenBao outage does not affect running instances."
+      }
+    },
+    "details": {
+      "keyId": "Key",
+      "address": "Address",
+      "namespace": "Namespace",
+      "transitKey": "Transit key",
+      "auth": "Authentication"
+    },
+    "encryptedTitle": "Encrypted (AES-256-GCM)",
+    "encryptedList": "MCP server URLs, arguments, environment values, headers and bearer tokens; upstream OAuth tokens and client secrets; identity provider tokens.",
+    "hashedTitle": "Stored as fingerprints (SHA-256)",
+    "hashedList": "API keys, and MetaMCP OAuth access tokens, refresh tokens, codes and client secrets: they are shown once and can never be read back.",
+    "plaintextPending": {
+      "one": "{{count}} value is still stored in clear text; it will be encrypted at the next restart.",
+      "other": "{{count}} values are still stored in clear text; they will be encrypted at the next restart."
+    },
+    "keysTitle": "Data keys",
+    "state": {
+      "active": "Active",
+      "pending": "Pending",
+      "retired": "Retired"
+    },
+    "createdAt": "Created {{time}}",
+    "activatesAt": "Active from {{time}}",
+    "values": {
+      "one": "{{count}} value",
+      "other": "{{count}} values"
+    },
+    "rotate": "Rotate the data key",
+    "rotateTitle": "Rotate the data key?",
+    "rotateDescription": "A new data key is created. It becomes active in about {{minutes}} min, once every MetaMCP instance has loaded it, then all stored secrets are re-encrypted with it. Nothing stops working in the meantime.",
+    "rotateConfirm": "Rotate",
+    "rotated": "New data key created",
+    "rotatedDescription": "Key {{key}} becomes active at {{time}}; secrets will then be re-encrypted.",
+    "rotateError": "The data key could not be rotated"
+  },
+  "activity": {
+    "title": "Activity log",
+    "description": "Who changed access, configuration and resources, and every sign-in. Entries cannot be modified.",
+    "descriptionRetention": "Who changed access, configuration and resources, and every sign-in. Entries cannot be modified and are kept {{days}} days.",
+    "export": "Export CSV",
+    "exportTruncated": "Only the 10,000 most recent matching entries were exported.",
+    "exportError": "The activity log could not be exported",
+    "searchPlaceholder": "Search people, targets, IP addresses…",
+    "filters": {
+      "category": "Category",
+      "allCategories": "All categories",
+      "outcome": "Outcome",
+      "allOutcomes": "All outcomes",
+      "period": "Period"
+    },
+    "periods": {
+      "24h": "Last 24 hours",
+      "7d": "Last 7 days",
+      "30d": "Last 30 days",
+      "90d": "Last 90 days",
+      "all": "All time"
+    },
+    "categories": {
+      "auth": "Sign-in",
+      "users": "Users",
+      "groups": "Groups",
+      "roles": "Roles",
+      "sso": "Single sign-on",
+      "settings": "Settings",
+      "sharing": "Sharing",
+      "resources": "Resources",
+      "api_keys": "API keys",
+      "security": "Security"
+    },
+    "outcome": {
+      "success": "Success",
+      "denied": "Denied",
+      "failure": "Failed"
+    },
+    "actions": {
+      "auth": {
+        "sign_in": "Signed in",
+        "sign_in_denied": "Sign-in refused"
+      },
+      "user": {
+        "created": "User created",
+        "provisioned": "User created by single sign-on",
+        "updated": "User updated",
+        "promoted": "Promoted to administrator",
+        "password_reset": "Password reset",
+        "disabled": "User disabled",
+        "enabled": "User enabled",
+        "sessions_revoked": "Sessions revoked",
+        "deleted": "User deleted"
+      },
+      "group": {
+        "created": "Group created",
+        "updated": "Group updated",
+        "deleted": "Group deleted",
+        "members_added": "Members added",
+        "member_removed": "Member removed",
+        "memberships_synced": "Groups synchronised from the identity provider"
+      },
+      "roles": {
+        "permissions_updated": "Role permissions changed"
+      },
+      "sso": {
+        "settings_updated": "Single sign-on settings changed"
+      },
+      "settings": {
+        "updated": "Setting changed"
+      },
+      "share": {
+        "granted": "Access granted",
+        "revoked": "Access removed"
+      },
+      "mcp_server": {
+        "created": "MCP server added",
+        "updated": "MCP server updated",
+        "deleted": "MCP server deleted"
+      },
+      "namespace": {
+        "created": "Namespace created",
+        "updated": "Namespace updated",
+        "deleted": "Namespace deleted"
+      },
+      "endpoint": {
+        "created": "Endpoint created",
+        "updated": "Endpoint updated",
+        "deleted": "Endpoint deleted"
+      },
+      "api_key": {
+        "created": "API key created",
+        "updated": "API key updated",
+        "deleted": "API key deleted"
+      },
+      "secrets": {
+        "data_key_rotated": "Data key rotated",
+        "data_key_rewrapped": "Data key re-wrapped"
+      }
+    },
+    "system": {
+      "default": "MetaMCP",
+      "Signin": "Sign-in",
+      "SSOgroupsync": "SSO group sync",
+      "SSOprovisioning": "SSO provisioning",
+      "ADMINEMAILS": "ADMIN_EMAILS",
+      "Startup": "Startup",
+      "Test": "Test"
+    },
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "showing": "{{shown}} of {{total}} entries",
+    "loadMore": "Load more",
+    "sheetDescription": "Recorded by MetaMCP. Secret values are never stored in the activity log.",
+    "fields": {
+      "time": "Time",
+      "actor": "By",
+      "actorId": "User ID",
+      "action": "Action",
+      "category": "Category",
+      "outcome": "Outcome",
+      "target": "Target",
+      "targetType": "Target type",
+      "targetId": "Target ID",
+      "ipAddress": "IP address",
+      "userAgent": "User agent",
+      "details": "Details"
+    },
+    "empty": {
+      "title": "No activity",
+      "description": "Nothing matches these filters yet. Changes to users, groups, roles, sharing, resources and settings appear here, along with sign-ins."
+    }
+  }
+}

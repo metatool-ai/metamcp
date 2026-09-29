@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { EncryptionCard } from "@/components/admin/encryption-card";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -682,6 +683,8 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </form>
+
+      <EncryptionCard />
     </div>
   );
 }

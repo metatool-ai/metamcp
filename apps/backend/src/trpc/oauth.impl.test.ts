@@ -1,3 +1,4 @@
+import type { AccessPrincipal } from "@repo/zod-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // vitest hoists vi.mock() to before imports, so the repository mocks fire
@@ -23,6 +24,43 @@ vi.mock("../db/repositories", () => ({
 vi.mock("../utils/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+
+// RBAC: resolve access with the real (pure) policy. Tests can grant extra
+// shares through `testShares` to model a server shared with the caller.
+const testShares: Array<{
+  userId: string | null;
+  groupUuid: string | null;
+  level: "use" | "edit" | "manage";
+}> = [];
+vi.mock("../lib/access/access.service", async () => {
+  const { resolveResourceAccess } = await import("../lib/access/policy");
+  return {
+    accessService: {
+      resolveAccessOne: vi.fn(
+        async (
+          principal: AccessPrincipal,
+          _type: string,
+          resource: { user_id: string | null },
+        ) =>
+          resolveResourceAccess({
+            principal,
+            ownerId: resource.user_id,
+            shares: testShares,
+            everyoneGroupUuid: null,
+          }),
+      ),
+    },
+  };
+});
+
+const principalFor = (userId: string): AccessPrincipal => ({
+  userId,
+  baseRole: "editor",
+  role: "editor",
+  isAdmin: false,
+  capabilities: [],
+  groupUuids: [],
+});
 
 const ORIGINAL_APP_URL = process.env.APP_URL;
 
@@ -129,7 +167,7 @@ describe("oauthImplementations.exchangeToken", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "CODE_FROM_REDIRECT" },
-      USER_ID,
+      principalFor(USER_ID),
     );
 
     expect(result.success).toBe(true);
@@ -182,7 +220,7 @@ describe("oauthImplementations.exchangeToken", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "BAD" },
-      USER_ID,
+      principalFor(USER_ID),
     );
 
     expect(result).toEqual({
@@ -200,23 +238,41 @@ describe("oauthImplementations.exchangeToken", () => {
     findServerByUuid.mockResolvedValue(undefined);
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C" },
-      USER_ID,
+      principalFor(USER_ID),
     );
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toBe("server_not_found");
   });
 
-  it("returns access_denied when a different user owns the server", async () => {
+  it("hides servers owned by someone else that are not shared with the caller", async () => {
     const { oauthImplementations, findServerByUuid } = await loadModule();
     findServerByUuid.mockResolvedValue(
       ownedServer(SERVER_UUID, "https://api.example.com/mcp", "other-user"),
     );
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C" },
-      USER_ID,
+      principalFor(USER_ID),
     );
     expect(result.success).toBe(false);
-    if (!result.success) expect(result.error).toBe("access_denied");
+    if (!result.success) expect(result.error).toBe("server_not_found");
+  });
+
+  it("returns access_denied when the server is only shared for use", async () => {
+    const { oauthImplementations, findServerByUuid } = await loadModule();
+    findServerByUuid.mockResolvedValue(
+      ownedServer(SERVER_UUID, "https://api.example.com/mcp", "other-user"),
+    );
+    testShares.push({ userId: USER_ID, groupUuid: null, level: "use" });
+    try {
+      const result = await oauthImplementations.exchangeToken(
+        { mcp_server_uuid: SERVER_UUID, code: "C" },
+        principalFor(USER_ID),
+      );
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error).toBe("access_denied");
+    } finally {
+      testShares.length = 0;
+    }
   });
 
   it("returns session_not_found when the OAuth session is missing", async () => {
@@ -229,7 +285,7 @@ describe("oauthImplementations.exchangeToken", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C" },
-      USER_ID,
+      principalFor(USER_ID),
     );
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toBe("session_not_found");
@@ -250,7 +306,7 @@ describe("oauthImplementations.exchangeToken", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C" },
-      USER_ID,
+      principalFor(USER_ID),
     );
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toBe("code_verifier_missing");
@@ -271,7 +327,7 @@ describe("oauthImplementations.exchangeToken", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C" },
-      USER_ID,
+      principalFor(USER_ID),
     );
     expect(result.success).toBe(false);
     if (!result.success)
@@ -386,7 +442,7 @@ describe("exchangeToken redirect_uri byte-match", () => {
         mcp_server_uuid: "00000000-0000-0000-0000-000000000fff",
         code: "C",
       },
-      USER_ID,
+      principalFor(USER_ID),
     );
 
     expect(observedRedirect).toBe(expectedRedirect);
@@ -484,7 +540,7 @@ describe("oauthImplementations.refreshToken", () => {
 
     const result = await oauthImplementations.refreshToken(
       { mcp_server_uuid: SERVER_UUID },
-      USER_ID,
+      principalFor(USER_ID),
     );
 
     expect(result.success).toBe(true);
@@ -512,7 +568,7 @@ describe("oauthImplementations.refreshToken", () => {
 
     const result = await oauthImplementations.refreshToken(
       { mcp_server_uuid: SERVER_UUID },
-      USER_ID,
+      principalFor(USER_ID),
     );
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toBe("no_refresh_token");
@@ -621,7 +677,7 @@ describe("exchangeToken state CSRF validation", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C", state: "from-upstream" },
-      USER_ID,
+      principalFor(USER_ID),
     );
 
     expect(result.success).toBe(true);
@@ -662,7 +718,7 @@ describe("exchangeToken state CSRF validation", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C", state: "the-nonce" },
-      USER_ID,
+      principalFor(USER_ID),
     );
 
     expect(result.success).toBe(true);
@@ -694,7 +750,7 @@ describe("exchangeToken state CSRF validation", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C", state: "different-value" },
-      USER_ID,
+      principalFor(USER_ID),
     );
 
     expect(result.success).toBe(false);
@@ -730,7 +786,7 @@ describe("exchangeToken state CSRF validation", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C" }, // no state
-      USER_ID,
+      principalFor(USER_ID),
     );
 
     expect(result.success).toBe(false);
@@ -783,7 +839,7 @@ describe("exchangeToken state CSRF validation", () => {
 
     const result = await oauthImplementations.exchangeToken(
       { mcp_server_uuid: SERVER_UUID, code: "C", state: "the-nonce" },
-      USER_ID,
+      principalFor(USER_ID),
     );
 
     expect(result.success).toBe(false);
@@ -804,7 +860,11 @@ describe("exchangeToken state CSRF validation", () => {
   // back-compat NULL branch). Pins the forward-through behaviour so a
   // future refactor of the spread cannot regress it.
   it("frontend.oauth.upsert forwards expected_state to the repository", async () => {
-    const { oauthImplementations, upsert } = await loadModule();
+    const { oauthImplementations, upsert, findServerByUuid } =
+      await loadModule();
+    findServerByUuid.mockResolvedValue(
+      ownedServer(SERVER_UUID, "https://upstream.example.com/mcp"),
+    );
     upsert.mockResolvedValue({
       uuid: "sess",
       mcp_server_uuid: SERVER_UUID,
@@ -815,10 +875,13 @@ describe("exchangeToken state CSRF validation", () => {
       updated_at: new Date(),
     });
 
-    await oauthImplementations.upsert({
-      mcp_server_uuid: SERVER_UUID,
-      expected_state: "the-csrf-nonce",
-    });
+    await oauthImplementations.upsert(
+      {
+        mcp_server_uuid: SERVER_UUID,
+        expected_state: "the-csrf-nonce",
+      },
+      principalFor(USER_ID),
+    );
 
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({

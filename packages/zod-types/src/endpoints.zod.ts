@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { ResourceAccessSchema, ResourceOwnerSchema } from "./access.zod";
 import { DatabaseNamespaceSchema, NamespaceSchema } from "./namespaces.zod";
 
 // Endpoint schema definitions
@@ -103,6 +104,9 @@ export const EndpointSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   user_id: z.string().nullable(),
+  // Access to an endpoint is the access to its namespace.
+  access: ResourceAccessSchema.optional(),
+  owner: ResourceOwnerSchema.nullable().optional(),
 });
 
 // Extended endpoint schema with namespace details

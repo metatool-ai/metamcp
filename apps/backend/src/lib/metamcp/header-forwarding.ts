@@ -15,17 +15,35 @@ export function sanitizeHeaderValue(value: string): string {
   return value.replace(/[\r\n\0]/g, "");
 }
 
+/** Headers MetaMCP reads its own credentials from (API key, OAuth token). */
+export const METAMCP_CREDENTIAL_HEADERS: readonly string[] = [
+  "authorization",
+  "x-api-key",
+];
+
 /**
  * Extracts client request headers into a flat Record, suitable for
  * later filtering by extractForwardedHeaders.
  *
  * This is the single extraction point used by both SSE and StreamableHTTP routers.
+ *
+ * On an endpoint that authenticates its callers, the credential headers hold
+ * the caller's MetaMCP API key or OAuth token: pass `withoutCredentials` so
+ * no `forward_headers` mapping can hand them over to an upstream server
+ * (which could then impersonate the caller).
  */
 export function extractClientHeaders(
   incomingHeaders: IncomingHttpHeaders,
+  options: { withoutCredentials?: boolean } = {},
 ): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(incomingHeaders)) {
+    if (
+      options.withoutCredentials &&
+      METAMCP_CREDENTIAL_HEADERS.includes(key.toLowerCase())
+    ) {
+      continue;
+    }
     if (typeof value === "string") {
       result[key] = value;
     } else if (Array.isArray(value)) {

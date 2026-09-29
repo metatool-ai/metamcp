@@ -20,10 +20,32 @@ spec:
         app.kubernetes.io/name: metamcp
         app.kubernetes.io/component: app
     spec:
+      securityContext:
+        # The image runs as the unprivileged "nextjs" user (uid 1001)
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: metamcp
           image: ${METAMCP_IMAGE}
           imagePullPolicy: ${METAMCP_IMAGE_PULL_POLICY}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # Writable locations: temporary files, the home directory (npx /
+          # uvx caches of STDIO servers) and the Next.js cache
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: home
+              mountPath: /home/nextjs
+            - name: next-cache
+              mountPath: /app/apps/frontend/.next/cache
           env:
             - name: POSTGRES_HOST
               value: "metamcp-postgres.${METAMCP_NAMESPACE}.svc.cluster.local"
@@ -49,6 +71,11 @@ spec:
                 secretKeyRef:
                   name: metamcp-secret
                   key: better-auth-secret
+            - name: SECRETS_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: metamcp-secret
+                  key: secrets-encryption-key
             - name: TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL
               value: "false"
             - name: BOOTSTRAP_ENABLE
@@ -64,12 +91,10 @@ spec:
                 secretKeyRef:
                   name: metamcp-secret
                   key: bootstrap-user-password
-            - name: BOOTSTRAP_API_KEYS
-              value: '[{"name":"Public","is_public":true},{"name":"Private","is_public":false}]'
             - name: BOOTSTRAP_NAMESPACES
               value: '[{"name":"Default","description":"Default namespace","is_public":true,"update":true}]'
             - name: BOOTSTRAP_ENDPOINTS
-              value: '[{"name":"Public","description":"Public endpoint","enable_auth":false,"enable_auth_query":false,"enable_auth_oauth":false,"is_public":true,"update":true}]'
+              value: '[{"name":"Public","description":"Public endpoint","enable_auth":true,"enable_auth_query":false,"enable_auth_oauth":false,"is_public":true,"update":true}]'
           ports:
             - name: http
               containerPort: 12008
@@ -97,6 +122,13 @@ spec:
             limits:
               cpu: ${METAMCP_APP_CPU_LIMIT}
               memory: ${METAMCP_APP_MEMORY_LIMIT}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: home
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

@@ -4,7 +4,7 @@ import {
   McpServerErrorStatusEnum,
   McpServerUpdateInput,
 } from "@repo/zod-types";
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { DatabaseError } from "pg";
 import { z } from "zod";
 
@@ -12,6 +12,7 @@ import logger from "@/utils/logger";
 
 import { db } from "../index";
 import { mcpServersTable } from "../schema";
+import type { AccessibleFilter } from "./access-filter";
 
 // Helper function to handle PostgreSQL errors
 function handleDatabaseError(
@@ -85,27 +86,33 @@ export class McpServersRepository {
       .orderBy(desc(mcpServersTable.created_at));
   }
 
-  // Find servers accessible to a specific user (public + user's own servers)
-  async findAllAccessibleToUser(userId: string): Promise<DatabaseMcpServer[]> {
+  // Find servers a principal can see (owned + shared, or all for admins)
+  async findAllByAccess(
+    filter: AccessibleFilter,
+  ): Promise<DatabaseMcpServer[]> {
+    if (filter.all) {
+      return await this.findAll();
+    }
     return await db
       .select()
       .from(mcpServersTable)
       .where(
-        or(
-          isNull(mcpServersTable.user_id), // Public servers
-          eq(mcpServersTable.user_id, userId), // User's own servers
-        ),
+        filter.sharedUuids.length > 0
+          ? or(
+              eq(mcpServersTable.user_id, filter.ownerId),
+              inArray(mcpServersTable.uuid, filter.sharedUuids),
+            )
+          : eq(mcpServersTable.user_id, filter.ownerId),
       )
       .orderBy(desc(mcpServersTable.created_at));
   }
 
-  // Find only public servers (no user ownership)
-  async findPublicServers(): Promise<DatabaseMcpServer[]> {
+  async findByUuids(uuids: string[]): Promise<DatabaseMcpServer[]> {
+    if (uuids.length === 0) return [];
     return await db
       .select()
       .from(mcpServersTable)
-      .where(isNull(mcpServersTable.user_id))
-      .orderBy(desc(mcpServersTable.created_at));
+      .where(inArray(mcpServersTable.uuid, uuids));
   }
 
   // Find servers owned by a specific user

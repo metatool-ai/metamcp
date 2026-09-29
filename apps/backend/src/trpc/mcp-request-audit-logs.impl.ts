@@ -1,4 +1,5 @@
 import {
+  type AccessPrincipal,
   ListMcpRequestAuditLogsRequestSchema,
   ListMcpRequestAuditLogsResponseSchema,
 } from "@repo/zod-types";
@@ -10,11 +11,12 @@ import logger from "@/utils/logger";
 export const mcpRequestAuditLogsImplementations = {
   list: async (
     input: z.infer<typeof ListMcpRequestAuditLogsRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof ListMcpRequestAuditLogsResponseSchema>> => {
     try {
       const logs = await mcpRequestAuditLogsRepository.list({
-        userId,
+        userId: principal.userId,
+        includeAll: principal.isAdmin,
         limit: input.limit,
         offset: input.offset,
         endpointName: input.endpointName,

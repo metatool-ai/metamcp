@@ -17,6 +17,10 @@ export const createAppRouter = (implementations: {
       config: frontendRouters.config,
       logs: frontendRouters.logs,
       mcpRequestAuditLogs: frontendRouters.mcpRequestAuditLogs,
+      access: frontendRouters.access,
+      admin: frontendRouters.admin,
+      shares: frontendRouters.shares,
+      oauthConsent: frontendRouters.oauthConsent,
     }),
   });
 };

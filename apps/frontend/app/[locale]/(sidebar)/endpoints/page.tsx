@@ -10,6 +10,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { OwnershipSelect } from "@/components/access/ownership-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -29,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { hasAccessLevel, useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 import { createTranslatedZodResolver } from "@/lib/zod-resolver";
@@ -37,6 +39,7 @@ import { EndpointsList } from "./endpoints-list";
 
 export default function EndpointsPage() {
   const { t } = useTranslations();
+  const { isAdmin, can } = useAccess();
   const [createOpen, setCreateOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedNamespaceUuid, setSelectedNamespaceUuid] =
@@ -51,8 +54,11 @@ export default function EndpointsPage() {
   const { data: namespacesResponse, isLoading: namespacesLoading } =
     trpc.frontend.namespaces.list.useQuery();
 
+  // Publishing a namespace through an endpoint requires managing it
   const availableNamespaces = namespacesResponse?.success
-    ? namespacesResponse.data
+    ? namespacesResponse.data.filter((namespace) =>
+        hasAccessLevel(namespace.access, "manage"),
+      )
     : [];
 
   // tRPC mutation for creating endpoint
@@ -220,533 +226,547 @@ export default function EndpointsPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                {t("endpoints:createEndpoint")}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{t("endpoints:createEndpoint")}</DialogTitle>
-                <DialogDescription>
-                  {t("endpoints:createEndpointDescription")}
-                </DialogDescription>
-              </DialogHeader>
-              <form
-                onSubmit={form.handleSubmit(onSubmit)}
-                className="space-y-4"
-              >
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="name" className="text-sm font-medium">
-                    {t("endpoints:name")}
-                  </label>
-                  <Input
-                    id="name"
-                    {...form.register("name")}
-                    placeholder={t("endpoints:namePlaceholder")}
-                  />
-                  {form.formState.errors.name && (
-                    <p className="text-sm text-red-500">
-                      {form.formState.errors.name.message}
+          {can("endpoints.create") && (
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t("endpoints:createEndpoint")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>{t("endpoints:createEndpoint")}</DialogTitle>
+                  <DialogDescription>
+                    {t("endpoints:createEndpointDescription")}
+                  </DialogDescription>
+                </DialogHeader>
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-4"
+                >
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="name" className="text-sm font-medium">
+                      {t("endpoints:name")}
+                    </label>
+                    <Input
+                      id="name"
+                      {...form.register("name")}
+                      placeholder={t("endpoints:namePlaceholder")}
+                    />
+                    {form.formState.errors.name && (
+                      <p className="text-sm text-red-500">
+                        {form.formState.errors.name.message}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      URL-compatible name (alphanumeric, underscore, and hyphen
+                      only). This will be accessible at /metamcp/[name]
                     </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="description"
+                      className="text-sm font-medium"
+                    >
+                      {t("endpoints:descriptionOptional")}
+                    </label>
+                    <Textarea
+                      id="description"
+                      {...form.register("description")}
+                      placeholder={t("endpoints:descriptionPlaceholder")}
+                      className="h-20"
+                    />
+                  </div>
+
+                  {isAdmin && (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-medium">
+                        {t("access:ownership.label")}
+                      </label>
+                      <OwnershipSelect
+                        value={form.watch("user_id")}
+                        onChange={(value) => form.setValue("user_id", value)}
+                      />
+                    </div>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    URL-compatible name (alphanumeric, underscore, and hyphen
-                    only). This will be accessible at /metamcp/[name]
-                  </p>
-                </div>
 
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="description" className="text-sm font-medium">
-                    {t("endpoints:descriptionOptional")}
-                  </label>
-                  <Textarea
-                    id="description"
-                    {...form.register("description")}
-                    placeholder={t("endpoints:descriptionPlaceholder")}
-                    className="h-20"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">
-                    {t("endpoints:ownership")}
-                  </label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-between"
-                        type="button"
-                      >
-                        {form.watch("user_id") === null
-                          ? t("endpoints:everyone")
-                          : t("endpoints:forMyself")}
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
-                      <DropdownMenuItem
-                        onClick={() => form.setValue("user_id", undefined)}
-                      >
-                        {t("endpoints:forMyself")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => form.setValue("user_id", null)}
-                      >
-                        {t("endpoints:everyone")}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <p className="text-xs text-muted-foreground">
-                    {t("endpoints:ownershipDescription")}
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">
-                    {t("endpoints:namespace")}
-                  </label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="justify-between"
-                        type="button"
-                      >
-                        <span>
-                          {selectedNamespaceName ||
-                            t("endpoints:selectNamespace")}
-                        </span>
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
-                      {namespacesLoading ? (
-                        <DropdownMenuItem disabled>
-                          {t("endpoints:loadingNamespaces")}
-                        </DropdownMenuItem>
-                      ) : availableNamespaces.length === 0 ? (
-                        <DropdownMenuItem disabled>
-                          {t("endpoints:noNamespacesAvailable")}
-                        </DropdownMenuItem>
-                      ) : (
-                        availableNamespaces.map((namespace) => (
-                          <DropdownMenuItem
-                            key={namespace.uuid}
-                            onClick={() =>
-                              handleNamespaceSelect(
-                                namespace.uuid,
-                                namespace.name,
-                              )
-                            }
-                            className="flex items-center justify-between"
-                          >
-                            <div className="flex flex-col">
-                              <span className="font-medium">
-                                {namespace.name}
-                              </span>
-                              {namespace.description && (
-                                <span className="text-xs text-muted-foreground">
-                                  {namespace.description}
-                                </span>
-                              )}
-                            </div>
-                            {selectedNamespaceUuid === namespace.uuid && (
-                              <Check className="ml-2 h-4 w-4" />
-                            )}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-medium">
+                      {t("endpoints:namespace")}
+                    </label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="justify-between"
+                          type="button"
+                        >
+                          <span>
+                            {selectedNamespaceName ||
+                              t("endpoints:selectNamespace")}
+                          </span>
+                          <ChevronDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                        {namespacesLoading ? (
+                          <DropdownMenuItem disabled>
+                            {t("endpoints:loadingNamespaces")}
                           </DropdownMenuItem>
-                        ))
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  {form.formState.errors.namespaceUuid && (
-                    <p className="text-sm text-red-500">
-                      {form.formState.errors.namespaceUuid.message}
+                        ) : availableNamespaces.length === 0 ? (
+                          <DropdownMenuItem disabled>
+                            {t("endpoints:noNamespacesAvailable")}
+                          </DropdownMenuItem>
+                        ) : (
+                          availableNamespaces.map((namespace) => (
+                            <DropdownMenuItem
+                              key={namespace.uuid}
+                              onClick={() =>
+                                handleNamespaceSelect(
+                                  namespace.uuid,
+                                  namespace.name,
+                                )
+                              }
+                              className="flex items-center justify-between"
+                            >
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {namespace.name}
+                                </span>
+                                {namespace.description && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {namespace.description}
+                                  </span>
+                                )}
+                              </div>
+                              {selectedNamespaceUuid === namespace.uuid && (
+                                <Check className="ml-2 h-4 w-4" />
+                              )}
+                            </DropdownMenuItem>
+                          ))
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {form.formState.errors.namespaceUuid && (
+                      <p className="text-sm text-red-500">
+                        {form.formState.errors.namespaceUuid.message}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {t("endpoints:namespaceDescription")}
                     </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    {t("endpoints:namespaceDescription")}
-                  </p>
-                </div>
-                {/* Rate Limit Settings */}
-                <div className="space-y-4 border-t pt-4">
-                  <h4 className="text-sm font-medium">
-                    {t("endpoints:rateLimit")}
-                  </h4>
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <label className="text-sm font-medium">
-                        {t("endpoints:enableMaxRate")}
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("endpoints:enableMaxRateDescription")}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={form.watch("enableMaxRate")}
-                      onCheckedChange={(checked) =>
-                        form.setValue("enableMaxRate", checked)
-                      }
-                      disabled={isSubmitting}
-                    />
                   </div>
-                  {form.watch("enableMaxRate") && (
-                    <>
-                      <div className="flex flex-col gap-2">
-                        <label
-                          htmlFor="maxRate"
-                          className="text-sm font-medium"
-                        >
-                          {t("endpoints:maxRate")}
+                  {/* Rate Limit Settings */}
+                  <div className="space-y-4 border-t pt-4">
+                    <h4 className="text-sm font-medium">
+                      {t("endpoints:rateLimit")}
+                    </h4>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-sm font-medium">
+                          {t("endpoints:enableMaxRate")}
                         </label>
-                        <Input
-                          id="maxRate"
-                          {...form.register("maxRate", { valueAsNumber: true })}
-                          placeholder={t("endpoints:maxRatePlaceholder")}
-                          type="number"
-                        />
-                        {form.formState.errors.maxRate && (
-                          <p className="text-sm text-red-500">
-                            {form.formState.errors.maxRate.message}
-                          </p>
-                        )}
                         <p className="text-xs text-muted-foreground">
-                          {t("endpoints:maxRateDescription")}
+                          {t("endpoints:enableMaxRateDescription")}
                         </p>
                       </div>
-                      <div className="flex flex-col gap-2">
-                        <label
-                          htmlFor="maxRateSeconds"
-                          className="text-sm font-medium"
-                        >
-                          {t("endpoints:maxRateSeconds")}
-                        </label>
-                        <Input
-                          id="maxRateSeconds"
-                          type="number"
-                          {...form.register("maxRateSeconds", {
-                            valueAsNumber: true,
-                          })}
-                          placeholder={t("endpoints:maxRateSecondsPlaceholder")}
-                        />
-                        {form.formState.errors.maxRateSeconds && (
-                          <p className="text-sm text-red-500">
-                            {form.formState.errors.maxRateSeconds.message}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {t("endpoints:maxRateSecondsDescription")}
-                        </p>
-                      </div>
-                    </>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <label className="text-sm font-medium">
-                        {t("endpoints:enableClientMaxRate")}
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("endpoints:enableClientMaxRateDescription")}
-                      </p>
+                      <Switch
+                        checked={form.watch("enableMaxRate")}
+                        onCheckedChange={(checked) =>
+                          form.setValue("enableMaxRate", checked)
+                        }
+                        disabled={isSubmitting}
+                      />
                     </div>
-                    <Switch
-                      checked={form.watch("enableClientMaxRate")}
-                      onCheckedChange={(checked) =>
-                        form.setValue("enableClientMaxRate", checked)
-                      }
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                  {form.watch("enableClientMaxRate") && (
-                    <>
-                      <div className="flex flex-col gap-2">
-                        <label
-                          htmlFor="clientMaxRate"
-                          className="text-sm font-medium"
-                        >
-                          {t("endpoints:clientMaxRate")}
-                        </label>
-                        <Input
-                          id="clientMaxRate"
-                          {...form.register("clientMaxRate", {
-                            valueAsNumber: true,
-                          })}
-                          type="number"
-                          placeholder={t("endpoints:clientMaxRatePlaceholder")}
-                        />
-                        {form.formState.errors.clientMaxRate && (
-                          <p className="text-sm text-red-500">
-                            {form.formState.errors.clientMaxRate.message}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {t("endpoints:clientMaxRateDescription")}
-                        </p>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <label
-                          htmlFor="clientMaxRateSeconds"
-                          className="text-sm font-medium"
-                        >
-                          {t("endpoints:clientMaxRateSeconds")}
-                        </label>
-                        <Input
-                          id="clientMaxRateSeconds"
-                          {...form.register("clientMaxRateSeconds", {
-                            valueAsNumber: true,
-                          })}
-                          placeholder={t(
-                            "endpoints:clientMaxRateSecondsPlaceholder",
-                          )}
-                          type="number"
-                        />
-                        {form.formState.errors.clientMaxRateSeconds && (
-                          <p className="text-sm text-red-500">
-                            {form.formState.errors.clientMaxRateSeconds.message}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {t("endpoints:clientMaxRateSecondsDescription")}
-                        </p>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <label
-                          htmlFor="clientMaxRateStrategy"
-                          className="text-sm font-medium"
-                        >
-                          {t("endpoints:clientMaxRateStrategy")}
-                        </label>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-between"
-                              type="button"
-                            >
-                              <span>
-                                {form.watch("clientMaxRateStrategy") === null
-                                  ? t("endpoints:selectStrategy")
-                                  : form.watch("clientMaxRateStrategy") === "ip"
-                                    ? t("endpoints:ipStrategy")
-                                    : form.watch("clientMaxRateStrategy") ===
-                                        "header"
-                                      ? t("endpoints:headerStrategy")
-                                      : t("endpoints:selectStrategy")}
-                              </span>
-                              <ChevronDown className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
-                            <DropdownMenuItem
-                              onClick={() =>
-                                form.setValue("clientMaxRateStrategy", "ip")
-                              }
-                            >
-                              {t("endpoints:ipStrategy")}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                form.setValue("clientMaxRateStrategy", "header")
-                              }
-                            >
-                              {t("endpoints:headerStrategy")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        {form.formState.errors.clientMaxRateStrategy && (
-                          <p className="text-sm text-red-500">
-                            {
-                              form.formState.errors.clientMaxRateStrategy
-                                .message
-                            }
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {t("endpoints:clientMaxRateStrategyDescription")}
-                        </p>
-                      </div>
-                      {form.watch("clientMaxRateStrategy") === "header" && (
+                    {form.watch("enableMaxRate") && (
+                      <>
                         <div className="flex flex-col gap-2">
                           <label
-                            htmlFor="clientMaxRateStrategyKey"
+                            htmlFor="maxRate"
                             className="text-sm font-medium"
                           >
-                            {t("endpoints:clientMaxRateStrategyKey")}
+                            {t("endpoints:maxRate")}
                           </label>
                           <Input
-                            id="clientMaxRateStrategyKey"
-                            {...form.register("clientMaxRateStrategyKey")}
+                            id="maxRate"
+                            {...form.register("maxRate", {
+                              valueAsNumber: true,
+                            })}
+                            placeholder={t("endpoints:maxRatePlaceholder")}
+                            type="number"
+                          />
+                          {form.formState.errors.maxRate && (
+                            <p className="text-sm text-red-500">
+                              {form.formState.errors.maxRate.message}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {t("endpoints:maxRateDescription")}
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label
+                            htmlFor="maxRateSeconds"
+                            className="text-sm font-medium"
+                          >
+                            {t("endpoints:maxRateSeconds")}
+                          </label>
+                          <Input
+                            id="maxRateSeconds"
+                            type="number"
+                            {...form.register("maxRateSeconds", {
+                              valueAsNumber: true,
+                            })}
                             placeholder={t(
-                              "endpoints:clientMaxRateStrategyKeyPlaceholder",
+                              "endpoints:maxRateSecondsPlaceholder",
                             )}
                           />
-                          {form.formState.errors.clientMaxRateStrategyKey && (
+                          {form.formState.errors.maxRateSeconds && (
+                            <p className="text-sm text-red-500">
+                              {form.formState.errors.maxRateSeconds.message}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {t("endpoints:maxRateSecondsDescription")}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-sm font-medium">
+                          {t("endpoints:enableClientMaxRate")}
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {t("endpoints:enableClientMaxRateDescription")}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.watch("enableClientMaxRate")}
+                        onCheckedChange={(checked) =>
+                          form.setValue("enableClientMaxRate", checked)
+                        }
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                    {form.watch("enableClientMaxRate") && (
+                      <>
+                        <div className="flex flex-col gap-2">
+                          <label
+                            htmlFor="clientMaxRate"
+                            className="text-sm font-medium"
+                          >
+                            {t("endpoints:clientMaxRate")}
+                          </label>
+                          <Input
+                            id="clientMaxRate"
+                            {...form.register("clientMaxRate", {
+                              valueAsNumber: true,
+                            })}
+                            type="number"
+                            placeholder={t(
+                              "endpoints:clientMaxRatePlaceholder",
+                            )}
+                          />
+                          {form.formState.errors.clientMaxRate && (
+                            <p className="text-sm text-red-500">
+                              {form.formState.errors.clientMaxRate.message}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {t("endpoints:clientMaxRateDescription")}
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label
+                            htmlFor="clientMaxRateSeconds"
+                            className="text-sm font-medium"
+                          >
+                            {t("endpoints:clientMaxRateSeconds")}
+                          </label>
+                          <Input
+                            id="clientMaxRateSeconds"
+                            {...form.register("clientMaxRateSeconds", {
+                              valueAsNumber: true,
+                            })}
+                            placeholder={t(
+                              "endpoints:clientMaxRateSecondsPlaceholder",
+                            )}
+                            type="number"
+                          />
+                          {form.formState.errors.clientMaxRateSeconds && (
                             <p className="text-sm text-red-500">
                               {
-                                form.formState.errors.clientMaxRateStrategyKey
+                                form.formState.errors.clientMaxRateSeconds
                                   .message
                               }
                             </p>
                           )}
                           <p className="text-xs text-muted-foreground">
-                            {t("endpoints:clientMaxRateStrategyKeyDescription")}
+                            {t("endpoints:clientMaxRateSecondsDescription")}
                           </p>
                         </div>
-                      )}
-                    </>
-                  )}
-                </div>
-                {/* API Key Authentication Settings */}
-                <div className="space-y-4 border-t pt-4">
-                  <h4 className="text-sm font-medium">
-                    {t("endpoints:apiKeyAuth")}
-                  </h4>
-                  {/* Enable API Key Auth */}
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <label className="text-sm font-medium">
-                        {t("endpoints:enableApiKeyAuth")}
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("endpoints:apiKeyAuthDescription")}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={form.watch("enableApiKeyAuth")}
-                      onCheckedChange={(checked) =>
-                        form.setValue("enableApiKeyAuth", checked)
-                      }
-                      disabled={isSubmitting}
-                    />
+                        <div className="flex flex-col gap-2">
+                          <label
+                            htmlFor="clientMaxRateStrategy"
+                            className="text-sm font-medium"
+                          >
+                            {t("endpoints:clientMaxRateStrategy")}
+                          </label>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="w-full justify-between"
+                                type="button"
+                              >
+                                <span>
+                                  {form.watch("clientMaxRateStrategy") === null
+                                    ? t("endpoints:selectStrategy")
+                                    : form.watch("clientMaxRateStrategy") ===
+                                        "ip"
+                                      ? t("endpoints:ipStrategy")
+                                      : form.watch("clientMaxRateStrategy") ===
+                                          "header"
+                                        ? t("endpoints:headerStrategy")
+                                        : t("endpoints:selectStrategy")}
+                                </span>
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)]">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  form.setValue("clientMaxRateStrategy", "ip")
+                                }
+                              >
+                                {t("endpoints:ipStrategy")}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  form.setValue(
+                                    "clientMaxRateStrategy",
+                                    "header",
+                                  )
+                                }
+                              >
+                                {t("endpoints:headerStrategy")}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          {form.formState.errors.clientMaxRateStrategy && (
+                            <p className="text-sm text-red-500">
+                              {
+                                form.formState.errors.clientMaxRateStrategy
+                                  .message
+                              }
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {t("endpoints:clientMaxRateStrategyDescription")}
+                          </p>
+                        </div>
+                        {form.watch("clientMaxRateStrategy") === "header" && (
+                          <div className="flex flex-col gap-2">
+                            <label
+                              htmlFor="clientMaxRateStrategyKey"
+                              className="text-sm font-medium"
+                            >
+                              {t("endpoints:clientMaxRateStrategyKey")}
+                            </label>
+                            <Input
+                              id="clientMaxRateStrategyKey"
+                              {...form.register("clientMaxRateStrategyKey")}
+                              placeholder={t(
+                                "endpoints:clientMaxRateStrategyKeyPlaceholder",
+                              )}
+                            />
+                            {form.formState.errors.clientMaxRateStrategyKey && (
+                              <p className="text-sm text-red-500">
+                                {
+                                  form.formState.errors.clientMaxRateStrategyKey
+                                    .message
+                                }
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              {t(
+                                "endpoints:clientMaxRateStrategyKeyDescription",
+                              )}
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-
-                  {/* Query Parameter Auth */}
-                  {form.watch("enableApiKeyAuth") && (
+                  {/* API Key Authentication Settings */}
+                  <div className="space-y-4 border-t pt-4">
+                    <h4 className="text-sm font-medium">
+                      {t("endpoints:apiKeyAuth")}
+                    </h4>
+                    {/* Enable API Key Auth */}
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <label className="text-sm font-medium">
-                          {t("endpoints:useQueryParamAuth")}
+                          {t("endpoints:enableApiKeyAuth")}
                         </label>
                         <p className="text-xs text-muted-foreground">
-                          {t("endpoints:queryParamAuthDescription")}
+                          {t("endpoints:apiKeyAuthDescription")}
                         </p>
                       </div>
                       <Switch
-                        checked={form.watch("useQueryParamAuth")}
+                        checked={form.watch("enableApiKeyAuth")}
                         onCheckedChange={(checked) =>
-                          form.setValue("useQueryParamAuth", checked)
+                          form.setValue("enableApiKeyAuth", checked)
                         }
-                        disabled={isSubmitting}
+                        disabled={
+                          isSubmitting ||
+                          (!isAdmin &&
+                            form.watch("enableApiKeyAuth") &&
+                            !form.watch("enableOauth"))
+                        }
                       />
                     </div>
-                  )}
-                </div>
 
-                {/* OAuth Authentication Settings */}
-                <div className="space-y-4 border-t pt-4">
-                  <h4 className="text-sm font-medium">
-                    {t("endpoints:oauthAuth")}
-                  </h4>
+                    {/* Query Parameter Auth */}
+                    {form.watch("enableApiKeyAuth") && (
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-sm font-medium">
+                            {t("endpoints:useQueryParamAuth")}
+                          </label>
+                          <p className="text-xs text-muted-foreground">
+                            {t("endpoints:queryParamAuthDescription")}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={form.watch("useQueryParamAuth")}
+                          onCheckedChange={(checked) =>
+                            form.setValue("useQueryParamAuth", checked)
+                          }
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                    )}
+                  </div>
 
-                  {/* Enable OAuth Auth */}
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <label className="text-sm font-medium">
-                        {t("endpoints:enableOauth")}
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("endpoints:oauthAuthDescription")}
-                      </p>
+                  {/* OAuth Authentication Settings */}
+                  <div className="space-y-4 border-t pt-4">
+                    <h4 className="text-sm font-medium">
+                      {t("endpoints:oauthAuth")}
+                    </h4>
+
+                    {/* Enable OAuth Auth */}
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-sm font-medium">
+                          {t("endpoints:enableOauth")}
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {t("endpoints:oauthAuthDescription")}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.watch("enableOauth")}
+                        onCheckedChange={(checked) =>
+                          form.setValue("enableOauth", checked)
+                        }
+                        disabled={
+                          isSubmitting ||
+                          (!isAdmin &&
+                            form.watch("enableOauth") &&
+                            !form.watch("enableApiKeyAuth"))
+                        }
+                      />
                     </div>
-                    <Switch
-                      checked={form.watch("enableOauth")}
+                    {!isAdmin && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("access:endpointAuthRequired")}
+                      </p>
+                    )}
+
+                    {/* OAuth HTTPS Warning */}
+                    {form.watch("enableOauth") && (
+                      <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800/30 rounded-md">
+                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                          {t("endpoints:oauthHttpsWarning")}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {isAdmin && (
+                    <div className="space-y-4 border-t pt-4">
+                      <h4 className="text-sm font-medium">
+                        {t("endpoints:adminToolsSection")}
+                      </h4>
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-sm font-medium">
+                            {t("endpoints:enableMetamcpAdminTools")}
+                          </label>
+                          <p className="text-xs text-muted-foreground">
+                            {t("endpoints:enableMetamcpAdminToolsDescription")}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={form.watch("enableMetamcpAdminTools")}
+                          onCheckedChange={(checked) =>
+                            form.setValue("enableMetamcpAdminTools", checked)
+                          }
+                          disabled={
+                            isSubmitting ||
+                            (!form.watch("enableApiKeyAuth") &&
+                              !form.watch("enableOauth"))
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="createMcpServer"
+                      checked={form.watch("createMcpServer")}
                       onCheckedChange={(checked) =>
-                        form.setValue("enableOauth", checked)
+                        form.setValue("createMcpServer", checked as boolean)
                       }
+                    />
+                    <label
+                      htmlFor="createMcpServer"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      {t("endpoints:createMcpServerDescription")}
+                    </label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("endpoints:createMcpServerExplanation")}
+                  </p>
+
+                  <div className="flex justify-end space-x-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={resetForm}
                       disabled={isSubmitting}
-                    />
+                    >
+                      {t("endpoints:cancel")}
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting || !selectedNamespaceUuid}
+                    >
+                      {isSubmitting
+                        ? t("endpoints:creating")
+                        : t("endpoints:createEndpoint")}
+                    </Button>
                   </div>
-
-                  {/* OAuth HTTPS Warning */}
-                  {form.watch("enableOauth") && (
-                    <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800/30 rounded-md">
-                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                        {t("endpoints:oauthHttpsWarning")}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-4 border-t pt-4">
-                  <h4 className="text-sm font-medium">
-                    {t("endpoints:adminToolsSection")}
-                  </h4>
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <label className="text-sm font-medium">
-                        {t("endpoints:enableMetamcpAdminTools")}
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("endpoints:enableMetamcpAdminToolsDescription")}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={form.watch("enableMetamcpAdminTools")}
-                      onCheckedChange={(checked) =>
-                        form.setValue("enableMetamcpAdminTools", checked)
-                      }
-                      disabled={
-                        isSubmitting ||
-                        (!form.watch("enableApiKeyAuth") &&
-                          !form.watch("enableOauth"))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="createMcpServer"
-                    checked={form.watch("createMcpServer")}
-                    onCheckedChange={(checked) =>
-                      form.setValue("createMcpServer", checked as boolean)
-                    }
-                  />
-                  <label
-                    htmlFor="createMcpServer"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    {t("endpoints:createMcpServerDescription")}
-                  </label>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("endpoints:createMcpServerExplanation")}
-                </p>
-
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={resetForm}
-                    disabled={isSubmitting}
-                  >
-                    {t("endpoints:cancel")}
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting || !selectedNamespaceUuid}
-                  >
-                    {isSubmitting
-                      ? t("endpoints:creating")
-                      : t("endpoints:createEndpoint")}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 

@@ -24,8 +24,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { AccessBadge } from "@/components/access/access-badges";
+import { OwnerLabel } from "@/components/access/owner-label";
 import { EditEndpoint } from "@/components/edit-endpoint";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,6 +51,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { hasAccessLevel, useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
 import { getAppUrl } from "@/lib/env";
 import { trpc } from "@/lib/trpc";
@@ -60,6 +62,7 @@ interface EndpointsListProps {
 
 export function EndpointsList({ onRefresh }: EndpointsListProps) {
   const { t } = useTranslations();
+  const { me } = useAccess();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -80,7 +83,6 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
   } = trpc.frontend.endpoints.list.useQuery();
 
   // Fetch user's API keys to use in URLs
-  const { data: apiKeysResponse } = trpc.frontend.apiKeys.list.useQuery();
 
   // Delete mutation
   const deleteEndpointMutation = trpc.frontend.endpoints.delete.useMutation({
@@ -264,16 +266,16 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
       },
     },
     {
-      accessorKey: "user_id",
-      header: t("endpoints:ownership"),
+      id: "owner",
+      header: t("access:owner.column"),
       cell: ({ row }) => {
         const endpoint = row.original;
-        const isPublic = endpoint.user_id === null;
         return (
-          <div className="py-2">
-            <Badge variant={isPublic ? "success" : "neutral"}>
-              {isPublic ? t("endpoints:public") : t("endpoints:private")}
-            </Badge>
+          <div className="flex flex-col items-start gap-1 py-2">
+            <OwnerLabel owner={endpoint.owner} currentUserId={me?.userId} />
+            {endpoint.access?.reason === "share" && (
+              <AccessBadge access={endpoint.access} />
+            )}
           </div>
         );
       },
@@ -328,38 +330,51 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
           toast.success(t("endpoints:list.openApiSchemaUrlCopied"));
         };
 
-        const getApiKey = () => {
-          const apiKeys = apiKeysResponse?.apiKeys || [];
-          const activeApiKey = apiKeys.find((key) => key.is_active);
-          return activeApiKey?.key || "YOUR_API_KEY";
+        // API keys are only shown once, at creation: the copied URL carries a
+        // placeholder to replace with one of the user's keys.
+        const getApiKey = () => "YOUR_API_KEY";
+        const replaceKeyHint = {
+          description: t("endpoints:list.replaceApiKeyPlaceholder"),
         };
 
         const copyFullSseUrlWithApiKey = () => {
           const apiKey = getApiKey();
           const baseUrl = `${getAppUrl()}/metamcp/${endpoint.name}/sse?api_key=${apiKey}`;
           navigator.clipboard.writeText(baseUrl);
-          toast.success(t("endpoints:list.sseUrlWithApiKeyCopied"));
+          toast.success(
+            t("endpoints:list.sseUrlWithApiKeyCopied"),
+            replaceKeyHint,
+          );
         };
 
         const copyFullShttpUrlWithApiKey = () => {
           const apiKey = getApiKey();
           const baseUrl = `${getAppUrl()}/metamcp/${endpoint.name}/mcp?api_key=${apiKey}`;
           navigator.clipboard.writeText(baseUrl);
-          toast.success(t("endpoints:list.shttpUrlWithApiKeyCopied"));
+          toast.success(
+            t("endpoints:list.shttpUrlWithApiKeyCopied"),
+            replaceKeyHint,
+          );
         };
 
         const copyFullApiUrlWithApiKey = () => {
           const apiKey = getApiKey();
           const baseUrl = `${getAppUrl()}/metamcp/${endpoint.name}/api?api_key=${apiKey}`;
           navigator.clipboard.writeText(baseUrl);
-          toast.success(t("endpoints:list.openApiUrlWithApiKeyCopied"));
+          toast.success(
+            t("endpoints:list.openApiUrlWithApiKeyCopied"),
+            replaceKeyHint,
+          );
         };
 
         const copyFullOpenApiSchemaUrlWithApiKey = () => {
           const apiKey = getApiKey();
           const baseUrl = `${getAppUrl()}/metamcp/${endpoint.name}/api/openapi.json?api_key=${apiKey}`;
           navigator.clipboard.writeText(baseUrl);
-          toast.success(t("endpoints:list.openApiSchemaUrlWithApiKeyCopied"));
+          toast.success(
+            t("endpoints:list.openApiSchemaUrlWithApiKeyCopied"),
+            replaceKeyHint,
+          );
         };
 
         return (
@@ -371,10 +386,12 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleEditEndpoint(endpoint)}>
-                <Edit className="mr-2 h-4 w-4" />
-                {t("endpoints:list.editEndpoint")}
-              </DropdownMenuItem>
+              {hasAccessLevel(endpoint.access, "manage") && (
+                <DropdownMenuItem onClick={() => handleEditEndpoint(endpoint)}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  {t("endpoints:list.editEndpoint")}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={() => navigator.clipboard.writeText(endpoint.uuid)}
               >
@@ -427,13 +444,15 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
                 <Package className="mr-2 h-4 w-4" />
                 {t("endpoints:list.viewNamespace")}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleDeleteEndpoint(endpoint)}
-                className="text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                {t("endpoints:list.deleteEndpoint")}
-              </DropdownMenuItem>
+              {hasAccessLevel(endpoint.access, "manage") && (
+                <DropdownMenuItem
+                  onClick={() => handleDeleteEndpoint(endpoint)}
+                  className="text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                  {t("endpoints:list.deleteEndpoint")}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );

@@ -24,24 +24,22 @@ import {
   Progress,
   PromptListChangedNotificationSchema,
   PromptReference,
-  Request,
   ResourceListChangedNotificationSchema,
   ResourceReference,
   ResourceUpdatedNotificationSchema,
-  Result,
   ServerCapabilities,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { McpServerType, McpServerTypeEnum } from "@repo/zod-types";
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type * as z3 from "zod/v3";
 import type * as z4 from "zod/v4/core";
 
 import { SESSION_KEYS } from "@/lib/constants";
 
-import { ConnectionStatus } from "../lib/constants";
+import { ConnectionStatus, INSPECTOR_HEADERS } from "../lib/constants";
 import { getAppUrl } from "../lib/env";
 import {
   Notification,
@@ -49,6 +47,7 @@ import {
 } from "../lib/notificationTypes";
 import { createAuthProvider } from "../lib/oauth-provider";
 import { trpc } from "../lib/trpc";
+import { useTranslations } from "./useTranslations";
 
 // Mirror the MCP SDK's zod 3/4 compatibility types. SDK 1.26 result schemas use
 // the zod 4 API (surfaced via zod 3.25's zod/v4 export), so request helpers must
@@ -83,6 +82,12 @@ interface UseConnectionOptions {
   isMetaMCP?: boolean;
   includeInactiveServers?: boolean;
   enabled?: boolean; // Skip hook execution when false
+  /**
+   * Start the upstream OAuth flow when the server answers 401. Only for
+   * people who can edit the server: they are the ones who can store its
+   * tokens, and nobody else should be redirected by a server's metadata.
+   */
+  allowOAuthFlow?: boolean;
 }
 
 export function useConnection({
@@ -100,9 +105,13 @@ export function useConnection({
   getRoots,
   isMetaMCP = false,
   includeInactiveServers = false,
+  allowOAuthFlow = false,
   enabled = true,
 }: UseConnectionOptions) {
-  const authProvider = createAuthProvider(mcpServerUuid, url);
+  const { t } = useTranslations();
+  const authProvider = createAuthProvider(mcpServerUuid, url, (target) =>
+    window.confirm(t("inspector:oauthRedirectConfirm", { host: target.host })),
+  );
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("disconnected");
   const [serverCapabilities, setServerCapabilities] =
@@ -278,6 +287,7 @@ export function useConnection({
       // Cookies will be sent automatically by the browser
       const proxyHealthResponse = await fetch(proxyHealthUrl, {
         credentials: "include", // Ensure cookies are sent
+        headers: INSPECTOR_HEADERS,
       });
       const proxyHealth = await proxyHealthResponse.json();
       if (proxyHealth?.status !== "ok") {
@@ -312,7 +322,7 @@ export function useConnection({
   });
 
   const handleAuthError = useMemoizedFn(async (error: unknown) => {
-    if (is401Error(error)) {
+    if (allowOAuthFlow && !isMetaMCP && is401Error(error)) {
       sessionStorage.setItem(SESSION_KEYS.SERVER_URL, url || "");
       sessionStorage.setItem(SESSION_KEYS.MCP_SERVER_UUID, mcpServerUuid);
 
@@ -324,8 +334,28 @@ export function useConnection({
     return false;
   });
 
+  // A connection attempt in progress: pages re-render (and re-trigger their
+  // auto-connect) while it runs, and each attempt opens a proxy session.
+  const connectingRef = useRef(false);
+
   const connect = useMemoizedFn(
     async (_e?: unknown, retryCount: number = 0): Promise<void> => {
+      if (retryCount > 0) {
+        return connectOnce(retryCount);
+      }
+      if (connectingRef.current) return;
+      connectingRef.current = true;
+      setConnectionStatus("connecting");
+      try {
+        await connectOnce(0);
+      } finally {
+        connectingRef.current = false;
+      }
+    },
+  );
+
+  const connectOnce = useMemoizedFn(
+    async (retryCount: number): Promise<void> => {
       // Skip connection if hook is disabled
       if (!enabled) {
         console.warn("Cannot connect: useConnection hook is disabled");
@@ -370,7 +400,7 @@ export function useConnection({
       try {
         // Inject auth manually instead of using SSEClientTransport, because we're
         // proxying through the inspector server first.
-        const headers: HeadersInit = {};
+        const headers: Record<string, string> = { ...INSPECTOR_HEADERS };
 
         // Use manually provided bearer token if available, otherwise use OAuth tokens
         const token =
@@ -429,9 +459,16 @@ export function useConnection({
                 `/mcp-proxy/server/stdio`,
                 getAppUrl(),
               );
-              mcpProxyServerUrl.searchParams.append("command", command);
-              mcpProxyServerUrl.searchParams.append("args", args);
-              mcpProxyServerUrl.searchParams.append("env", JSON.stringify(env));
+              // Stored servers are resolved server-side from their UUID;
+              // only ad-hoc connections send the command itself.
+              if (!mcpServerUuid) {
+                mcpProxyServerUrl.searchParams.append("command", command);
+                mcpProxyServerUrl.searchParams.append("args", args);
+                mcpProxyServerUrl.searchParams.append(
+                  "env",
+                  JSON.stringify(env),
+                );
+              }
               transportOptions = {
                 authProvider: authProvider,
                 eventSourceInit: {
@@ -461,7 +498,11 @@ export function useConnection({
 
             case McpServerTypeEnum.enum.SSE:
               mcpProxyServerUrl = new URL(`/mcp-proxy/server/sse`, getAppUrl());
-              mcpProxyServerUrl.searchParams.append("url", url);
+              // Stored servers are resolved server-side: never put their
+              // URL (which may carry credentials) in the proxy address.
+              if (!mcpServerUuid) {
+                mcpProxyServerUrl.searchParams.append("url", url);
+              }
               transportOptions = {
                 eventSourceInit: {
                   fetch: (
@@ -490,7 +531,11 @@ export function useConnection({
 
             case McpServerTypeEnum.enum.STREAMABLE_HTTP:
               mcpProxyServerUrl = new URL(`/mcp-proxy/server/mcp`, getAppUrl());
-              mcpProxyServerUrl.searchParams.append("url", url);
+              // Stored servers are resolved server-side: never put their
+              // URL (which may carry credentials) in the proxy address.
+              if (!mcpServerUuid) {
+                mcpProxyServerUrl.searchParams.append("url", url);
+              }
               transportOptions = {
                 authProvider: authProvider,
                 eventSourceInit: {
@@ -525,6 +570,15 @@ export function useConnection({
           }
 
           mcpProxyServerUrl.searchParams.append("transportType", transportType);
+          // The backend loads the stored configuration and credentials of
+          // this server (after checking access) instead of trusting values
+          // sent by the browser.
+          if (mcpServerUuid) {
+            mcpProxyServerUrl.searchParams.append(
+              "mcpServerUuid",
+              mcpServerUuid,
+            );
+          }
         }
 
         if (onNotification) {
@@ -565,6 +619,10 @@ export function useConnection({
                 })
               : new SSEClientTransport(mcpProxyServerUrl, transportOptions);
 
+          // Replace, never pile up, the previous connection
+          if (mcpClient) {
+            await mcpClient.close().catch(() => undefined);
+          }
           await client.connect(transport as Transport);
 
           setClientTransport(transport);
@@ -579,8 +637,11 @@ export function useConnection({
             instructions: client.getInstructions(),
           });
         } catch (error) {
+          // The proxy address may contain an ad-hoc URL or command: log the
+          // route only.
           console.error(
-            `Failed to connect to MCP Server via the MCP Inspector Proxy: ${mcpProxyServerUrl}:`,
+            "Failed to connect to MCP Server via the MCP Inspector Proxy (%s):",
+            mcpProxyServerUrl.pathname,
             error,
           );
 
@@ -593,13 +654,17 @@ export function useConnection({
             return;
           }
 
-          const shouldRetry = await handleAuthError(error);
+          // One authorization attempt per connection: a server that keeps
+          // answering 401 after a successful flow must not loop.
+          const shouldRetry = retryCount < 1 && (await handleAuthError(error));
           if (shouldRetry) {
             return connect(undefined, retryCount + 1);
           }
           if (is401Error(error)) {
             // Don't set error state if we're about to redirect for auth
-
+            if (!allowOAuthFlow || isMetaMCP) {
+              setConnectionStatus("error");
+            }
             return;
           }
           throw error;

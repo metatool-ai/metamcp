@@ -22,3 +22,12 @@ export type ConnectionStatus =
   | "connected"
   | "error"
   | "error-connecting-to-proxy";
+
+/**
+ * Sent on every request to the backend inspector proxy (/mcp-proxy), which
+ * rejects requests without it: a cross-site page cannot add this header, so
+ * it cannot open inspector sessions with the user's cookies.
+ */
+export const INSPECTOR_HEADERS: Readonly<Record<string, string>> = {
+  "X-MetaMCP-Inspector": "1",
+};

@@ -4,6 +4,11 @@ This projects uses Next.js locale in middleware and client side translation.
 
 Default locale is en (English) while zh (Simplified Chinese) is supported. The author can recognize both languages so can better support the translation accuracy there, but you are welcomed to contribute more languages following this doc.
 
+Supported locales: `en` (English, default), `fr` (French), `zh` (Simplified Chinese), `ko` (Korean), `pt` (Portuguese) and `es` (Spanish). The browser's `Accept-Language` preferences (with their `q` weights) pick the initial language; the language switcher stores an explicit choice in the `preferred-language` cookie.
+
+- **Plurals**: a value can be an object such as `{ "one": "{{count}} member", "other": "{{count}} members" }`, selected with the locale's plural rules (`Intl.PluralRules`): French uses `one` for 0 and 1.
+- **Fallback**: keys missing in a translation fall back to English (French merges nested keys too).
+
 ## Project Structure
 
 ```

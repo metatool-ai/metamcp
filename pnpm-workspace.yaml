@@ -1,3 +1,15 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Supply-chain safeguards (pnpm >= 10.26)
+# Transitive dependencies may only come from the registry (no git / tarball
+# URLs pulled in by a compromised package).
+blockExoticSubdeps: true
+# Do not resolve versions published less than seven days ago: most
+# malicious releases are detected and unpublished well before. For an urgent
+# fix, list the package in minimumReleaseAgeExclude.
+minimumReleaseAge: 10080
+# Refuse a version whose provenance is weaker than the previous ones'
+# (e.g. published without the trusted publisher that signed earlier releases).
+trustPolicy: no-downgrade

@@ -2,6 +2,10 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 
+import {
+  INSPECTOR_REQUEST_HEADER,
+  requireInspectorRequest,
+} from "../middleware/inspector-request.middleware";
 import metamcpRoutes from "./mcp-proxy/metamcp";
 import serverRoutes from "./mcp-proxy/server";
 
@@ -19,19 +23,14 @@ mcpProxyRouter.use(
       "mcp-session-id",
       "x-custom-auth-header",
       "last-event-id",
+      INSPECTOR_REQUEST_HEADER,
     ],
+    exposedHeaders: ["mcp-session-id", "last-event-id"],
   }),
 );
 
-// Basic authentication disabled for easier OAuth integration
-
-// Apply additional headers
-mcpProxyRouter.use((req, res, next) => {
-  res.header("Access-Control-Expose-Headers", "mcp-session-id");
-  res.header("Access-Control-Expose-Headers", "authorization");
-  res.header("Access-Control-Expose-Headers", "last-event-id");
-  next();
-});
+// Only the MetaMCP web app may drive the proxy (cross-site request guard)
+mcpProxyRouter.use(requireInspectorRequest);
 
 // Mount MCP server proxy routes under /server
 mcpProxyRouter.use("/server", serverRoutes);

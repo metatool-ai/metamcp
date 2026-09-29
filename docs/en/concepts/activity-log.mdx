@@ -1,0 +1,48 @@
+---
+title: "Activity log"
+description: "Who changed access, configuration and resources"
+---
+
+The activity log answers "who did what, when, from where" for everything that affects access or configuration. Administrators find it in **Administration → Activity log**.
+
+It complements the [audit logs](/en/concepts/audit-logs), which record MCP requests (tool calls through endpoints).
+
+## What is recorded
+
+| Category | Events |
+|----------|--------|
+| Sign-in | Successful sign-ins (password or SSO) and refused sign-ins with the reason (disabled account, no matching IdP group, registration disabled); MCP clients authorized or refused on the OAuth consent page |
+| Users | Created (by an administrator, by sign-up or automatically by SSO), updated (before → after), promoted by `ADMIN_EMAILS`, password reset, disabled, enabled, sessions revoked, deleted (and where their resources went) |
+| Groups | Created, updated (role, IdP mappings), deleted, members added or removed, memberships synchronised from the identity provider |
+| Roles | Changes to the permissions of editors and viewers |
+| Single sign-on | Changes to the groups claim, synchronisation and "require a group match" |
+| Settings | Every settings change, before → after |
+| Sharing | Access granted or removed, with the person or group and the level |
+| Resources | MCP servers, namespaces and endpoints created, updated or deleted; namespace tools enabled or disabled; endpoint authentication switches |
+| API keys | Created, enabled / disabled, scope changed, deleted (with their preview, never the key), including when an administrator acts on another user's key |
+| Security | Data key rotations and re-wrapping of data keys |
+
+Each entry keeps the actor (a snapshot of their name and email, so history survives deletions), the target, the outcome, the client IP address and user agent, and details.
+
+The client address comes from the `X-Forwarded-For` entries added by trusted proxies (`TRUST_PROXY`, default: the bundled web server and proxies on private networks). If clients connect to MetaMCP directly from a private network, set `TRUST_PROXY=loopback` so they cannot choose the address they are logged under.
+
+<Note>
+**Secret values are never recorded.** For an MCP server, the log names the fields that changed (for example `env.GITHUB_TOKEN`, `url`, `bearerToken`), never their values. As a safety net, anything under a key that looks sensitive (`token`, `secret`, `password`, …) is replaced before storage.
+</Note>
+
+## Using it
+
+- Filter by category, outcome (success / denied / failure) and period, or search people, targets and IP addresses.
+- Click an entry to see every field, including the JSON details.
+- **Export CSV** downloads the filtered entries (up to 10,000). Values are quoted and spreadsheet formulas neutralised.
+
+## Integrity and retention
+
+- The table is **append-only**: a database trigger rejects any modification. Entries are only deleted by the retention job. The application's database role owns the table, so this does not resist someone holding its credentials: for tamper-evidence, also ship the events elsewhere with `ACTIVITY_LOG_STDOUT`.
+- Entries are kept `ACTIVITY_LOG_RETENTION_DAYS` days (default `365`; `0` keeps them forever).
+- With `ACTIVITY_LOG_STDOUT=true`, every event is also written to the standard output as one JSON line (`"type": "metamcp.activity"`), ready for Loki, Elasticsearch or a SIEM.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ACTIVITY_LOG_RETENTION_DAYS` | `365` | Days to keep entries (`0` = forever) |
+| `ACTIVITY_LOG_STDOUT` | `false` | Also print each event as a JSON line |

@@ -1,3 +1,5 @@
+import { createAccessRouter } from "./access";
+import { createAdminRouter } from "./admin";
 import { createApiKeysRouter } from "./api-keys";
 import { createConfigRouter } from "./config";
 import { createEndpointsRouter } from "./endpoints";
@@ -6,6 +8,8 @@ import { createMcpRequestAuditLogsRouter } from "./mcp-request-audit-logs";
 import { createMcpServersRouter } from "./mcp-servers";
 import { createNamespacesRouter } from "./namespaces";
 import { createOAuthRouter } from "./oauth";
+import { createOAuthConsentRouter } from "./oauth-consent";
+import { createSharesRouter } from "./shares";
 import { createToolsRouter } from "./tools";
 
 export { createMcpServersRouter };
@@ -16,6 +20,10 @@ export { createToolsRouter };
 export { createApiKeysRouter };
 export { createConfigRouter };
 export { createMcpRequestAuditLogsRouter };
+export { createAccessRouter };
+export { createAdminRouter };
+export { createSharesRouter };
+export { createOAuthConsentRouter };
 
 export const createFrontendRouter = (implementations: {
   mcpServers: Parameters<typeof createMcpServersRouter>[0];
@@ -27,6 +35,10 @@ export const createFrontendRouter = (implementations: {
   config: Parameters<typeof createConfigRouter>[0];
   logs: Parameters<typeof createLogsRouter>[0];
   mcpRequestAuditLogs: Parameters<typeof createMcpRequestAuditLogsRouter>[0];
+  access: Parameters<typeof createAccessRouter>[0];
+  admin: Parameters<typeof createAdminRouter>[0];
+  shares: Parameters<typeof createSharesRouter>[0];
+  oauthConsent: Parameters<typeof createOAuthConsentRouter>[0];
 }) => {
   return {
     mcpServers: createMcpServersRouter(implementations.mcpServers),
@@ -40,5 +52,9 @@ export const createFrontendRouter = (implementations: {
     mcpRequestAuditLogs: createMcpRequestAuditLogsRouter(
       implementations.mcpRequestAuditLogs,
     ),
+    access: createAccessRouter(implementations.access),
+    admin: createAdminRouter(implementations.admin),
+    shares: createSharesRouter(implementations.shares),
+    oauthConsent: createOAuthConsentRouter(implementations.oauthConsent),
   };
 };

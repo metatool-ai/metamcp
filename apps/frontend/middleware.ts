@@ -1,7 +1,7 @@
 import { betterFetch } from "@better-fetch/fetch";
 import { NextRequest, NextResponse } from "next/server";
 
-const locales = ["en", "zh", "ko", "pt", "es"];
+const locales = ["en", "fr", "zh", "ko", "pt", "es"];
 const defaultLocale = "en";
 
 // Get the preferred locale from the request
@@ -22,31 +22,58 @@ function getLocale(request: NextRequest): string {
     return savedLocale;
   }
 
-  // Check Accept-Language header as fallback
+  // Accept-Language fallback: the supported language with the highest
+  // preference (q) wins, e.g. "fr-FR,fr;q=0.9,en;q=0.8" -> "fr".
   const acceptLanguage = request.headers.get("accept-language");
   if (acceptLanguage) {
-    // Simple language detection - look for zh in accept-language
-    if (acceptLanguage.includes("zh")) {
-      return "zh";
-    }
-
-    // Look for ko in accept-language
-    if (acceptLanguage.includes("ko")) {
-      return "ko";
-    }
-
-    // Look for pt in accept-language
-    if (acceptLanguage.includes("pt")) {
-      return "pt";
-    }
-
-    // Look for es in accept-language
-    if (acceptLanguage.includes("es")) {
-      return "es";
+    const preferred = acceptLanguage
+      .split(",")
+      .map((part, index) => {
+        const [tag = "", ...params] = part.trim().split(";");
+        const q = params
+          .map((param) => param.trim())
+          .find((param) => param.startsWith("q="));
+        const weight = q ? Number(q.slice(2)) : 1;
+        return {
+          language: tag.toLowerCase().split("-")[0] ?? "",
+          weight: Number.isFinite(weight) ? weight : 0,
+          index,
+        };
+      })
+      .filter((entry) => entry.weight > 0 && locales.includes(entry.language))
+      .sort((a, b) => b.weight - a.weight || a.index - b.index)[0];
+    if (preferred) {
+      return preferred.language;
     }
   }
 
   return defaultLocale;
+}
+
+const ADMIN_ROUTES = ["/admin", "/settings", "/live-logs"];
+
+function isAdminRoute(pathname: string): boolean {
+  return ADMIN_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+}
+
+// Effective role (base role + group roles) comes from the backend.
+async function fetchIsAdmin(cookie: string): Promise<boolean> {
+  try {
+    // tRPC procedure "frontend.access.me", mounted under /trpc/frontend
+    const response = await fetch(
+      "http://localhost:12009/trpc/frontend/frontend.access.me",
+      { headers: { cookie }, cache: "no-store" },
+    );
+    if (!response.ok) return false;
+    const body = (await response.json()) as {
+      result?: { data?: { isAdmin?: boolean } | null };
+    };
+    return body.result?.data?.isAdmin === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function middleware(request: NextRequest) {
@@ -118,10 +145,26 @@ export async function middleware(request: NextRequest) {
     });
 
     if (!session) {
-      // Redirect to login if not authenticated (with locale)
+      // Redirect to login if not authenticated (with locale). The query is
+      // kept: the OAuth consent page (/authorize?request=...) needs it.
       const loginUrl = new URL(`/${locale}/login`, request.url);
-      loginUrl.searchParams.set("callbackUrl", pathnameWithoutLocale);
+      loginUrl.searchParams.set(
+        "callbackUrl",
+        `${pathnameWithoutLocale}${request.nextUrl.search}`,
+      );
       return NextResponse.redirect(loginUrl);
+    }
+
+    // Administration pages, server settings and live logs are reserved to
+    // administrators. The backend enforces it too; this avoids rendering
+    // pages whose data calls would all be refused.
+    if (isAdminRoute(pathnameWithoutLocale)) {
+      const isAdmin = await fetchIsAdmin(request.headers.get("cookie") || "");
+      if (!isAdmin) {
+        const deniedUrl = new URL(`/${locale}/access-denied`, request.url);
+        deniedUrl.searchParams.set("from", pathnameWithoutLocale);
+        return NextResponse.redirect(deniedUrl);
+      }
     }
 
     return NextResponse.next();

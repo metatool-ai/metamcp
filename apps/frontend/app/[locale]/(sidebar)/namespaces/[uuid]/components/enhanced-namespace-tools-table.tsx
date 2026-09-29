@@ -1,6 +1,6 @@
 "use client";
 
-import { NamespaceTool, ToolStatusEnum } from "@repo/zod-types";
+import { NamespaceTool, ResourceAccess, ToolStatusEnum } from "@repo/zod-types";
 import {
   Braces,
   Calendar,
@@ -106,8 +106,12 @@ interface EnhancedNamespaceToolsTableProps {
     uuid: string;
     name: string;
     status: string;
+    /** Set when the caller can open the server's own page. */
+    access?: ResourceAccess;
   }>;
   sessionInitializing?: boolean;
+  /** Only namespace editors can change tool status and overrides. */
+  canEdit?: boolean;
 }
 
 type SortField =
@@ -138,7 +142,16 @@ export function EnhancedNamespaceToolsTable({
   namespaceUuid,
   servers,
   sessionInitializing = false,
+  canEdit = true,
 }: EnhancedNamespaceToolsTableProps) {
+  // Using a namespace does not grant access to its servers' own pages.
+  const openableServers = useMemo(
+    () =>
+      new Set(
+        servers.filter((server) => server.access).map((server) => server.uuid),
+      ),
+    [servers],
+  );
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [sortField, setSortField] = useState<SortField>("name");
@@ -989,7 +1002,9 @@ export function EnhancedNamespaceToolsTable({
                         </div>
                       </TableCell>
                       <TableCell className="min-w-[120px] w-[150px]">
-                        {tool.serverName && tool.serverUuid ? (
+                        {tool.serverName &&
+                        tool.serverUuid &&
+                        openableServers.has(tool.serverUuid) ? (
                           <Link
                             href={`/mcp-servers/${tool.serverUuid}`}
                             className="flex items-center gap-2 hover:underline"
@@ -1018,7 +1033,7 @@ export function EnhancedNamespaceToolsTable({
                             <Switch
                               checked={tool.status === "ACTIVE"}
                               onCheckedChange={() => handleStatusToggle(tool)}
-                              disabled={isToggling}
+                              disabled={isToggling || !canEdit}
                             />
                           </div>
                         ) : (
@@ -1095,7 +1110,7 @@ export function EnhancedNamespaceToolsTable({
                                 </>
                               )}
                             </DropdownMenuItem>
-                            {tool.sources.saved && (
+                            {tool.sources.saved && canEdit && (
                               <DropdownMenuItem
                                 onClick={() =>
                                   startEditingOverrides(toolId, tool)
@@ -1108,16 +1123,19 @@ export function EnhancedNamespaceToolsTable({
                                 )}
                               </DropdownMenuItem>
                             )}
-                            {tool.serverUuid && (
-                              <DropdownMenuItem asChild>
-                                <Link href={`/mcp-servers/${tool.serverUuid}`}>
-                                  <Server className="mr-2 h-4 w-4" />
-                                  {t(
-                                    "namespaces:enhancedToolsTable.viewServer",
-                                  )}
-                                </Link>
-                              </DropdownMenuItem>
-                            )}
+                            {tool.serverUuid &&
+                              openableServers.has(tool.serverUuid) && (
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    href={`/mcp-servers/${tool.serverUuid}`}
+                                  >
+                                    <Server className="mr-2 h-4 w-4" />
+                                    {t(
+                                      "namespaces:enhancedToolsTable.viewServer",
+                                    )}
+                                  </Link>
+                                </DropdownMenuItem>
+                              )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -1317,7 +1335,8 @@ export function EnhancedNamespaceToolsTable({
                                     )}
                                     :
                                   </span>
-                                  {tool.serverUuid ? (
+                                  {tool.serverUuid &&
+                                  openableServers.has(tool.serverUuid) ? (
                                     <Link
                                       href={`/mcp-servers/${tool.serverUuid}`}
                                       className="text-sm text-blue-600 hover:underline"

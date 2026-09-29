@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { hasAccessLevel, useAccess } from "@/hooks/useAccess";
 import { useConnection } from "@/hooks/useConnection";
 import { useTranslations } from "@/hooks/useTranslations";
 import { Notification } from "@/lib/notificationTypes";
@@ -45,10 +46,18 @@ function McpInspectorContent() {
   const { data: serversResponse, isLoading: serversLoading } =
     trpc.frontend.mcpServers.list.useQuery();
 
-  // Memoize servers array to prevent unnecessary re-renders
+  const { can } = useAccess();
+  const canUseInspector = can("inspector.use");
+
+  // Memoize servers array to prevent unnecessary re-renders. Servers only
+  // shared for use need the inspector permission; people who can edit a
+  // server can always test it (same rule as the backend proxy).
   const servers: McpServer[] = useMemo(() => {
-    return serversResponse?.success ? serversResponse.data : [];
-  }, [serversResponse]);
+    const all = serversResponse?.success ? serversResponse.data : [];
+    return all.filter(
+      (server) => canUseInspector || hasAccessLevel(server.access, "edit"),
+    );
+  }, [serversResponse, canUseInspector]);
 
   // Get selected server details
   const selectedServer = servers.find(
@@ -98,6 +107,7 @@ function McpInspectorContent() {
     bearerToken: selectedServer?.bearerToken || undefined,
     onNotification,
     onStdErrNotification,
+    allowOAuthFlow: hasAccessLevel(selectedServer?.access, "edit"),
     enabled: Boolean(selectedServer && !serversLoading && selectedServerUuid),
   });
 
@@ -277,14 +287,16 @@ function McpInspectorContent() {
                 <Eye className="h-4 w-4 mr-2" />
                 {t("mcp-servers:list.viewDetails")}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditDialogOpen(true)}
-              >
-                <Edit className="h-4 w-4 mr-2" />
-                {t("inspector:editServerButton")}
-              </Button>
+              {hasAccessLevel(selectedServer?.access, "edit") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditDialogOpen(true)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  {t("inspector:editServerButton")}
+                </Button>
+              )}
             </div>
           )}
         </div>

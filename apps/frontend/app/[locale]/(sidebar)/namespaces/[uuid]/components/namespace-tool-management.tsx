@@ -4,7 +4,7 @@ import {
   ClientRequest,
   ListToolsResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { ToolStatusEnum } from "@repo/zod-types";
+import { ResourceAccess, ToolStatusEnum } from "@repo/zod-types";
 import { AlertTriangle, Database, RefreshCw, Wrench } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -22,10 +22,13 @@ interface NamespaceToolManagementProps {
     uuid: string;
     name: string;
     status: string;
+    /** Set when the caller can open the server's own page. */
+    access?: ResourceAccess;
   }>;
   namespaceUuid: string;
   makeRequest?: MakeRequestFn; // Optional makeRequest function for MetaMCP connections
   sessionInitializing?: boolean; // Whether session initialization is in progress
+  canEdit?: boolean; // Only namespace editors save tool mappings / statuses / overrides
 }
 
 export function NamespaceToolManagement({
@@ -33,6 +36,7 @@ export function NamespaceToolManagement({
   namespaceUuid,
   makeRequest,
   sessionInitializing = false,
+  canEdit = true,
 }: NamespaceToolManagementProps) {
   const [loading, setLoading] = useState(false);
   const [mcpTools, setMcpTools] = useState<
@@ -135,7 +139,7 @@ export function NamespaceToolManagement({
           setMcpTools(mcpToolsData);
 
           // Automatically save tools to namespace mappings when autoSave is true (first load only)
-          if (autoSave && toolsListResponse.tools.length > 0) {
+          if (canEdit && autoSave && toolsListResponse.tools.length > 0) {
             const toolsForSubmission = toolsListResponse.tools.map((tool) => ({
               name: tool.name, // Keep the full "ServerName__toolName" format
               description: tool.description || "",
@@ -163,7 +167,7 @@ export function NamespaceToolManagement({
         setMcpTools([]);
       }
     },
-    [makeRequest, refreshToolsMutation, namespaceUuid],
+    [makeRequest, refreshToolsMutation, namespaceUuid, canEdit],
   );
 
   // Safely auto-fetch MetaMCP tools when connection becomes available
@@ -385,6 +389,7 @@ export function NamespaceToolManagement({
             namespaceUuid={namespaceUuid}
             servers={servers}
             sessionInitializing={sessionInitializing}
+            canEdit={canEdit}
           />
         </div>
       ) : (

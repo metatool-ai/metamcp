@@ -1,5 +1,6 @@
 import { OAuthClientInformation } from "@modelcontextprotocol/sdk/shared/auth.js";
 import {
+  type AccessPrincipal,
   ExchangeOAuthTokenRequestSchema,
   ExchangeOAuthTokenResponseSchema,
   GetOAuthSessionRequestSchema,
@@ -18,6 +19,9 @@ import {
   oauthSessionsRepository,
 } from "../db/repositories";
 import { OAuthSessionsSerializer } from "../db/serializers";
+import { accessService } from "../lib/access/access.service";
+import { hasLevel } from "../lib/access/resource-guards";
+import { publicErrorMessage } from "../lib/errors";
 import { tryRefreshUpstreamTokens } from "../lib/oauth-upstream/refresh-on-401";
 import {
   discoverAuthorizationServerMetadata,
@@ -78,10 +82,13 @@ type ResolveServerResult =
 
 async function resolveOwnedServerUrl(
   mcpServerUuid: string,
-  userId: string,
+  principal: AccessPrincipal,
 ): Promise<ResolveServerResult> {
   const server = await mcpServersRepository.findByUuid(mcpServerUuid);
-  if (!server) {
+  const access = server
+    ? await accessService.resolveAccessOne(principal, "mcp_server", server)
+    : null;
+  if (!server || !access) {
     return {
       ok: false,
       error: {
@@ -90,15 +97,15 @@ async function resolveOwnedServerUrl(
       },
     };
   }
-  // Match the access rules used elsewhere: a server with a `user_id` is
-  // private to that user; a server with `user_id === null` is public.
-  if (server.user_id && server.user_id !== userId) {
+  // Upstream OAuth tokens are shared by everyone using the server, so only
+  // people who can edit it may (re)connect it.
+  if (!hasLevel(access, "edit")) {
     return {
       ok: false,
       error: {
         error: "access_denied",
         error_description:
-          "You can only run OAuth flows against servers you own",
+          "You need edit access to this MCP server to connect its OAuth account",
       },
     };
   }
@@ -119,11 +126,33 @@ async function resolveOwnedServerUrl(
   return { ok: true, url: server.url };
 }
 
+async function canEditServer(
+  mcpServerUuid: string,
+  principal: AccessPrincipal,
+): Promise<boolean> {
+  const server = await mcpServersRepository.findByUuid(mcpServerUuid);
+  if (!server) return false;
+  const access = await accessService.resolveAccessOne(
+    principal,
+    "mcp_server",
+    server,
+  );
+  return hasLevel(access, "edit");
+}
+
 export const oauthImplementations = {
   get: async (
     input: z.infer<typeof GetOAuthSessionRequestSchema>,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof GetOAuthSessionResponseSchema>> => {
     try {
+      // Tokens and client secrets: edit access on the server required
+      if (!(await canEditServer(input.mcp_server_uuid, principal))) {
+        return {
+          success: false as const,
+          message: "OAuth session not found",
+        };
+      }
       const session = await oauthSessionsRepository.findByMcpServerUuid(
         input.mcp_server_uuid,
       );
@@ -151,8 +180,16 @@ export const oauthImplementations = {
 
   upsert: async (
     input: z.infer<typeof UpsertOAuthSessionRequestSchema>,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof UpsertOAuthSessionResponseSchema>> => {
     try {
+      if (!(await canEditServer(input.mcp_server_uuid, principal))) {
+        return {
+          success: false as const,
+          error:
+            "Access denied: you need edit access to this MCP server to change its OAuth session",
+        };
+      }
       const session = await oauthSessionsRepository.upsert({
         mcp_server_uuid: input.mcp_server_uuid,
         ...(input.client_information && {
@@ -185,7 +222,7 @@ export const oauthImplementations = {
       logger.error("Error upserting OAuth session:", error);
       return {
         success: false as const,
-        error: error instanceof Error ? error.message : "Internal server error",
+        error: publicErrorMessage(error, "Internal server error"),
       };
     }
   },
@@ -200,7 +237,7 @@ export const oauthImplementations = {
   // browser blocks the response body, leaving tokens unpersisted.
   exchangeToken: async (
     input: z.infer<typeof ExchangeOAuthTokenRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof ExchangeOAuthTokenResponseSchema>> => {
     // Resolve the upstream URL from the DB (NOT from the request). This is
     // the SSRF guard: an attacker-supplied URL would otherwise steer the
@@ -208,7 +245,7 @@ export const oauthImplementations = {
     // authorization code, PKCE verifier, client_id, and client_secret.
     const serverResolution = await resolveOwnedServerUrl(
       input.mcp_server_uuid,
-      userId,
+      principal,
     );
     if (!serverResolution.ok) {
       return { success: false as const, ...serverResolution.error };
@@ -386,11 +423,11 @@ export const oauthImplementations = {
   // first call and reject the second with `invalid_grant`.
   refreshToken: async (
     input: z.infer<typeof RefreshOAuthTokenRequestSchema>,
-    userId: string,
+    principal: AccessPrincipal,
   ): Promise<z.infer<typeof RefreshOAuthTokenResponseSchema>> => {
     const serverResolution = await resolveOwnedServerUrl(
       input.mcp_server_uuid,
-      userId,
+      principal,
     );
     if (!serverResolution.ok) {
       return { success: false as const, ...serverResolution.error };

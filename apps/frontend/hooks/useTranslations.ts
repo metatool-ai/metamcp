@@ -18,7 +18,7 @@ export function useTranslations() {
 
   const t = (key: string, params?: Record<string, string | number>) => {
     if (!translations) return key;
-    return getTranslation(translations, key, params);
+    return getTranslation(translations, key, params, locale);
   };
 
   return { t, isLoading, locale };

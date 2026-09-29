@@ -11,18 +11,25 @@ import streamableHttpRouter from "./public-metamcp/streamable-http";
 
 const publicEndpointsRouter = express.Router();
 
-// Enable CORS for all public endpoint routes
+// Enable CORS for all public endpoint routes. Any origin may call them, but
+// without credentials: these routes authenticate with an API key or bearer
+// token sent explicitly, never with the browser's cookies.
 publicEndpointsRouter.use(
   cors({
-    origin: true, // Allow all origins
-    credentials: true,
+    origin: true,
+    credentials: false,
     methods: ["GET", "POST", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
+      "Accept",
       "mcp-session-id",
+      "mcp-protocol-version",
+      "last-event-id",
       "Authorization",
       "X-API-Key",
     ],
+    // Browser MCP clients must read the session id and the OAuth challenge.
+    exposedHeaders: ["mcp-session-id", "WWW-Authenticate"],
   }),
 );
 
@@ -55,10 +62,16 @@ publicEndpointsRouter.get("/health", (req, res) => {
   });
 });
 
-// List all available public endpoints
+// List the endpoints that are reachable without credentials. This route is
+// unauthenticated, so endpoints protected by an API key or OAuth are never
+// disclosed here (they are listed in the web UI to the people who can use them).
 publicEndpointsRouter.get("/", async (req, res) => {
   try {
-    const endpoints = await endpointsRepository.findAllWithNamespaces();
+    const endpoints = (
+      await endpointsRepository.findAllWithNamespaces()
+    ).filter(
+      (endpoint) => !endpoint.enable_api_key_auth && !endpoint.enable_oauth,
+    );
     const publicEndpoints = endpoints.map((endpoint) => ({
       name: endpoint.name,
       description: endpoint.description,

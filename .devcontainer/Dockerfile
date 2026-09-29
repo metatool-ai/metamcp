@@ -10,9 +10,9 @@ RUN apt-get update && apt-get install -y \
     nano \
     postgresql-client \
     ca-certificates \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y nodejs \
-    && npm install -g pnpm@10.12.0 \
+    && npm install -g pnpm@10.29.3 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -66,10 +66,15 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 COPY docker-entrypoint-dev.sh ./
 RUN chmod +x docker-entrypoint-dev.sh
 
+# Development container only: it runs as root on purpose (devcontainer.json
+# "remoteUser": "root", Docker CLI, bind-mounted workspace). The production
+# image (../Dockerfile) runs as an unprivileged user.
 # Use Tini as the init process to handle signals and zombie processes properly
+# nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
 # Default command for devcontainer - keeps container running for VS Code to connect
 # Can be overridden by devcontainer.json (overrideCommand: true) or docker-compose
 # To start services manually, run: ./docker-entrypoint-dev.sh
+# nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["sleep", "infinity"] 

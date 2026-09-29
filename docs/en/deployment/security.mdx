@@ -1,0 +1,74 @@
+---
+title: "Security settings"
+description: "Production checks, reverse proxies, MCP sessions, outbound connections and the OAuth server"
+---
+
+This page lists the settings and behaviours that matter when exposing MetaMCP. See also [secrets encryption](/en/deployment/secrets-encryption) and [access control](/en/concepts/access-control).
+
+## Production checks
+
+With `NODE_ENV=production` (the default of the Docker image):
+
+- MetaMCP **refuses to start** while `BETTER_AUTH_SECRET` has a placeholder value of the example configurations (such as `your-super-secret-key-change-this-in-production` or `change-me`). Generate one with `openssl rand -base64 32`.
+- **Bootstrap users** whose password is a well-known placeholder (`changeme`, `password`...) are skipped: leave `BOOTSTRAP_USER_PASSWORD` empty to create the first account (an administrator) from the sign-up page instead.
+- `ALLOW_INSECURE_DEFAULTS=true` turns these errors into warnings, for a throwaway evaluation instance only.
+
+`BOOTSTRAP_RECREATE_USER=true` re-applies the environment password of bootstrap users when it changed. It never deletes the user (and therefore never their MCP servers, namespaces and endpoints).
+
+## Reverse proxy and client addresses
+
+Browsers and MCP clients reach the backend through the bundled web server, which adds the address it sees to `X-Forwarded-For`. The backend trusts that header only from the proxies listed in `TRUST_PROXY`; the resulting address is used by the [activity log](/en/concepts/activity-log) and the rate limits.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRUST_PROXY` | `loopback,uniquelocal` | Proxies allowed to report the client address: `true`, `false`, a hop count, or addresses, CIDR ranges and `loopback`, `linklocal`, `uniquelocal`, comma-separated |
+
+The default fits the usual setups: the bundled web server, and a reverse proxy or ingress controller on a private network (Docker networks, Kubernetes). Configure the proxy to **append** the client address (`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` with nginx) and to send a fixed `Host`. If clients reach MetaMCP directly from a private network (no reverse proxy), use `TRUST_PROXY=loopback`, otherwise they could choose the address they are logged under.
+
+## MCP sessions
+
+Streamable HTTP sessions outlive the requests that use them, and most MCP clients never close them. MetaMCP closes sessions without any request for a while, and caps the open sessions of each client (user or API key; unauthenticated clients per endpoint), closing the least recently used one when a new session starts.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SESSION_IDLE_TIMEOUT` | `86400000` (24 h) | Milliseconds without any request before a session is closed (`0` = never). A session with a request in progress (e.g. a notification stream) is never idle |
+| `MAX_SESSIONS_PER_CLIENT` | `100` | Open sessions per client (`0` = unlimited) |
+| `SESSION_LIFETIME` | | Absolute lifetime of sessions, in milliseconds (also in **Settings**) |
+
+The [inspector](/en/concepts/inspector) keeps at most 20 sessions per user. The connections a session holds to MCP servers are released sooner, once unused for `MCP_CONNECTION_IDLE_TTL`: see [Memory and sizing](/en/deployment/performance).
+
+## Outbound connections
+
+MetaMCP connects to the URLs configured in MCP servers and upstream OAuth settings. Private networks stay reachable (internal MCP servers are a normal use), but **link-local and cloud metadata addresses** (`169.254.0.0/16` such as `169.254.169.254`, `fe80::/10`, `fd00:ec2::254`, `100.100.100.200`) are refused, so that an editor cannot read the credentials of the machine through MetaMCP. `ALLOW_LINK_LOCAL_EGRESS=true` lifts the restriction.
+
+This is a safeguard, not an egress firewall: restrict outbound traffic at the network level for a strict policy. STDIO servers run commands and are therefore reserved to people with the *STDIO servers* permission.
+
+## Credentials sent to MCP servers
+
+- On endpoints that require authentication, the caller's MetaMCP credentials (`Authorization`, `X-API-Key`) are never passed on through *forwarded headers*: an upstream server could otherwise act as the caller.
+- A stored server's own credentials are only used when it is reached by its identifier, after an access check. Connecting the inspector to a URL never borrows the credentials of another server with the same URL.
+
+## OAuth server
+
+MetaMCP is an OAuth 2.1 authorization server for MCP clients:
+
+- A signed-in user **approves every authorization** on a consent page showing the client name and, prominently, the address the code is sent to. Dynamic client registration is open (as MCP clients require), so any application can register under any name: the consent page is what protects users from one-click token theft.
+- PKCE is mandatory, with `S256` only.
+- Redirect URIs must be HTTPS, or HTTP on the loopback interface (`localhost`, `127.0.0.1`, `[::1]`) for native clients; no fragments nor credentials. Other HTTP URLs are only accepted outside production.
+- Confidential clients authenticate on the token, refresh, introspection and revocation endpoints; a client can only introspect or revoke its own tokens.
+- Revoking a user's sessions (**Administration → Users**) also revokes the tokens MetaMCP issued to their MCP clients.
+
+## Web application
+
+- Pages cannot be framed (`X-Frame-Options: DENY`, `frame-ancestors 'none'`). Set `Strict-Transport-Security` on the proxy that terminates TLS.
+- The inspector proxy (`/mcp-proxy`) only accepts requests carrying the `X-MetaMCP-Inspector` header sent by the web application, and refuses those flagged cross-site by the browser: a malicious page cannot drive it with the user's cookies.
+- "Disable email/password sign-in" (SSO only) is enforced by the API, not only by the login form.
+- The registry search of the **Explore** page goes through the MetaMCP server, which sends the search terms only, never the user's cookies.
+
+## Docker Compose
+
+The provided `docker-compose.yml`:
+
+- publishes Postgres on `127.0.0.1` only (Docker publishes ports past host firewalls);
+- passes only the `POSTGRES_*` variables to the database container, never the whole `.env`;
+- requires `BETTER_AUTH_SECRET` to be set.

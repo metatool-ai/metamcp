@@ -39,22 +39,77 @@
     "SESSION_LIFETIME",
     "MAX_TOTAL_CONNECTIONS",
     "BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS",
-    "BETTER_AUTH_SESSION_UPDATE_AGE_SECONDS"
+    "BETTER_AUTH_SESSION_UPDATE_AGE_SECONDS",
+    "BOOTSTRAP_GROUPS",
+    "ADMIN_EMAILS",
+    "DEFAULT_USER_ROLE",
+    "OIDC_GROUPS_CLAIM",
+    "OIDC_SYNC_GROUPS",
+    "OIDC_REQUIRE_GROUP_MATCH",
+    "INTEGRATION_DATABASE_URL",
+    "SECRETS_PROVIDER",
+    "SECRETS_ENCRYPTION_KEY",
+    "SECRETS_ENCRYPTION_KEY_PREVIOUS",
+    "SECRETS_KEY_ACTIVATION_DELAY_SECONDS",
+    "OPENBAO_ADDR",
+    "OPENBAO_NAMESPACE",
+    "OPENBAO_TOKEN",
+    "OPENBAO_TOKEN_FILE",
+    "OPENBAO_ROLE_ID",
+    "OPENBAO_SECRET_ID",
+    "OPENBAO_SECRET_ID_FILE",
+    "OPENBAO_APPROLE_MOUNT",
+    "OPENBAO_K8S_ROLE",
+    "OPENBAO_K8S_MOUNT",
+    "OPENBAO_K8S_TOKEN_PATH",
+    "OPENBAO_TRANSIT_MOUNT",
+    "OPENBAO_TRANSIT_KEY",
+    "OPENBAO_TIMEOUT_MS",
+    "VAULT_ADDR",
+    "VAULT_TOKEN",
+    "VAULT_TOKEN_FILE",
+    "ACTIVITY_LOG_RETENTION_DAYS",
+    "ACTIVITY_LOG_STDOUT",
+    "TRUST_PROXY",
+    "SESSION_IDLE_TIMEOUT",
+    "MAX_SESSIONS_PER_CLIENT",
+    "BOOTSTRAP_API_KEYS_FILE",
+    "ALLOW_INSECURE_DEFAULTS",
+    "SECRETS_ENCRYPTION_KEY_FILE",
+    "ALLOW_LINK_LOCAL_EGRESS",
+    "MCP_WARM_POOL",
+    "MCP_CONNECTION_IDLE_TTL",
+    "MAX_CONNECTIONS_PER_SERVER"
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**"
+      ]
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": [
+        "^lint"
+      ]
     },
     "lint:fix": {
-      "dependsOn": ["^lint:fix"]
+      "dependsOn": [
+        "^lint:fix"
+      ]
     },
     "check-types": {
-      "dependsOn": ["^check-types"]
+      "dependsOn": [
+        "^check-types"
+      ]
     },
     "dev": {
       "cache": false,

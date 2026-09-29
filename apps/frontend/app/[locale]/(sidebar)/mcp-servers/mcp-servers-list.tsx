@@ -24,12 +24,16 @@ import {
   Search,
   SearchCode,
   Server,
+  Share2,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { AccessBadge } from "@/components/access/access-badges";
+import { OwnerLabel } from "@/components/access/owner-label";
+import { ShareDialog } from "@/components/access/share-dialog";
 import { EditMcpServer } from "@/components/edit-mcp-server";
 import { McpServersListSkeleton } from "@/components/skeletons/mcp-servers-list-skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +61,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { hasAccessLevel, useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 
@@ -67,6 +72,8 @@ interface McpServersListProps {
 export function McpServersList({ onRefresh }: McpServersListProps) {
   const { t } = useTranslations();
   const router = useRouter();
+  const { me, can } = useAccess();
+  const [serverToShare, setServerToShare] = useState<McpServer | null>(null);
   const [sorting, setSorting] = useState<SortingState>([
     {
       id: "created_at",
@@ -221,27 +228,38 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
       },
     },
     {
-      accessorKey: "user_id",
-      size: 120,
+      id: "owner",
+      accessorFn: (server) =>
+        server.owner?.name ?? t("access:owner.organization"),
+      size: 180,
       header: ({ column }) => {
         return (
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            {t("mcp-servers:list.ownership")}
+            {t("access:owner.column")}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );
       },
       cell: ({ row }) => {
         const server = row.original;
-        const isPublic = server.user_id === null;
         return (
-          <div className="px-3 py-2">
-            <Badge variant={isPublic ? "success" : "neutral"}>
-              {isPublic ? t("mcp-servers:public") : t("mcp-servers:private")}
-            </Badge>
+          <div className="flex flex-col items-start gap-1 px-3 py-2">
+            <OwnerLabel owner={server.owner} currentUserId={me?.userId} />
+            {server.access?.reason === "share" && (
+              <AccessBadge access={server.access} />
+            )}
+            {(server.shareCount ?? 0) > 0 &&
+              hasAccessLevel(server.access, "manage") && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Share2 className="size-3" aria-hidden />
+                  {t("access:share.sharedWith", {
+                    count: server.shareCount ?? 0,
+                  })}
+                </span>
+              )}
           </div>
         );
       },
@@ -401,25 +419,38 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
                 <FileText className="mr-2 h-4 w-4" />
                 {t("mcp-servers:list.copyServerJson")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleInspect}>
-                <SearchCode className="mr-2 h-4 w-4" />
-                {t("mcp-servers:list.inspect")}
-              </DropdownMenuItem>
+              {can("inspector.use") && (
+                <DropdownMenuItem onClick={handleInspect}>
+                  <SearchCode className="mr-2 h-4 w-4" />
+                  {t("mcp-servers:list.inspect")}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={handleViewDetails}>
                 <Eye className="mr-2 h-4 w-4" />
                 {t("mcp-servers:list.viewDetails")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleEditClick}>
-                <Edit className="mr-2 h-4 w-4" />
-                {t("mcp-servers:editServer")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-red-600 focus:text-red-600"
-                onClick={handleDeleteClick}
-              >
-                <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                {t("mcp-servers:deleteServer")}
-              </DropdownMenuItem>
+              {hasAccessLevel(server.access, "manage") &&
+                can("resources.share") && (
+                  <DropdownMenuItem onClick={() => setServerToShare(server)}>
+                    <Share2 className="mr-2 h-4 w-4" />
+                    {t("access:share.action")}
+                  </DropdownMenuItem>
+                )}
+              {hasAccessLevel(server.access, "edit") && (
+                <DropdownMenuItem onClick={handleEditClick}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  {t("mcp-servers:editServer")}
+                </DropdownMenuItem>
+              )}
+              {hasAccessLevel(server.access, "manage") && (
+                <DropdownMenuItem
+                  className="text-red-600 focus:text-red-600"
+                  onClick={handleDeleteClick}
+                >
+                  <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                  {t("mcp-servers:deleteServer")}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -490,6 +521,16 @@ export function McpServersList({ onRefresh }: McpServersListProps) {
 
   return (
     <>
+      {serverToShare && (
+        <ShareDialog
+          resourceType="mcp_server"
+          resourceUuid={serverToShare.uuid}
+          resourceName={serverToShare.name}
+          open={Boolean(serverToShare)}
+          onOpenChange={(open) => !open && setServerToShare(null)}
+        />
+      )}
+
       {/* Edit Server Dialog */}
       <EditMcpServer
         server={serverToEdit}

@@ -1,6 +1,8 @@
 import { DatabaseEndpoint } from "@repo/zod-types";
 import express from "express";
 
+import { clientAddress } from "./request-context";
+
 /**
  * Simple in-memory rate limiter for failed authentication attempts
  * In production, use Redis or similar for distributed rate limiting
@@ -16,33 +18,20 @@ export class AuthRateLimiter {
     this.windowMs = windowMs;
   }
 
+  /**
+   * True while `identifier` has used up its failed attempts in the current
+   * window. Read-only: only `recordFailedAttempt` counts.
+   */
   isRateLimited(identifier: string): boolean {
-    const now = Date.now();
     const record = this.attempts.get(identifier);
-
     if (!record) {
-      this.attempts.set(identifier, {
-        count: 1,
-        resetTime: now + this.windowMs,
-      });
       return false;
     }
-
-    if (now > record.resetTime) {
-      // Reset window
-      this.attempts.set(identifier, {
-        count: 1,
-        resetTime: now + this.windowMs,
-      });
+    if (Date.now() > record.resetTime) {
+      this.attempts.delete(identifier);
       return false;
     }
-
-    if (record.count >= this.maxAttempts) {
-      return true;
-    }
-
-    record.count++;
-    return false;
+    return record.count >= this.maxAttempts;
   }
 
   recordFailedAttempt(identifier: string): void {
@@ -95,7 +84,7 @@ export function getAuthRateLimitIdentifier(
   req: express.Request,
   endpoint: DatabaseEndpoint,
 ): string {
-  const ip = req.ip || req.socket?.remoteAddress || "unknown";
+  const ip = clientAddress(req) ?? "unknown";
   const endpointId = endpoint.uuid || endpoint.name || "unknown";
   return `${ip}:${endpointId}`;
 }

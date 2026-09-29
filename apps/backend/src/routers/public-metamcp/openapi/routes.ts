@@ -7,8 +7,10 @@ import {
 } from "@/middleware/api-key-oauth.middleware";
 import logger from "@/utils/logger";
 
+import { mcpServerPool } from "../../../lib/metamcp/mcp-server-pool";
 import { metaMcpServerPool } from "../../../lib/metamcp/metamcp-server-pool";
 import { lookupEndpoint } from "../../../middleware/lookup-endpoint-middleware";
+import { rateLimitMiddleware } from "../../../middleware/rate-limit.middleware";
 import { createMiddlewareEnabledHandlers } from "./handlers";
 import { generateOpenApiSchema } from "./schema-generator";
 import { executeToolWithMiddleware } from "./tool-execution";
@@ -104,9 +106,8 @@ openApiRouter.get(
         params: {},
       };
 
-      const result = await listToolsWithMiddleware(
-        listToolsRequest,
-        handlerContext,
+      const result = await mcpServerPool.trackRequest(sessionId, () =>
+        listToolsWithMiddleware(listToolsRequest, handlerContext),
       );
 
       const openApiSchema = await generateOpenApiSchema(
@@ -129,9 +130,10 @@ openApiRouter.get(
 // Tool execution endpoint for POST requests
 openApiRouter.post(
   "/:endpoint_name/api/:tool_name",
-  express.json(),
   lookupEndpoint,
   authenticateApiKey,
+  rateLimitMiddleware,
+  express.json(),
   async (req, res) => {
     await executeToolWithMiddleware(
       req as ToolExecutionRequest,
@@ -146,6 +148,7 @@ openApiRouter.get(
   "/:endpoint_name/api/:tool_name",
   lookupEndpoint,
   authenticateApiKey,
+  rateLimitMiddleware,
   async (req, res) => {
     await executeToolWithMiddleware(req as ToolExecutionRequest, res, {});
   },

@@ -40,7 +40,9 @@ At minimum, set:
 - `METAMCP_PUBLIC_URL`
 - `METAMCP_HOST`
 - `METAMCP_POSTGRES_PASSWORD`
-- `METAMCP_BETTER_AUTH_SECRET`
+- `METAMCP_BETTER_AUTH_SECRET` (placeholder values are refused at startup)
+- `METAMCP_SECRETS_ENCRYPTION_KEY` (protects stored MCP server credentials;
+  back it up separately from the database)
 - `METAMCP_BOOTSTRAP_USER_EMAIL`
 - `METAMCP_BOOTSTRAP_USER_PASSWORD`
 

@@ -1,0 +1,20 @@
+{
+  "exploreMcpServers": "Catalogue MCP (bêta)",
+  "mcpServers": "Serveurs MCP",
+  "metamcpNamespaces": "Namespaces MetaMCP",
+  "metamcpEndpoints": "Endpoints MetaMCP",
+  "mcpInspector": "Inspecteur MCP",
+  "apiKeys": "Clés API",
+  "auditLogs": "Journaux d'audit",
+  "settings": "Paramètres",
+  "liveLogs": "Journaux en direct",
+  "application": "Application",
+  "logout": "Se déconnecter",
+  "profile": "Profil",
+  "administration": "Administration",
+  "users": "Utilisateurs",
+  "groups": "Groupes",
+  "roles": "Rôles et permissions",
+  "sso": "Authentification unique",
+  "activity": "Journal d'activité"
+}

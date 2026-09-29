@@ -31,21 +31,13 @@ userinfoRouter.get("/oauth/userinfo", async (req, res) => {
       });
     }
 
-    // Look up token data (in production, this should validate signature and lookup in database)
-    const tokenData = await oauthRepository.getAccessToken(token);
+    // Unknown or expired. An expired access token keeps its row, which
+    // still holds the refresh token of the grant.
+    const tokenData = await oauthRepository.getActiveAccessToken(token);
     if (!tokenData) {
       return res.status(401).json({
         error: "invalid_token",
         error_description: "Token not found or expired",
-      });
-    }
-
-    // Check if token has expired
-    if (Date.now() > tokenData.expires_at.getTime()) {
-      await oauthRepository.deleteAccessToken(token);
-      return res.status(401).json({
-        error: "invalid_token",
-        error_description: "Access token has expired",
       });
     }
 

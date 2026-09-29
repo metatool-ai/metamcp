@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { ResourceAccessSchema, ResourceOwnerSchema } from "./access.zod";
 import {
   McpServerErrorStatusEnum,
   McpServerSchema,
@@ -42,6 +43,9 @@ export const NamespaceSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   user_id: z.string().nullable(),
+  access: ResourceAccessSchema.optional(),
+  owner: ResourceOwnerSchema.nullable().optional(),
+  shareCount: z.number().optional(),
 });
 
 // Server within namespace schema - extends McpServerSchema with namespace-specific status

@@ -16,13 +16,16 @@ import {
   MoreHorizontal,
   Package,
   Search,
+  Share2,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
+import { AccessBadge } from "@/components/access/access-badges";
+import { OwnerLabel } from "@/components/access/owner-label";
+import { ShareDialog } from "@/components/access/share-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,11 +50,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { hasAccessLevel, useAccess } from "@/hooks/useAccess";
 import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 
 export function NamespacesList() {
   const { t } = useTranslations();
+  const { me, can } = useAccess();
+  const [namespaceToShare, setNamespaceToShare] = useState<Namespace | null>(
+    null,
+  );
   const [sorting, setSorting] = useState<SortingState>([
     {
       id: "created_at",
@@ -174,16 +182,25 @@ export function NamespacesList() {
       },
     },
     {
-      accessorKey: "user_id",
-      header: t("namespaces.ownership"),
+      id: "owner",
+      header: t("access:owner.column"),
       cell: ({ row }) => {
         const namespace = row.original;
-        const isPublic = namespace.user_id === null;
         return (
-          <div className="py-2">
-            <Badge variant={isPublic ? "success" : "neutral"}>
-              {isPublic ? t("namespaces.public") : t("namespaces.private")}
-            </Badge>
+          <div className="flex flex-col items-start gap-1 py-2">
+            <OwnerLabel owner={namespace.owner} currentUserId={me?.userId} />
+            {namespace.access?.reason === "share" && (
+              <AccessBadge access={namespace.access} />
+            )}
+            {(namespace.shareCount ?? 0) > 0 &&
+              hasAccessLevel(namespace.access, "manage") && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Share2 className="size-3" aria-hidden />
+                  {t("access:share.sharedWith", {
+                    count: namespace.shareCount ?? 0,
+                  })}
+                </span>
+              )}
           </div>
         );
       },
@@ -243,13 +260,24 @@ export function NamespacesList() {
                     {t("namespaces.viewDetails")}
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-red-600 focus:text-red-600"
-                  onClick={handleDeleteClick}
-                >
-                  <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                  {t("namespaces.deleteNamespace")}
-                </DropdownMenuItem>
+                {hasAccessLevel(namespace.access, "manage") &&
+                  can("resources.share") && (
+                    <DropdownMenuItem
+                      onClick={() => setNamespaceToShare(namespace)}
+                    >
+                      <Share2 className="mr-2 h-4 w-4" />
+                      {t("access:share.action")}
+                    </DropdownMenuItem>
+                  )}
+                {hasAccessLevel(namespace.access, "manage") && (
+                  <DropdownMenuItem
+                    className="text-red-600 focus:text-red-600"
+                    onClick={handleDeleteClick}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                    {t("namespaces.deleteNamespace")}
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -337,6 +365,15 @@ export function NamespacesList() {
 
   return (
     <div className="space-y-4">
+      {namespaceToShare && (
+        <ShareDialog
+          resourceType="namespace"
+          resourceUuid={namespaceToShare.uuid}
+          resourceName={namespaceToShare.name}
+          open={Boolean(namespaceToShare)}
+          onOpenChange={(open) => !open && setNamespaceToShare(null)}
+        />
+      )}
       <div className="flex items-center space-x-2">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />

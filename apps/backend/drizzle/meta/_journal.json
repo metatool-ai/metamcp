@@ -134,6 +134,41 @@
       "when": 1781531857640,
       "tag": "0018_oauth_expected_state",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790601841338,
+      "tag": "0019_rbac",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790610589307,
+      "tag": "0020_secrets_at_rest",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790610617364,
+      "tag": "0021_drop_plaintext_api_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790611713256,
+      "tag": "0022_activity_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790623973669,
+      "tag": "0023_api_key_scopes",
+      "breakpoints": true
     }
   ]
 }

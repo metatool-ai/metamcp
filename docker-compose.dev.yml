@@ -41,6 +41,8 @@ services:
       
       # Auth configuration
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-your-super-secret-key-change-this-in-production}
+      # Local stack: the example secrets are accepted (never in production)
+      ALLOW_INSECURE_DEFAULTS: "true"
       
       # Docker networking fix
       TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: ${TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL:-true}
@@ -57,14 +59,16 @@ services:
     image: postgres:16-alpine
     container_name: metamcp-pg-dev
     restart: unless-stopped
-    env_file:
-      - .env
+    # Only the database settings: the whole .env (encryption key, auth
+    # secret, OIDC secret...) must not reach the database server, where any
+    # superuser session could read its environment.
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-metamcp_db}
       POSTGRES_USER: ${POSTGRES_USER:-metamcp_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-m3t4mcp}
     ports:
-      - "${POSTGRES_EXTERNAL_PORT:-9433}:5432"
+      # Local access only (docker publishes ports past host firewalls)
+      - "127.0.0.1:${POSTGRES_EXTERNAL_PORT:-9433}:5432"
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data
     healthcheck:

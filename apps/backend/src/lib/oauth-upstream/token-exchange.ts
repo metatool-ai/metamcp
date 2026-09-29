@@ -12,6 +12,7 @@
 // from discovery against the protected resource).
 
 import logger from "../../utils/logger";
+import { guardedFetch } from "../net/egress-guard";
 
 export type TokenEndpointAuthMethod =
   | "none"
@@ -103,7 +104,8 @@ async function postFormToToken({
     params.set("client_id", clientId);
   }
 
-  const doFetch = fetchImpl ?? fetch;
+  // Token endpoints come from user configuration: no metadata / link-local
+  const doFetch = fetchImpl ?? guardedFetch;
   const response = await doFetch(tokenEndpoint, {
     method: "POST",
     headers,
@@ -236,7 +238,7 @@ export interface OAuthAuthorizationServerMetadata {
 // misconfigured provider's metadata would mask real upstream bugs.
 export async function discoverAuthorizationServerMetadata(
   serverUrl: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = guardedFetch,
 ): Promise<OAuthAuthorizationServerMetadata | null> {
   let wellKnownUrl: URL;
   try {

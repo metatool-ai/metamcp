@@ -47,10 +47,17 @@ wait_for_postgres
 # Run migrations
 run_migrations
 
+# V8 sizes its heaps from the host memory, not from what MetaMCP needs: an
+# idle backend would hold ~350 MB. These caps stay well above the actual use;
+# flags given in NODE_OPTIONS take precedence (the last one wins), and an
+# empty value falls back to Node's own defaults.
+BACKEND_NODE_OPTIONS=${BACKEND_NODE_OPTIONS---max-semi-space-size=4 --max-old-space-size=512}
+FRONTEND_NODE_OPTIONS=${FRONTEND_NODE_OPTIONS---max-semi-space-size=2 --max-old-space-size=256}
+
 # Start backend in the background
 echo "Starting backend server..."
 cd /app/apps/backend
-PORT=12009 node dist/index.js &
+NODE_OPTIONS="$BACKEND_NODE_OPTIONS ${NODE_OPTIONS:-}" PORT=12009 node dist/index.js &
 BACKEND_PID=$!
 
 # Wait a moment for backend to start
@@ -66,7 +73,10 @@ echo "✅ Backend server started successfully (PID: $BACKEND_PID)"
 # Start frontend
 echo "Starting frontend server..."
 cd /app/apps/frontend
-PORT=12008 pnpm start &
+# forwarded-for.cjs adds the client address to X-Forwarded-For (see the file).
+# Next.js is started by node itself: through `pnpm start` a pnpm process
+# (~100 MB) would stay alive for nothing.
+NODE_OPTIONS="--require /app/apps/frontend/forwarded-for.cjs $FRONTEND_NODE_OPTIONS ${NODE_OPTIONS:-}" PORT=12008 node node_modules/next/dist/bin/next start &
 FRONTEND_PID=$!
 
 # Wait a moment for frontend to start
@@ -91,12 +101,19 @@ cleanup() {
 }
 
 # Trap signals for graceful shutdown
-trap cleanup TERM INT
+trap 'cleanup; exit 0' TERM INT
 
 echo "Services started successfully!"
 echo "Backend running on port 12009"
 echo "Frontend running on port 12008"
 
-# Wait for both processes
-wait $BACKEND_PID
-wait $FRONTEND_PID 
+# Stop the container as soon as one of the servers exits (a crash, or a heap
+# cap reached), so that the restart policy brings MetaMCP back instead of
+# leaving the other one running alone
+while kill -0 $BACKEND_PID 2>/dev/null && kill -0 $FRONTEND_PID 2>/dev/null; do
+    sleep 5 &
+    wait $!
+done
+echo "❌ A MetaMCP server exited, stopping the container"
+cleanup
+exit 1 
