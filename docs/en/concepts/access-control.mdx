@@ -196,12 +196,3 @@ The database migration keeps existing deployments working:
 <Note>
 After upgrading, review **Administration → Users** and the shares of your organisation resources: former public resources could be edited by anyone, and are now read-only for non-admins.
 </Note>
-
-When you upgrade from version 3.0.0, administrators lose access to the personal resources of other users:
-
-- a personal namespace of an administrator stops exposing the personal servers of others that are not shared with them;
-- an organisation namespace stops exposing personal servers that are not shared with Everyone;
-- an organisation API key limited to endpoints stops working on the endpoints of personal namespaces;
-- administrators no longer list nor change the API keys of other users.
-
-Ask the owners to share what administrators must keep using. When someone leaves, deleting their account can transfer their resources to the organisation.

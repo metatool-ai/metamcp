@@ -1,9 +1,8 @@
 services:
   app:
     container_name: metamcp
-    # This fork's image (RBAC, encrypted secrets, activity log). Pin a
-    # version (or digest) in production.
-    image: ${METAMCP_IMAGE:-ghcr.io/sixmon/metamcp:latest}
+    # Pin a version (or digest) in production with METAMCP_IMAGE.
+    image: ${METAMCP_IMAGE:-ghcr.io/metatool-ai/metamcp:latest}
     pull_policy: always
     env_file:
       - .env

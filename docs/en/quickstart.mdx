@@ -30,11 +30,13 @@ Before starting, ensure you have:
     ```bash
     cp example.env .env
     ```
+
+    Then set the two secrets MetaMCP needs, each generated with `openssl rand -base64 32`: `BETTER_AUTH_SECRET` (required) and `SECRETS_ENCRYPTION_KEY` (the key that encrypts stored credentials, see [secrets encryption](/en/deployment/secrets-encryption)).
     
     <Note>
       If you modify `APP_URL` in the `.env` file, make sure you only access MetaMCP from that URL due to CORS policy enforcement.
     </Note>
-    <Warning>In production environment, make sure you modify POSTGRES_PASSWORD and BETTER_AUTH_SECRET. Also use HTTPS. A typical way to generate secrets is `openssl rand -hex 32 | base64`</Warning>
+    <Warning>In production, also change POSTGRES_PASSWORD and serve MetaMCP over HTTPS. Upgrading a 2.4 instance? Follow [Upgrading from v2.4](/en/deployment/upgrading).</Warning>
   </Accordion>
 
   <Accordion icon="docker" title="Start with Docker Compose">

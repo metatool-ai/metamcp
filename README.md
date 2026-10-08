@@ -163,8 +163,11 @@ Clone repo, prepare `.env`, and start with docker compose:
 git clone https://github.com/metatool-ai/metamcp.git
 cd metamcp
 cp example.env .env
+# set BETTER_AUTH_SECRET and SECRETS_ENCRYPTION_KEY in .env (openssl rand -base64 32)
 docker compose up -d
 ```
+
+Upgrading a MetaMCP 2.4 instance: see [Upgrading from v2.4](docs/en/deployment/upgrading.mdx).
 
 If you modify APP_URL env vars, make sure you only access from the APP_URL, because MetaMCP enforces CORS policy on the URL, so no other URL is accessible.
 

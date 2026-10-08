@@ -62,6 +62,7 @@
             "pages": [
               "en/deployment/custom-deployment",
               "en/deployment/secrets-encryption",
+              "en/deployment/upgrading",
               "en/deployment/security",
               "en/deployment/performance"
             ]

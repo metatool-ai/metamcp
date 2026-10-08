@@ -1,0 +1,156 @@
+---
+title: "Upgrading from v2.4"
+description: "Upgrade a MetaMCP 2.4 instance (Docker Compose)"
+---
+
+Plan 15 minutes of work, including about one minute of downtime while the migrations run.
+
+- This guide covers a Docker Compose installation of MetaMCP 2.4.22 with the default names: containers `metamcp` and `metamcp-pg`, database `metamcp_db`, user `metamcp_user`. Adapt the commands if your `.env` changes them.
+- Run the commands on the server, in the directory that holds `docker-compose.yml`.
+- The upgrade runs the database migrations 0013 onwards. They cannot be undone: rolling back means restoring the backup of step 1.
+
+What changes for your users:
+
+- Existing accounts become **editors**, and the oldest account becomes an **administrator**.
+- Former public MCP servers and namespaces belong to the organisation: everyone keeps using them, only administrators change them.
+- Existing API keys keep working, but can no longer be displayed.
+- An MCP server starts when one of its tools is first called: a few seconds the first time.
+- MCP clients signing in through OAuth see a consent page for each new authorization.
+- Administrators manage users, settings and the organisation's resources, not the personal resources of others (see [access control](/en/concepts/access-control#administrators-and-personal-resources)).
+
+## 1. Back up
+
+Save the configuration and the database: it is the only way back to 2.4.
+
+```bash
+cp .env .env.2.4.22
+```
+
+```bash
+cp docker-compose.yml docker-compose.yml.2.4.22
+```
+
+```bash
+docker exec metamcp-pg pg_dump -U metamcp_user -d metamcp_db -Fc > metamcp-2.4.22.dump
+```
+
+Check that `metamcp-2.4.22.dump` is not empty, then copy it off the server.
+
+## 2. Prepare the `.env`
+
+This version encrypts the secrets of MCP servers with a key you provide, and refuses example secrets.
+
+**Encryption key.** Generate it:
+
+```bash
+openssl rand -base64 32
+```
+
+Add `SECRETS_ENCRYPTION_KEY=<the value>` to `.env` and store it in your password manager: without it, the stored secrets can no longer be read. See [secrets encryption](/en/deployment/secrets-encryption).
+
+**Authentication secret.** Check `BETTER_AUTH_SECRET`:
+
+```bash
+grep '^BETTER_AUTH_SECRET=' .env
+```
+
+- No line, or an example value such as `your-super-secret-key-change-this-in-production`: generate one with `openssl rand -base64 32`. The 2.4 Compose file fell back to that example value, and this version refuses to start with it. Everyone will have to sign in again.
+- A real secret already set: keep it.
+
+**Also add:**
+
+- `METAMCP_IMAGE=ghcr.io/metatool-ai/metamcp:<version>` to pin the version you install;
+- optionally `ADMIN_EMAILS=admin@example.com`, an administrator that stays one whatever happens;
+- optionally `LOG_LEVEL=info` for the first start, to see the encryption in the logs.
+
+## 3. Update `docker-compose.yml`
+
+Replace the file with the one of the release you install (set `VERSION` to its number), then carry over your own changes.
+
+```bash
+VERSION=X.Y.Z
+```
+
+```bash
+curl -fsSLo docker-compose.yml "https://raw.githubusercontent.com/metatool-ai/metamcp/v$VERSION/docker-compose.yml"
+```
+
+```bash
+diff docker-compose.yml.2.4.22 docker-compose.yml
+```
+
+Carry over your ports, networks and reverse proxy labels from the old file. What this version changes:
+
+| Item | 2.4.22 | This version |
+| --- | --- | --- |
+| Image | `ghcr.io/metatool-ai/metamcp:latest` | same image, version pinned with `METAMCP_IMAGE` |
+| `BETTER_AUTH_SECRET` | example value by default | required |
+| Postgres port | `9433` on every interface | `127.0.0.1:9433` only |
+| Postgres environment | the whole `.env` | the `POSTGRES_*` variables only |
+| Application restart | `no` | `unless-stopped` |
+| Volumes | `postgres_data` | also `uv_cache` and `npm_cache` |
+
+To reach Postgres from another machine, use an SSH tunnel.
+
+## 4. Start
+
+Pull the image and restart: the migrations run when the container starts.
+
+```bash
+docker compose pull
+```
+
+```bash
+docker compose up -d
+```
+
+```bash
+docker compose logs -f app
+```
+
+The logs show, in order:
+
+1. `Migrations completed successfully!`
+2. `Backend server started successfully`
+3. `Frontend server started successfully`
+
+With `LOG_LEVEL=info`, the line `Encrypted N record(s) with the active data key` confirms the encryption of the secrets.
+
+| Symptom | Cause | What to do |
+| --- | --- | --- |
+| `BETTER_AUTH_SECRET still has the value of the example configuration` | example secret | back to step 2 |
+| `pull` refused (`denied`) | private GHCR package | make the package public, or `docker login ghcr.io` with a token that has `read:packages` |
+| `Migration failed! Exiting...` | a migration failed | read the error just above, then roll back |
+
+## 5. Check
+
+- [ ] Sign in with **the oldest account**: it is an administrator. In **Administration → Users**, the other accounts are editors.
+- [ ] **Settings → Encryption at rest** shows no warning.
+- [ ] An MCP client with an existing API key lists the tools and makes a call. The first call to a server takes a few seconds.
+- [ ] **Administration → Activity log** shows the sign-ins.
+
+## 6. After the upgrade
+
+- **Shares**: former public servers and namespaces are shared with *Everyone*; only administrators change them. Adjust them with the **Share** button of each resource.
+- **Roles**: choose viewer or editor in **Administration → Users**. New accounts are viewers by default (`DEFAULT_USER_ROLE`).
+- **API keys**: for MCP clients, create keys limited to the endpoints they use.
+- **Logs**: remove `LOG_LEVEL=info` from `.env`, then run `docker compose up -d` again.
+
+## Rolling back
+
+The migrations cannot be undone: going back to 2.4 restores the backup of step 1.
+
+1. Stop everything: `docker compose down`.
+2. Put the 2.4.22 files back: `cp .env.2.4.22 .env`, then `cp docker-compose.yml.2.4.22 docker-compose.yml`.
+3. Start Postgres alone: `docker compose up -d postgres`.
+4. Recreate an empty database: `docker exec metamcp-pg dropdb -U metamcp_user metamcp_db`, then `docker exec metamcp-pg createdb -U metamcp_user metamcp_db`.
+5. Restore the backup: `docker exec -i metamcp-pg pg_restore -U metamcp_user -d metamcp_db < metamcp-2.4.22.dump`.
+6. Start the application: `docker compose up -d`.
+
+## Kubernetes
+
+With the manifests of `deploy/kubernetes`, the steps are the same: back up the database, add the encryption key, then change the image.
+
+- The key goes in `METAMCP_SECRETS_ENCRYPTION_KEY`, and reaches the `metamcp-secret` Secret.
+- The image goes in `METAMCP_IMAGE`, for example `ghcr.io/metatool-ai/metamcp:X.Y.Z`.
+- The commands are in `deploy/kubernetes/README.md`.

@@ -13,7 +13,7 @@ With `NODE_ENV=production` (the default of the Docker image):
 - **Bootstrap users** whose password is a well-known placeholder (`changeme`, `password`...) are skipped: leave `BOOTSTRAP_USER_PASSWORD` empty to create the first account (an administrator) from the sign-up page instead.
 - `ALLOW_INSECURE_DEFAULTS=true` turns these errors into warnings, for a throwaway evaluation instance only.
 
-`BOOTSTRAP_RECREATE_USER=true` re-applies the environment password of bootstrap users when it changed. It never deletes the user (and therefore never their MCP servers, namespaces and endpoints). MetaMCP detects the change with a salted scrypt fingerprint of the password; fingerprints stored by version 3.0.0 and earlier cannot be compared, so the first start after the upgrade applies the environment password again.
+`BOOTSTRAP_RECREATE_USER=true` re-applies the environment password of bootstrap users when it changed. It never deletes the user (and therefore never their MCP servers, namespaces and endpoints). MetaMCP detects the change with a salted scrypt fingerprint of the password; fingerprints stored by earlier versions cannot be compared, so the first start after the upgrade applies the environment password again.
 
 ## Reverse proxy and client addresses
 

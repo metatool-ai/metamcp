@@ -68,7 +68,7 @@ Two settings help further:
 - **Preinstall the servers** in an image derived from MetaMCP, and use their executables as commands (`mcp-server-memory` rather than `npx -y @modelcontextprotocol/server-memory`): the first start after a restart is direct too, and the versions are pinned:
 
 ```dockerfile
-FROM ghcr.io/sixmon/metamcp:latest
+FROM ghcr.io/metatool-ai/metamcp:latest
 USER root
 # npm packages: their executables land on the PATH (/usr/bin)
 RUN npm install -g @modelcontextprotocol/server-memory@2026.8.31 \

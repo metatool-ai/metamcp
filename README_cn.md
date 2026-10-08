@@ -118,6 +118,7 @@ MCP 服务器配置，告诉 MetaMCP 如何启动 MCP 服务器。
 git clone https://github.com/metatool-ai/metamcp.git
 cd metamcp
 cp example.env .env
+# 在 .env 中设置 BETTER_AUTH_SECRET 和 SECRETS_ENCRYPTION_KEY（openssl rand -base64 32）
 docker compose up -d
 ```
 
