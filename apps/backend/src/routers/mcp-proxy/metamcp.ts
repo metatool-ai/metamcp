@@ -7,6 +7,7 @@ import express from "express";
 
 import logger from "@/utils/logger";
 
+import { namespacesRepository } from "../../db/repositories";
 import { createServer } from "../../lib/metamcp/index";
 import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
@@ -16,6 +17,31 @@ const metamcpRouter = express.Router();
 // Apply better auth middleware to all metamcp routes
 metamcpRouter.use(betterAuthMcpMiddleware);
 
+const getRequestUserId = (req: express.Request): string | undefined =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (req as any).user?.id;
+
+// Only the namespace owner (or anyone, for public namespaces) may reach a
+// namespace through the web-app proxy. Answered with 404 so existence is not
+// disclosed.
+metamcpRouter.param("uuid", async (req, res, next, uuid: string) => {
+  try {
+    const userId = getRequestUserId(req);
+    const namespace = await namespacesRepository.findByUuid(uuid);
+    if (
+      !userId ||
+      !namespace ||
+      (namespace.user_id != null && namespace.user_id !== userId)
+    ) {
+      res.status(404).json({ error: "Namespace not found" });
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 const webAppTransports: Map<string, Transport> = new Map<string, Transport>(); // Web app transports by sessionId
 const metamcpServers: Map<
   string,
@@ -24,6 +50,32 @@ const metamcpServers: Map<
     cleanup: () => Promise<void>;
   }
 > = new Map(); // MetaMCP servers by sessionId
+const sessionOwners: Map<string, { userId: string; namespaceUuid: string }> =
+  new Map(); // Owner and namespace by sessionId
+
+const setSessionOwner = (
+  sessionId: string,
+  req: express.Request,
+  namespaceUuid: string,
+) => {
+  sessionOwners.set(sessionId, {
+    userId: getRequestUserId(req) as string,
+    namespaceUuid,
+  });
+};
+
+// A session may only be used by the user who opened it, on the same namespace.
+const isSessionOwner = (
+  sessionId: string | undefined,
+  req: express.Request,
+): boolean => {
+  const owner = sessionId ? sessionOwners.get(sessionId) : undefined;
+  return (
+    !!owner &&
+    owner.userId === getRequestUserId(req) &&
+    owner.namespaceUuid === req.params.uuid
+  );
+};
 
 // Create a MetaMCP server instance
 const createMetaMcpServer = async (
@@ -42,6 +94,9 @@ const createMetaMcpServer = async (
 // Cleanup function for a specific session
 const cleanupSession = async (sessionId: string) => {
   logger.info(`Cleaning up session ${sessionId}`);
+
+  // Drop ownership first so a failing close below cannot leave it behind.
+  sessionOwners.delete(sessionId);
 
   // Clean up transport
   const transport = webAppTransports.get(sessionId);
@@ -68,8 +123,10 @@ metamcpRouter.get("/:uuid/mcp", async (req, res) => {
   //   `Received GET message for MetaMCP namespace ${namespaceUuid} sessionId ${sessionId}`,
   // );
   try {
-    const transport = webAppTransports.get(
-      sessionId,
+    const transport = (
+      isSessionOwner(sessionId, req)
+        ? webAppTransports.get(sessionId)
+        : undefined
     ) as StreamableHTTPServerTransport;
     if (!transport) {
       res.status(404).end("Session not found");
@@ -119,6 +176,7 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
 
             webAppTransports.set(newSessionId, webAppTransport);
             metamcpServers.set(newSessionId, mcpServerInstance);
+            setSessionOwner(newSessionId, req, namespaceUuid);
 
             logger.info(
               `MetaMCP Client <-> Proxy sessionId: ${newSessionId} for namespace ${namespaceUuid}`,
@@ -154,8 +212,10 @@ metamcpRouter.post("/:uuid/mcp", async (req, res) => {
     //   `Received POST message for MetaMCP namespace ${namespaceUuid} sessionId ${sessionId}`,
     // );
     try {
-      const transport = webAppTransports.get(
-        sessionId,
+      const transport = (
+        isSessionOwner(sessionId, req)
+          ? webAppTransports.get(sessionId)
+          : undefined
       ) as StreamableHTTPServerTransport;
       if (!transport) {
         res.status(404).end("Transport not found for sessionId " + sessionId);
@@ -180,6 +240,10 @@ metamcpRouter.delete("/:uuid/mcp", async (req, res) => {
   );
 
   if (sessionId) {
+    if (!isSessionOwner(sessionId, req)) {
+      res.status(404).end("Session not found");
+      return;
+    }
     try {
       await cleanupSession(sessionId);
       logger.info(`MetaMCP session ${sessionId} cleaned up successfully`);
@@ -220,6 +284,7 @@ metamcpRouter.get("/:uuid/sse", async (req, res) => {
 
     webAppTransports.set(sessionId, webAppTransport);
     metamcpServers.set(sessionId, mcpServerInstance);
+    setSessionOwner(sessionId, req, namespaceUuid);
 
     // Handle cleanup when connection closes
     res.on("close", async () => {
@@ -242,8 +307,10 @@ metamcpRouter.post("/:uuid/message", async (req, res) => {
     //   `Received POST message for MetaMCP namespace ${namespaceUuid} sessionId ${sessionId}`,
     // );
 
-    const transport = webAppTransports.get(
-      sessionId as string,
+    const transport = (
+      isSessionOwner(sessionId as string, req)
+        ? webAppTransports.get(sessionId as string)
+        : undefined
     ) as SSEServerTransport;
     if (!transport) {
       res.status(404).end("Session not found");
