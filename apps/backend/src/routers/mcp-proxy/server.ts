@@ -4,14 +4,17 @@ import {
   SSEClientTransport,
   SseError,
 } from "@modelcontextprotocol/sdk/client/sse.js";
-import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { McpServerErrorStatusEnum, McpServerTypeEnum } from "@repo/zod-types";
+import {
+  DatabaseMcpServer,
+  McpServerErrorStatusEnum,
+  McpServerTypeEnum,
+  ServerParameters,
+} from "@repo/zod-types";
 import express from "express";
-import { parse as shellParseArgs } from "shell-quote";
 import { findActualExecutable } from "spawn-rx";
 
 import logger from "@/utils/logger";
@@ -20,7 +23,10 @@ import { mcpServersRepository } from "../../db/repositories";
 import mcpProxy from "../../lib/mcp-proxy";
 import { transformDockerUrl } from "../../lib/metamcp/client";
 import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
-import { resolveEnvVariables } from "../../lib/metamcp/utils";
+import {
+  convertDbServerToParams,
+  resolveEnvVariables,
+} from "../../lib/metamcp/utils";
 import { ProcessManagedStdioTransport } from "../../lib/stdio-transport/process-managed-transport";
 import { betterAuthMcpMiddleware } from "../../middleware/better-auth-mcp.middleware";
 
@@ -30,10 +36,6 @@ const STREAMABLE_HTTP_HEADERS_PASSTHROUGH = [
   "mcp-session-id",
   "last-event-id",
 ];
-
-const defaultEnvironment = {
-  ...getDefaultEnvironment(),
-};
 
 // Cooldown mechanism for failed STDIO commands
 const STDIO_COOLDOWN_DURATION = 10000; // 10 seconds
@@ -75,78 +77,69 @@ const setStdioCooldown = (
   stdioCommandCooldowns.set(key, Date.now() + STDIO_COOLDOWN_DURATION);
 };
 
-// Function to extract server UUID from STDIO command
-const extractServerUuidFromStdioCommand = async (
-  command: string,
-  args: string[],
-): Promise<string | null> => {
-  try {
-    // For filesys server, the command is typically: npx @modelcontextprotocol/server-filesystem /workspaceFolder
-    // We need to find the server in the database that matches this command pattern
-
-    // First, try to find by command and args pattern
-    const fullCommand = `${command} ${args.join(" ")}`;
-    logger.info(`Looking for server with command: ${fullCommand}`);
-
-    // Look for servers that match this command pattern
-    const servers = await mcpServersRepository.findAll();
-    logger.info(`Found ${servers.length} servers in database`);
-
-    for (const server of servers) {
-      if (server.type === "STDIO" && server.command) {
-        const serverCommand = `${server.command} ${(server.args || []).join(" ")}`;
-        logger.info(
-          `Checking server ${server.name} (${server.uuid}): ${serverCommand}`,
-        );
-        if (serverCommand === fullCommand) {
-          logger.info(
-            `Found exact match for server ${server.name} (${server.uuid})`,
-          );
-          return server.uuid;
-        }
-      }
-    }
-
-    // If no exact match, try to find by command only (for cases where args might vary)
-    for (const server of servers) {
-      if (server.type === "STDIO" && server.command === command) {
-        logger.info(
-          `Found command-only match for server ${server.name} (${server.uuid})`,
-        );
-        return server.uuid;
-      }
-    }
-
-    logger.info(`No server found for command: ${fullCommand}`);
-    return null;
-  } catch (error) {
-    logger.error("Error extracting server UUID from STDIO command:", error);
-    return null;
+// Raised when the requested MCP server does not exist or is not accessible to
+// the authenticated user. Answered with 404 so existence is not disclosed.
+class InspectorTargetNotFoundError extends Error {
+  constructor() {
+    super("MCP server not found");
+    this.name = "InspectorTargetNotFoundError";
   }
+}
+
+interface InspectorTarget {
+  server: DatabaseMcpServer;
+  params: ServerParameters;
+  stdio?: { cmd: string; args: string[]; env: Record<string, string> };
+}
+
+const getRequestUserId = (req: express.Request): string | undefined =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (req as any).user?.id;
+
+// Resolve the MCP server the inspector wants to connect to. Connection
+// parameters (command, args, env, url, headers) always come from the stored
+// server configuration, never from the request, so an authenticated session
+// cannot spawn arbitrary processes or reach arbitrary URLs through this proxy
+// (CVE-2026-79538). Only the owner's servers and public servers are reachable.
+const resolveInspectorTarget = async (
+  req: express.Request,
+): Promise<InspectorTarget> => {
+  const serverUuid = req.query.mcpServerUuid;
+  const userId = getRequestUserId(req);
+  if (typeof serverUuid !== "string" || !serverUuid || !userId) {
+    throw new InspectorTargetNotFoundError();
+  }
+
+  const server = await mcpServersRepository.findByUuid(serverUuid);
+  if (!server || (server.user_id !== null && server.user_id !== userId)) {
+    throw new InspectorTargetNotFoundError();
+  }
+
+  const params = await convertDbServerToParams(server);
+  if (!params) {
+    logger.warn(
+      `Could not build connection parameters for server ${server.uuid}`,
+    );
+    throw new InspectorTargetNotFoundError();
+  }
+
+  if (params.type === McpServerTypeEnum.enum.STDIO) {
+    if (!params.command) {
+      throw new InspectorTargetNotFoundError();
+    }
+    const env = resolveEnvVariables(params.env || {}) as Record<string, string>;
+    const { cmd, args } = findActualExecutable(
+      params.command,
+      params.args || [],
+    );
+    return { server, params, stdio: { cmd, args, env } };
+  }
+
+  return { server, params };
 };
 
-// Function to check if server is in error state
-const checkServerErrorStatus = async (serverUuid: string): Promise<boolean> => {
-  try {
-    const server = await mcpServersRepository.findByUuid(serverUuid);
-    if (!server) {
-      logger.info(`Server ${serverUuid} not found`);
-      return false;
-    }
-
-    const isInError =
-      server.error_status === McpServerErrorStatusEnum.enum.ERROR;
-    if (isInError) {
-      logger.info(`Server ${server.name} (${serverUuid}) is in ERROR state`);
-    }
-    return isInError;
-  } catch (error) {
-    logger.error(
-      `Error checking server error status for ${serverUuid}:`,
-      error,
-    );
-    return false;
-  }
+const sendInspectorTargetNotFound = (res: express.Response) => {
+  res.status(404).json({ error: "MCP server not found" });
 };
 
 // Function to get HTTP headers.
@@ -194,6 +187,16 @@ serverRouter.use(betterAuthMcpMiddleware);
 
 const webAppTransports: Map<string, Transport> = new Map<string, Transport>(); // Web app transports by web app sessionId
 const serverTransports: Map<string, Transport> = new Map<string, Transport>(); // Server Transports by web app sessionId
+const sessionOwners: Map<string, string> = new Map<string, string>(); // User id by web app sessionId
+
+// A proxy session may only be used by the user who opened it.
+const isSessionOwner = (
+  sessionId: string | undefined,
+  req: express.Request,
+): boolean => {
+  const userId = getRequestUserId(req);
+  return !!sessionId && !!userId && sessionOwners.get(sessionId) === userId;
+};
 
 // Session cleanup function
 const cleanupSession = async (sessionId: string) => {
@@ -227,52 +230,43 @@ const cleanupSession = async (sessionId: string) => {
     serverTransports.delete(sessionId);
   }
 
+  sessionOwners.delete(sessionId);
+
   logger.info(`Session ${sessionId} cleanup completed`);
 };
 
-const createTransport = async (req: express.Request): Promise<Transport> => {
-  const query = req.query;
-  logger.info("Query parameters:", JSON.stringify(query));
+const createTransport = async (
+  req: express.Request,
+  target: InspectorTarget,
+): Promise<Transport> => {
+  const { server, params } = target;
 
-  const transportType = query.transportType as string;
+  if (server.error_status === McpServerErrorStatusEnum.enum.ERROR) {
+    logger.info(`Server ${server.name} (${server.uuid}) is in ERROR state`);
+    throw new Error(
+      `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
+    );
+  }
 
-  if (transportType === McpServerTypeEnum.enum.STDIO) {
-    const command = query.command as string;
-    const origArgs = shellParseArgs(query.args as string) as string[];
-    const queryEnv = query.env ? JSON.parse(query.env as string) : {};
-
-    // Resolve environment variable placeholders
-    const resolvedQueryEnv = resolveEnvVariables(queryEnv);
-
-    const env = { ...process.env, ...defaultEnvironment, ...resolvedQueryEnv };
-
-    const { cmd, args } = findActualExecutable(command, origArgs);
+  if (params.type === McpServerTypeEnum.enum.STDIO && target.stdio) {
+    const { cmd, args, env } = target.stdio;
 
     // Check if this command is in cooldown
     if (isStdioInCooldown(cmd, args, env)) {
-      logger.info(`STDIO command in cooldown: ${cmd} ${args.join(" ")}`);
+      logger.info(`STDIO command in cooldown for server ${server.uuid}`);
       const cooldownEnd = stdioCommandCooldowns.get(
         createStdioKey(cmd, args, env),
       );
       if (cooldownEnd) {
         throw new Error(
-          `Command "${cmd} ${args.join(" ")}" is in cooldown. Please wait ${Math.ceil((cooldownEnd - Date.now()) / 1000)} seconds before retrying.`,
+          `Server "${server.name}" is in cooldown. Please wait ${Math.ceil((cooldownEnd - Date.now()) / 1000)} seconds before retrying.`,
         );
       }
     }
 
-    // Check if the server is in error state
-    const serverUuid = await extractServerUuidFromStdioCommand(cmd, args);
-    if (serverUuid) {
-      const isInError = await checkServerErrorStatus(serverUuid);
-      if (isInError) {
-        throw new Error(
-          `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
-        );
-      }
-    }
-
-    logger.info(`STDIO transport: command=${cmd}, args=${args}`);
+    logger.info(
+      `STDIO transport for server ${server.name} (${server.uuid}): command=${cmd}`,
+    );
 
     const transport = new ProcessManagedStdioTransport({
       command: cmd,
@@ -288,38 +282,27 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       // If the transport fails to start, put it in cooldown
       setStdioCooldown(cmd, args, env);
       logger.info(
-        `STDIO command failed, setting cooldown: ${cmd} ${args.join(" ")}`,
+        `STDIO command failed for server ${server.uuid}, setting cooldown`,
       );
       throw error;
     }
-  } else if (transportType === McpServerTypeEnum.enum.SSE) {
-    const url = transformDockerUrl(query.url as string);
-
-    // Check if the server is in error state (for SSE, we need to find server by URL)
-    const servers = await mcpServersRepository.findAll();
-    const matchingServer = servers.find(
-      (server) => server.type === "SSE" && server.url === url,
-    );
-    if (matchingServer) {
-      const isInError = await checkServerErrorStatus(matchingServer.uuid);
-      if (isInError) {
-        throw new Error(
-          `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
-        );
-      }
-    }
+  } else if (params.type === McpServerTypeEnum.enum.SSE && params.url) {
+    const url = transformDockerUrl(params.url);
 
     // Merge custom headers from database with passthrough headers from request
     const headers = {
-      ...(matchingServer?.headers || {}),
-      ...getHttpHeaders(req, transportType),
+      ...(params.headers || {}),
+      ...getHttpHeaders(req, params.type),
     };
 
+    // Log only origin and path: the stored URL may carry credentials in
+    // its query string.
+    const targetUrl = new URL(url);
     logger.info(
-      `SSE transport: url=${url}, headers=${JSON.stringify(headers)}`,
+      `SSE transport for server ${server.name} (${server.uuid}): url=${targetUrl.origin}${targetUrl.pathname}, headers=${Object.keys(headers).join(",")}`,
     );
 
-    const transport = new SSEClientTransport(new URL(url), {
+    const transport = new SSEClientTransport(targetUrl, {
       eventSourceInit: {
         fetch: (url, init) => fetch(url, { ...init, headers }),
       },
@@ -329,27 +312,16 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     });
     await transport.start();
     return transport;
-  } else if (transportType === McpServerTypeEnum.enum.STREAMABLE_HTTP) {
-    const url = transformDockerUrl(query.url as string);
-
-    // Check if the server is in error state (for STREAMABLE_HTTP, we need to find server by URL)
-    const servers = await mcpServersRepository.findAll();
-    const matchingServer = servers.find(
-      (server) => server.type === "STREAMABLE_HTTP" && server.url === url,
-    );
-    if (matchingServer) {
-      const isInError = await checkServerErrorStatus(matchingServer.uuid);
-      if (isInError) {
-        throw new Error(
-          `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
-        );
-      }
-    }
+  } else if (
+    params.type === McpServerTypeEnum.enum.STREAMABLE_HTTP &&
+    params.url
+  ) {
+    const url = transformDockerUrl(params.url);
 
     // Merge custom headers from database with passthrough headers from request
     const headers = {
-      ...(matchingServer?.headers || {}),
-      ...getHttpHeaders(req, transportType),
+      ...(params.headers || {}),
+      ...getHttpHeaders(req, params.type),
     };
 
     const transport = new StreamableHTTPClientTransport(new URL(url), {
@@ -360,7 +332,9 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     await transport.start();
     return transport;
   } else {
-    logger.error(`Invalid transport type: ${transportType}`);
+    logger.error(
+      `Invalid transport type ${params.type} for server ${server.uuid}`,
+    );
     throw new Error("Invalid transport type specified");
   }
 };
@@ -369,8 +343,10 @@ serverRouter.get("/mcp", async (req, res) => {
   const sessionId = req.headers["mcp-session-id"] as string;
   // logger.info(`Received GET message for sessionId ${sessionId}`);
   try {
-    const transport = webAppTransports.get(
-      sessionId,
+    const transport = (
+      isSessionOwner(sessionId, req)
+        ? webAppTransports.get(sessionId)
+        : undefined
     ) as StreamableHTTPServerTransport;
     if (!transport) {
       res.status(404).end("Session not found");
@@ -390,9 +366,15 @@ serverRouter.post("/mcp", async (req, res) => {
   if (!sessionId) {
     try {
       logger.info("New StreamableHttp connection request");
+      let target: InspectorTarget;
       try {
-        serverTransport = await createTransport(req);
+        target = await resolveInspectorTarget(req);
+        serverTransport = await createTransport(req, target);
       } catch (error) {
+        if (error instanceof InspectorTargetNotFoundError) {
+          sendInspectorTargetNotFound(res);
+          return;
+        }
         if (error instanceof SseError && error.code === 401) {
           logger.error(
             "Received 401 Unauthorized from MCP server:",
@@ -414,31 +396,17 @@ serverRouter.post("/mcp", async (req, res) => {
             `StreamableHttp STDIO process crashed with code: ${exitCode}, signal: ${signal}`,
           );
 
-          // Try to extract server UUID from the command/args
-          const query = req.query;
-          const command = query.command as string;
-          const origArgs = shellParseArgs(query.args as string) as string[];
+          const serverUuid = target.server.uuid;
 
-          const serverUuid = await extractServerUuidFromStdioCommand(
-            command,
-            origArgs,
-          );
-
-          if (serverUuid) {
-            // Report crash to server pool
-            mcpServerPool
-              .handleServerCrashWithoutNamespace(serverUuid, exitCode, signal)
-              .catch((error) => {
-                logger.error(
-                  `Error reporting StreamableHttp STDIO crash to server pool for ${serverUuid}:`,
-                  error,
-                );
-              });
-          } else {
-            logger.warn(
-              `Could not determine server UUID for crashed StreamableHttp STDIO process: ${command} ${origArgs.join(" ")}`,
-            );
-          }
+          // Report crash to server pool
+          mcpServerPool
+            .handleServerCrashWithoutNamespace(serverUuid, exitCode, signal)
+            .catch((error) => {
+              logger.error(
+                `Error reporting StreamableHttp STDIO crash to server pool for ${serverUuid}:`,
+                error,
+              );
+            });
         };
       }
 
@@ -449,6 +417,7 @@ serverRouter.post("/mcp", async (req, res) => {
         sessionIdGenerator: () => newSessionId,
         onsessioninitialized: (sessionId) => {
           webAppTransports.set(sessionId, webAppTransport);
+          sessionOwners.set(sessionId, getRequestUserId(req) as string);
           if (serverTransport) {
             serverTransports.set(sessionId, serverTransport);
           }
@@ -489,8 +458,10 @@ serverRouter.post("/mcp", async (req, res) => {
   } else {
     // logger.info(`Received POST message for sessionId ${sessionId}`);
     try {
-      const transport = webAppTransports.get(
-        sessionId,
+      const transport = (
+        isSessionOwner(sessionId, req)
+          ? webAppTransports.get(sessionId)
+          : undefined
       ) as StreamableHTTPServerTransport;
       if (!transport) {
         res.status(404).end("Transport not found for sessionId " + sessionId);
@@ -516,8 +487,10 @@ serverRouter.delete("/mcp", async (req, res) => {
 
   if (sessionId) {
     try {
-      const serverTransport = serverTransports.get(
-        sessionId,
+      const serverTransport = (
+        isSessionOwner(sessionId, req)
+          ? serverTransports.get(sessionId)
+          : undefined
       ) as StreamableHTTPClientTransport;
       if (!serverTransport) {
         res.status(404).end("Transport not found for sessionId " + sessionId);
@@ -550,10 +523,19 @@ serverRouter.get("/stdio", async (req, res) => {
   try {
     logger.info("New STDIO connection request");
     let serverTransport: Transport | undefined;
+    let target: InspectorTarget;
     try {
-      serverTransport = await createTransport(req);
+      target = await resolveInspectorTarget(req);
+      if (!target.stdio) {
+        throw new InspectorTargetNotFoundError();
+      }
+      serverTransport = await createTransport(req, target);
       logger.info("Created server transport");
     } catch (error) {
+      if (error instanceof InspectorTargetNotFoundError) {
+        sendInspectorTargetNotFound(res);
+        return;
+      }
       if (error instanceof SseError && error.code === 401) {
         logger.error(
           "Received 401 Unauthorized from MCP server. Authentication failure.",
@@ -573,6 +555,11 @@ serverRouter.get("/stdio", async (req, res) => {
 
     webAppTransports.set(webAppTransport.sessionId, webAppTransport);
     serverTransports.set(webAppTransport.sessionId, serverTransport);
+    sessionOwners.set(
+      webAppTransport.sessionId,
+      getRequestUserId(req) as string,
+    );
+    const stdioTarget = target.stdio;
 
     // Handle cleanup when connection closes
     const handleConnectionClose = () => {
@@ -601,40 +588,19 @@ serverRouter.get("/stdio", async (req, res) => {
         `STDIO process crashed with code: ${exitCode}, signal: ${signal}`,
       );
 
-      // Try to extract server UUID from the command/args
-      const query = req.query;
-      const command = query.command as string;
-      const origArgs = shellParseArgs(query.args as string) as string[];
-
+      const serverUuid = target.server.uuid;
       logger.info(
-        `STDIO crash handler called for command: ${command} ${origArgs.join(" ")}`,
+        `Reporting crash to server pool for server UUID: ${serverUuid}`,
       );
-
-      // For filesys server, the server UUID might be in the args or we need to derive it
-      // For now, we'll use a fallback approach to find the server UUID
-      const serverUuid = await extractServerUuidFromStdioCommand(
-        command,
-        origArgs,
-      );
-
-      if (serverUuid) {
-        logger.info(
-          `Reporting crash to server pool for server UUID: ${serverUuid}`,
-        );
-        // Report crash to server pool
-        mcpServerPool
-          .handleServerCrashWithoutNamespace(serverUuid, exitCode, signal)
-          .catch((error) => {
-            logger.error(
-              `Error reporting STDIO crash to server pool for ${serverUuid}:`,
-              error,
-            );
-          });
-      } else {
-        logger.warn(
-          `Could not determine server UUID for crashed STDIO process: ${command} ${origArgs.join(" ")}`,
-        );
-      }
+      // Report crash to server pool
+      mcpServerPool
+        .handleServerCrashWithoutNamespace(serverUuid, exitCode, signal)
+        .catch((error) => {
+          logger.error(
+            `Error reporting STDIO crash to server pool for ${serverUuid}:`,
+            error,
+          );
+        });
     };
 
     // Monitor for quick failures and set cooldown
@@ -646,21 +612,11 @@ serverRouter.get("/stdio", async (req, res) => {
       const runTime = Date.now() - commandStartTime;
       if (runTime < QUICK_FAILURE_THRESHOLD) {
         // Process failed quickly, likely a startup error
-        const query = req.query;
-        const command = query.command as string;
-        const origArgs = shellParseArgs(query.args as string) as string[];
-        const queryEnv = query.env ? JSON.parse(query.env as string) : {};
-        const resolvedQueryEnv = resolveEnvVariables(queryEnv);
-        const env = {
-          ...process.env,
-          ...defaultEnvironment,
-          ...resolvedQueryEnv,
-        };
-        const { cmd, args } = findActualExecutable(command, origArgs);
+        const { cmd, args, env } = stdioTarget;
 
         setStdioCooldown(cmd, args, env);
         logger.info(
-          `STDIO process terminated quickly (${runTime}ms), setting cooldown: ${cmd} ${args.join(" ")}`,
+          `STDIO process terminated quickly (${runTime}ms), setting cooldown for server ${target.server.uuid}`,
         );
       }
     };
@@ -692,21 +648,11 @@ serverRouter.get("/stdio", async (req, res) => {
             errorContent.includes("ENOENT") ||
             errorContent.includes("no such file or directory")
           ) {
-            const query = req.query;
-            const command = query.command as string;
-            const origArgs = shellParseArgs(query.args as string) as string[];
-            const queryEnv = query.env ? JSON.parse(query.env as string) : {};
-            const resolvedQueryEnv = resolveEnvVariables(queryEnv);
-            const env = {
-              ...process.env,
-              ...defaultEnvironment,
-              ...resolvedQueryEnv,
-            };
-            const { cmd, args } = findActualExecutable(command, origArgs);
+            const { cmd, args, env } = stdioTarget;
 
             setStdioCooldown(cmd, args, env);
             logger.info(
-              `STDIO process reported startup error, setting cooldown: ${cmd} ${args.join(" ")}`,
+              `STDIO process reported startup error, setting cooldown for server ${target.server.uuid}`,
             );
           }
 
@@ -748,8 +694,16 @@ serverRouter.get("/sse", async (req, res) => {
     );
     let serverTransport: Transport | undefined;
     try {
-      serverTransport = await createTransport(req);
+      const target = await resolveInspectorTarget(req);
+      if (target.params.type !== McpServerTypeEnum.enum.SSE) {
+        throw new InspectorTargetNotFoundError();
+      }
+      serverTransport = await createTransport(req, target);
     } catch (error) {
+      if (error instanceof InspectorTargetNotFoundError) {
+        sendInspectorTargetNotFound(res);
+        return;
+      }
       if (error instanceof SseError && error.code === 401) {
         logger.error(
           "Received 401 Unauthorized from MCP server. Authentication failure.",
@@ -776,6 +730,10 @@ serverRouter.get("/sse", async (req, res) => {
         res,
       );
       webAppTransports.set(webAppTransport.sessionId, webAppTransport);
+      sessionOwners.set(
+        webAppTransport.sessionId,
+        getRequestUserId(req) as string,
+      );
       logger.info("Created client transport");
       if (serverTransport) {
         serverTransports.set(webAppTransport.sessionId, serverTransport);
@@ -822,8 +780,10 @@ serverRouter.post("/message", async (req, res) => {
     const sessionId = req.query.sessionId;
     // logger.info(`Received POST message for sessionId ${sessionId}`);
 
-    const transport = webAppTransports.get(
-      sessionId as string,
+    const transport = (
+      isSessionOwner(sessionId as string, req)
+        ? webAppTransports.get(sessionId as string)
+        : undefined
     ) as SSEServerTransport;
     if (!transport) {
       res.status(404).end("Session not found");
