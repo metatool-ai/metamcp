@@ -90,12 +90,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
+COPY --from=builder --chown=nextjs:nodejs /app/pnpm-lock.yaml ./
 
-# Install production dependencies only
-RUN pnpm install --prod
+# Install production dependencies only. CI=true lets pnpm replace the
+# node_modules copied from the builder without asking for a TTY, and the
+# lockfile keeps the result pinned.
+RUN CI=true pnpm install --prod --frozen-lockfile
 
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+# Install drizzle-kit locally in backend for migrations. It is a dev
+# dependency in the repo, so save it as a production one here; otherwise
+# pnpm re-adds dev dependencies and conflicts with the --prod install above.
+RUN cd apps/backend && CI=true pnpm add --save-prod --prod drizzle-kit@0.31.1
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
