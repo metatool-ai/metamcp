@@ -19,6 +19,7 @@ import {
 } from "../db/repositories";
 import { OAuthSessionsSerializer } from "../db/serializers";
 import { tryRefreshUpstreamTokens } from "../lib/oauth-upstream/refresh-on-401";
+import { serverErrorTracker } from "../lib/metamcp/server-error-tracker";
 import {
   discoverAuthorizationServerMetadata,
   exchangeAuthorizationCode,
@@ -339,6 +340,11 @@ export const oauthImplementations = {
       mcp_server_uuid: input.mcp_server_uuid,
       tokens,
     });
+
+    // A successful OAuth exchange makes a previous authentication-related
+    // connection failure recoverable. Clear the stale error flag so the
+    // Inspector and background pool can retry with the newly persisted tokens.
+    await serverErrorTracker.resetServerErrorState(input.mcp_server_uuid);
 
     // One-shot clear: with the upstream exchange successful, the
     // `expected_state` nonce has served its purpose. Clearing it now

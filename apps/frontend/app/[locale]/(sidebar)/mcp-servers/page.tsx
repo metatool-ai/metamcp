@@ -7,6 +7,7 @@ import {
   McpServerTypeEnum,
 } from "@repo/zod-types";
 import { ChevronDown, Plus, Server } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -46,6 +47,7 @@ import { McpServersList } from "./mcp-servers-list";
 
 export default function McpServersPage() {
   const { t } = useTranslations();
+  const router = useRouter();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const form = useForm<CreateServerFormData>({
@@ -82,6 +84,15 @@ export default function McpServersPage() {
         setIsDialogOpen(false);
         form.reset();
         toast.success(t("mcp-servers:serverCreated"));
+
+        // HTTP servers may require OAuth. Open their detail page immediately;
+        // its connection hook handles the 401 challenge and authorization redirect.
+        if (
+          data.data.type === McpServerTypeEnum.enum.SSE ||
+          data.data.type === McpServerTypeEnum.enum.STREAMABLE_HTTP
+        ) {
+          router.push(`/mcp-servers/${data.data.uuid}`);
+        }
       } else {
         // Handle backend error response
         toast.error(data.message || t("mcp-servers:createError"));

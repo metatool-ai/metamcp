@@ -337,15 +337,9 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     const matchingServer = servers.find(
       (server) => server.type === "STREAMABLE_HTTP" && server.url === url,
     );
-    if (matchingServer) {
-      const isInError = await checkServerErrorStatus(matchingServer.uuid);
-      if (isInError) {
-        throw new Error(
-          `Server is in error state and cannot be connected to. Please check the server configuration and try again later.`,
-        );
-      }
-    }
-
+    // Do not short-circuit Streamable HTTP requests on a stale ERROR flag:
+    // the upstream may be returning an OAuth challenge, and the Inspector
+    // must receive its 401 so the browser can initiate authorization.
     // Merge custom headers from database with passthrough headers from request
     const headers = {
       ...(matchingServer?.headers || {}),

@@ -154,11 +154,7 @@ export default function McpServerDetailPage({
     onStdErrNotification: (notification) => {
       console.error("MCP StdErr:", notification);
     },
-    enabled: Boolean(
-      server &&
-      !isLoading &&
-      server.error_status !== McpServerErrorStatusEnum.enum.ERROR,
-    ),
+    enabled: Boolean(server && !isLoading),
   });
 
   // Auto-connect when hook is enabled and not already connected.
@@ -173,7 +169,6 @@ export default function McpServerDetailPage({
       connection &&
       server &&
       !isLoading &&
-      server.error_status !== McpServerErrorStatusEnum.enum.ERROR &&
       connection.connectionStatus === "disconnected"
     ) {
       didAutoConnect.current = true;
@@ -195,10 +190,6 @@ export default function McpServerDetailPage({
 
   // Handle manual connect/disconnect
   const handleConnectionToggle = () => {
-    if (server?.error_status === McpServerErrorStatusEnum.enum.ERROR) {
-      // Don't allow connection if server is in error state
-      return;
-    }
     if (connection.connectionStatus === "connected") {
       connection.disconnect();
     } else {

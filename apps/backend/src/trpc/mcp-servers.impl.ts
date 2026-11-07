@@ -428,19 +428,19 @@ export const mcpServersImplementations = {
         }
       }
 
-      // Reset error status for stdio servers when they are updated
-      if (updatedServer.type === McpServerTypeEnum.enum.STDIO) {
-        try {
-          await serverErrorTracker.resetServerErrorState(updatedServer.uuid);
-          logger.info(
-            `Reset error status for updated stdio server: ${updatedServer.name} (${updatedServer.uuid})`,
-          );
-        } catch (error) {
-          logger.error(
-            `Error resetting error status for updated stdio server ${updatedServer.name} (${updatedServer.uuid}):`,
-            error,
-          );
-        }
+      // Any successful configuration update gives the server a fresh
+      // connection attempt. In particular, converting a crashed STDIO server
+      // to HTTP must clear the old process-crash flag or OAuth is blocked.
+      try {
+        await serverErrorTracker.resetServerErrorState(updatedServer.uuid);
+        logger.info(
+          `Reset error status for updated server: ${updatedServer.name} (${updatedServer.uuid})`,
+        );
+      } catch (error) {
+        logger.error(
+          `Error resetting error status for updated server ${updatedServer.name} (${updatedServer.uuid}):`,
+          error,
+        );
       }
 
       // Invalidate idle session for the updated server to refresh with new parameters (async)
