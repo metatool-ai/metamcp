@@ -87,11 +87,13 @@ export default function McpServersPage() {
 
         // HTTP servers may require OAuth. Open their detail page immediately;
         // its connection hook handles the 401 challenge and authorization redirect.
+        const createdServer = data.data;
         if (
-          data.data.type === McpServerTypeEnum.enum.SSE ||
-          data.data.type === McpServerTypeEnum.enum.STREAMABLE_HTTP
+          createdServer &&
+          (createdServer.type === McpServerTypeEnum.enum.SSE ||
+            createdServer.type === McpServerTypeEnum.enum.STREAMABLE_HTTP)
         ) {
-          router.push(`/mcp-servers/${data.data.uuid}`);
+          router.push(`/mcp-servers/${createdServer.uuid}`);
         }
       } else {
         // Handle backend error response
