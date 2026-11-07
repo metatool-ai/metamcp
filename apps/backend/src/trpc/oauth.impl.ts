@@ -344,7 +344,16 @@ export const oauthImplementations = {
     // A successful OAuth exchange makes a previous authentication-related
     // connection failure recoverable. Clear the stale error flag so the
     // Inspector and background pool can retry with the newly persisted tokens.
-    await serverErrorTracker.resetServerErrorState(input.mcp_server_uuid);
+    try {
+      await serverErrorTracker.resetServerErrorState(input.mcp_server_uuid);
+    } catch (resetError) {
+      // Token persistence is already successful; a stale UI error flag must
+      // not turn a completed OAuth exchange into a failed callback.
+      logger.warn(
+        "[oauth] failed to reset server error state after successful exchange",
+        resetError,
+      );
+    }
 
     // One-shot clear: with the upstream exchange successful, the
     // `expected_state` nonce has served its purpose. Clearing it now
