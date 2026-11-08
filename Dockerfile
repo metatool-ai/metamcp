@@ -90,12 +90,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
+COPY --from=builder --chown=nextjs:nodejs /app/pnpm-lock.yaml ./
 
 # Install production dependencies only
-RUN pnpm install --prod
+RUN CI=true pnpm install --prod --frozen-lockfile
 
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+# Fail the image build if the migration CLI is missing
+RUN cd apps/backend && pnpm exec drizzle-kit --version
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
