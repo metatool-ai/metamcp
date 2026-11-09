@@ -24,11 +24,9 @@ import {
   Progress,
   PromptListChangedNotificationSchema,
   PromptReference,
-  Request,
   ResourceListChangedNotificationSchema,
   ResourceReference,
   ResourceUpdatedNotificationSchema,
-  Result,
   ServerCapabilities,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -290,18 +288,57 @@ export function useConnection({
   });
 
   const is401Error = useMemoizedFn((error: unknown): boolean => {
-    return Boolean(
-      (error instanceof SseError && error.code === 401) ||
-      (error instanceof Error && error.message.includes("401")) ||
-      (error instanceof Error && error.message.includes("Unauthorized")) ||
-      // Handle fetch errors that might come from streamable HTTP
-      (error instanceof TypeError && error.message.includes("401")) ||
-      // Handle response errors
-      (error &&
-        typeof error === "object" &&
-        "status" in error &&
-        (error as { status: number }).status === 401),
-    );
+    const containsHttp401 = (
+      value: unknown,
+      depth = 0,
+      seen = new Set<unknown>(),
+    ): boolean => {
+      if (
+        depth > 6 ||
+        value === null ||
+        typeof value !== "object" ||
+        seen.has(value)
+      ) {
+        return false;
+      }
+      seen.add(value);
+
+      const record = value as Record<string, unknown>;
+      if (
+        record.httpStatus === 401 ||
+        record.status === 401 ||
+        record.statusCode === 401
+      ) {
+        return true;
+      }
+
+      return ["data", "error", "cause", "shape", "meta"].some((key) =>
+        containsHttp401(record[key], depth + 1, seen),
+      );
+    };
+
+    if (containsHttp401(error)) {
+      return true;
+    }
+
+    if (error instanceof SseError && error.code === 401) {
+      return true;
+    }
+
+    if (error instanceof Error) {
+      if (
+        error.message.includes("401") ||
+        error.message.toLowerCase().includes("unauthorized")
+      ) {
+        return true;
+      }
+
+      // The upstream SDK's StreamableHTTPError uses .code for HTTP status.
+      const candidate = error as Error & { code?: unknown };
+      return candidate.name === "StreamableHTTPError" && candidate.code === 401;
+    }
+
+    return false;
   });
 
   const isProxyAuthError = useMemoizedFn((error: unknown): boolean => {

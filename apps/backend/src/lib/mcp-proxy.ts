@@ -3,6 +3,53 @@ import { isJSONRPCRequest } from "@modelcontextprotocol/sdk/types.js";
 
 import logger from "@/utils/logger";
 
+/**
+ * The MCP SDK's StreamableHTTPError stores the upstream HTTP status in
+ * `.code`. Preserve it as JSON-safe data across the JSON-RPC proxy boundary
+ * so browser clients can initiate OAuth after an upstream 401.
+ */
+export function getHttpStatusCode(error: unknown): number | undefined {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+
+  for (
+    let depth = 0;
+    depth < 6 && current && typeof current === "object";
+    depth++
+  ) {
+    if (seen.has(current)) return undefined;
+    seen.add(current);
+
+    const candidate = current as {
+      code?: unknown;
+      status?: unknown;
+      statusCode?: unknown;
+      cause?: unknown;
+    };
+
+    for (const value of [
+      candidate.status,
+      candidate.statusCode,
+      candidate.code,
+    ]) {
+      if (typeof value === "number" && value >= 400 && value <= 599) {
+        return value;
+      }
+    }
+
+    current = candidate.cause;
+  }
+
+  return undefined;
+}
+
+export function getProxyErrorData(
+  error: unknown,
+): { httpStatus: number } | undefined {
+  const httpStatus = getHttpStatusCode(error);
+  return httpStatus === undefined ? undefined : { httpStatus };
+}
+
 function onClientError(error: Error) {
   // Don't log "Not connected" errors as they're expected when connections close
   if (error?.message && error.message.includes("Not connected")) {
@@ -110,8 +157,10 @@ export default function mcpProxy({
           id: message.id,
           error: {
             code: -32001,
-            message: error.message,
-            data: error,
+            message: error instanceof Error ? error.message : String(error),
+            // Do not serialize the Error object: its fields are not reliably
+            // enumerable. MCP clients receive this in McpError.data.
+            data: getProxyErrorData(error),
           },
         };
 
