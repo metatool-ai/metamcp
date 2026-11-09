@@ -140,6 +140,8 @@ streamableHttpRouter.get(
         res.status(404).end("Session not found");
         return;
       } else {
+        sessionManager.touchSession(sessionId);
+        metaMcpServerPool.touchSession(sessionId);
         logger.info(`Found session ${sessionId}, handling request`);
         normalizeStreamableHttpAcceptHeader(req);
         await transport.handleRequest(req, res);
@@ -289,6 +291,8 @@ streamableHttpRouter.post(
             timestamp: new Date().toISOString(),
           });
         } else {
+          sessionManager.touchSession(sessionId);
+          metaMcpServerPool.touchSession(sessionId);
           logger.info(`Found session ${sessionId}, handling request`);
           normalizeStreamableHttpAcceptHeader(req);
           res.type("application/json");

@@ -154,6 +154,8 @@ sseRouter.post(
         res.status(404).end("Session not found");
         return;
       }
+      sessionManager.touchSession(sessionId as string);
+      metaMcpServerPool.touchSession(sessionId as string);
       await transport.handlePostMessage(req, res);
     } catch (error) {
       logger.error("Error in public endpoint /message route:", error);

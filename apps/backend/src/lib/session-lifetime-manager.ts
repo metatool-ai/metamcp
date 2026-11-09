@@ -6,6 +6,7 @@ export interface SessionLifetimeManager<T> {
   addSession(sessionId: string, session: T): void;
   removeSession(sessionId: string): void;
   getSession(sessionId: string): T | undefined;
+  touchSession(sessionId: string): void;
   getAllSessions(): Map<string, T>;
   getSessionAge(sessionId: string): number | undefined;
   isSessionExpired(sessionId: string): Promise<boolean>;
@@ -43,6 +44,13 @@ export class SessionLifetimeManagerImpl<
 
   getSession(sessionId: string): T | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  /** Refresh the idle-expiry clock when a client uses an existing session. */
+  touchSession(sessionId: string): void {
+    if (this.sessions.has(sessionId)) {
+      this.sessionTimestamps.set(sessionId, Date.now());
+    }
   }
 
   getAllSessions(): Map<string, T> {

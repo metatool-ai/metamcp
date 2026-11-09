@@ -91,6 +91,7 @@ export class MetaMcpServerPool {
   ): Promise<MetaMcpServerInstance | undefined> {
     // Check if we already have an active server for this sessionId
     if (this.activeServers[sessionId]) {
+      this.touchSession(sessionId);
       return this.activeServers[sessionId];
     }
 
@@ -176,6 +177,13 @@ export class MetaMcpServerPool {
     }
 
     return newServer;
+  }
+
+  /** Refresh the idle-expiry clock when an existing client session is used. */
+  touchSession(sessionId: string): void {
+    if (this.activeServers[sessionId]) {
+      this.sessionTimestamps[sessionId] = Date.now();
+    }
   }
 
   private applyAdminToolsContext(
