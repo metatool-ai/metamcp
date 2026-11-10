@@ -187,6 +187,13 @@ const getHttpHeaders = (
   return headers;
 };
 
+const isUnauthorizedMcpError = (error: unknown): boolean => {
+  if (error instanceof SseError && error.code === 401) return true;
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; status?: unknown; statusCode?: unknown };
+  return candidate.code === 401 || candidate.status === 401 || candidate.statusCode === 401;
+};
+
 const serverRouter = express.Router();
 
 // Apply better auth middleware to all MCP proxy routes
@@ -387,12 +394,14 @@ serverRouter.post("/mcp", async (req, res) => {
       try {
         serverTransport = await createTransport(req);
       } catch (error) {
-        if (error instanceof SseError && error.code === 401) {
-          logger.error(
-            "Received 401 Unauthorized from MCP server:",
-            error.message,
-          );
-          res.status(401).json(error);
+        if (isUnauthorizedMcpError(error)) {
+          logger.info("Received 401 Unauthorized from Streamable HTTP MCP server", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          res.status(401).json({
+            error: "upstream_unauthorized",
+            error_description: error instanceof Error ? error.message : String(error),
+          });
           return;
         }
 
