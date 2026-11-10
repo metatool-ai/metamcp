@@ -24,6 +24,12 @@ vi.mock("../utils/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+vi.mock("../lib/metamcp/mcp-server-pool", () => ({
+  mcpServerPool: {
+    invalidateServerConnection: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 const ORIGINAL_APP_URL = process.env.APP_URL;
 
 const jsonResponse = (status: number, body: unknown): Response =>
@@ -141,6 +147,71 @@ describe("oauthImplementations.exchangeToken", () => {
         token_type: "Bearer",
         expires_in: 3600,
         refresh_token: "RT_abc",
+      }),
+    });
+    const { mcpServerPool } = await import("../lib/metamcp/mcp-server-pool");
+    expect(mcpServerPool.invalidateServerConnection).toHaveBeenCalledWith(
+      "oauth-token-update",
+      SERVER_UUID,
+    );
+    fetchSpy.mockRestore();
+  });
+
+  it("preserves the refresh token and requested scopes when the token response omits them", async () => {
+    const {
+      oauthImplementations,
+      findByMcpServerUuid,
+      upsert,
+      findServerByUuid,
+    } = await loadModule();
+
+    findServerByUuid.mockResolvedValue(
+      ownedServer(SERVER_UUID, "https://api.example.com/mcp"),
+    );
+    findByMcpServerUuid.mockResolvedValue({
+      mcp_server_uuid: SERVER_UUID,
+      code_verifier: "PKCE_VERIFIER",
+      client_information: {
+        client_id: "client-1",
+        scope:
+          "openid https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify",
+        token_endpoint: "https://api.example.com/token",
+      },
+      tokens: {
+        access_token: "AT_old",
+        token_type: "Bearer",
+        refresh_token: "RT_existing",
+        scope: "openid https://www.googleapis.com/auth/drive",
+      },
+    });
+    upsert.mockResolvedValue({});
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (url) => {
+        const urlStr = typeof url === "string" ? url : (url as URL).toString();
+        if (urlStr.includes("/.well-known/")) {
+          return new Response("not found", { status: 404 });
+        }
+        return jsonResponse(200, {
+          access_token: "AT_new",
+          token_type: "Bearer",
+        });
+      });
+
+    const result = await oauthImplementations.exchangeToken(
+      { mcp_server_uuid: SERVER_UUID, code: "CODE_FROM_REDIRECT" },
+      USER_ID,
+    );
+
+    expect(result.success).toBe(true);
+    expect(upsert).toHaveBeenCalledWith({
+      mcp_server_uuid: SERVER_UUID,
+      tokens: expect.objectContaining({
+        access_token: "AT_new",
+        refresh_token: "RT_existing",
+        scope:
+          "openid https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify",
       }),
     });
     fetchSpy.mockRestore();
@@ -803,6 +874,31 @@ describe("exchangeToken state CSRF validation", () => {
   // the CSRF check at `exchangeToken` (which then falls through the
   // back-compat NULL branch). Pins the forward-through behaviour so a
   // future refactor of the spread cannot regress it.
+  it("invalidates pooled connections when OAuth tokens are upserted", async () => {
+    const { oauthImplementations, upsert } = await loadModule();
+    upsert.mockResolvedValue({
+      uuid: "sess",
+      mcp_server_uuid: SERVER_UUID,
+      client_information: null,
+      tokens: { access_token: "new-token", token_type: "Bearer" },
+      code_verifier: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    const result = await oauthImplementations.upsert({
+      mcp_server_uuid: SERVER_UUID,
+      tokens: { access_token: "new-token", token_type: "Bearer" },
+    });
+
+    expect(result.success).toBe(true);
+    const { mcpServerPool } = await import("../lib/metamcp/mcp-server-pool");
+    expect(mcpServerPool.invalidateServerConnection).toHaveBeenCalledWith(
+      "oauth-token-update",
+      SERVER_UUID,
+    );
+  });
+
   it("frontend.oauth.upsert forwards expected_state to the repository", async () => {
     const { oauthImplementations, upsert } = await loadModule();
     upsert.mockResolvedValue({

@@ -18,6 +18,7 @@ import {
   oauthSessionsRepository,
 } from "../db/repositories";
 import { OAuthSessionsSerializer } from "../db/serializers";
+import { mcpServerPool } from "../lib/metamcp/mcp-server-pool";
 import { tryRefreshUpstreamTokens } from "../lib/oauth-upstream/refresh-on-401";
 import { serverErrorTracker } from "../lib/metamcp/server-error-tracker";
 import {
@@ -120,6 +121,24 @@ async function resolveOwnedServerUrl(
   return { ok: true, url: server.url };
 }
 
+async function invalidateServerAfterTokenUpdate(mcpServerUuid: string) {
+  // Existing pooled MCP sessions retain the access token they connected with.
+  // Drop every active/idle connection so the next request uses the new grant.
+  try {
+    await mcpServerPool.invalidateServerConnection(
+      "oauth-token-update",
+      mcpServerUuid,
+    );
+  } catch (error) {
+    logger.warn(
+      `[oauth] tokens saved but pooled sessions could not be invalidated ` +
+        `for server=${mcpServerUuid}: ${
+          error instanceof Error ? error.message : "unknown"
+        }`,
+    );
+  }
+}
+
 export const oauthImplementations = {
   get: async (
     input: z.infer<typeof GetOAuthSessionRequestSchema>,
@@ -175,6 +194,10 @@ export const oauthImplementations = {
           success: false as const,
           error: "Failed to upsert OAuth session",
         };
+      }
+
+      if (input.tokens) {
+        await invalidateServerAfterTokenUpdate(input.mcp_server_uuid);
       }
 
       return {
@@ -336,10 +359,31 @@ export const oauthImplementations = {
       throw error;
     }
 
+    // OAuth providers may omit `refresh_token` when reauthorizing an
+    // existing grant. Preserve the prior refresh token so scope upgrades do
+    // not silently turn a long-lived connection into a one-hour session.
+    if (!tokens.refresh_token && session.tokens?.refresh_token) {
+      tokens.refresh_token = session.tokens.refresh_token;
+    }
+
+    // Per RFC 6749, a token response may omit `scope` when it matches the
+    // requested scope. The client information was updated before redirect;
+    // use it as the authoritative fallback, then retain the previous scope.
+    if (!tokens.scope) {
+      const requestedScope = session.client_information?.scope;
+      if (typeof requestedScope === "string" && requestedScope.length > 0) {
+        tokens.scope = requestedScope;
+      } else if (session.tokens?.scope) {
+        tokens.scope = session.tokens.scope;
+      }
+    }
+
     await oauthSessionsRepository.upsert({
       mcp_server_uuid: input.mcp_server_uuid,
       tokens,
     });
+
+    await invalidateServerAfterTokenUpdate(input.mcp_server_uuid);
 
     // A successful OAuth exchange makes a previous authentication-related
     // connection failure recoverable. Clear the stale error flag so the

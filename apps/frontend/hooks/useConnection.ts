@@ -382,6 +382,30 @@ export function useConnection({
         }
       }
 
+      // Discover upstream OAuth scopes before opening the MCP connection.
+      // A valid existing token can initialize the session while lacking the
+      // permissions required by newly enabled tools. Do not run this for the
+      // aggregate MetaMCP endpoint, STDIO servers, or manually supplied tokens.
+      if (
+        !isMetaMCP &&
+        !bearerToken &&
+        url &&
+        (transportType === McpServerTypeEnum.enum.SSE ||
+          transportType === McpServerTypeEnum.enum.STREAMABLE_HTTP)
+      ) {
+        try {
+          const redirected = await authProvider.ensureRequiredScopes();
+          if (redirected) return;
+        } catch (error) {
+          console.error(
+            "Unable to complete upstream OAuth scope check:",
+            error,
+          );
+          setConnectionStatus("error");
+          return;
+        }
+      }
+
       const client = new Client(
         {
           name: "metamcp-proxy",

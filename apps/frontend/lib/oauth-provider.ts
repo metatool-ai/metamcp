@@ -1,4 +1,8 @@
-import { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import {
+  auth,
+  discoverOAuthServerInfo,
+  OAuthClientProvider,
+} from "@modelcontextprotocol/sdk/client/auth.js";
 import {
   OAuthClientInformation,
   OAuthClientInformationSchema,
@@ -27,10 +31,74 @@ function base64UrlEncode(bytes: Uint8Array): string {
     .replace(/=+$/, "");
 }
 
+// Google scopes can imply narrower permissions. Keep this aligned with
+// Workspace MCP's auth/scopes.py so a broad grant (for example drive or
+// gmail.modify) does not trigger a needless consent cycle for its subsets.
+const GOOGLE_SCOPE_HIERARCHY: Record<string, string[]> = {
+  "https://www.googleapis.com/auth/gmail.modify": [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.compose",
+    "https://www.googleapis.com/auth/gmail.labels",
+  ],
+  "https://www.googleapis.com/auth/drive": [
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive.file",
+  ],
+  "https://www.googleapis.com/auth/calendar": [
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
+  ],
+  "https://www.googleapis.com/auth/documents": [
+    "https://www.googleapis.com/auth/documents.readonly",
+  ],
+  "https://www.googleapis.com/auth/spreadsheets": [
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+  ],
+  "https://www.googleapis.com/auth/presentations": [
+    "https://www.googleapis.com/auth/presentations.readonly",
+  ],
+  "https://www.googleapis.com/auth/tasks": [
+    "https://www.googleapis.com/auth/tasks.readonly",
+  ],
+  "https://www.googleapis.com/auth/contacts": [
+    "https://www.googleapis.com/auth/contacts.readonly",
+  ],
+  "https://www.googleapis.com/auth/chat.messages": [
+    "https://www.googleapis.com/auth/chat.messages.readonly",
+  ],
+  "https://www.googleapis.com/auth/chat.spaces": [
+    "https://www.googleapis.com/auth/chat.spaces.readonly",
+  ],
+  "https://www.googleapis.com/auth/forms.body": [
+    "https://www.googleapis.com/auth/forms.body.readonly",
+  ],
+  "https://www.googleapis.com/auth/script.projects": [
+    "https://www.googleapis.com/auth/script.projects.readonly",
+  ],
+  "https://www.googleapis.com/auth/script.deployments": [
+    "https://www.googleapis.com/auth/script.deployments.readonly",
+  ],
+};
+
+function expandGoogleScopes(scopes: string[]): Set<string> {
+  const expanded = new Set(scopes);
+  for (const [broadScope, narrowerScopes] of Object.entries(
+    GOOGLE_SCOPE_HIERARCHY,
+  )) {
+    if (expanded.has(broadScope)) {
+      narrowerScopes.forEach((scope) => expanded.add(scope));
+    }
+  }
+  return expanded;
+}
+
 // OAuth client provider that works with a specific MCP server
 class DbOAuthClientProvider implements OAuthClientProvider {
   private mcpServerUuid: string;
   protected serverUrl: string;
+  private forceAuthorization = false;
+  private pendingScope?: string;
 
   constructor(mcpServerUuid: string, serverUrl: string) {
     this.mcpServerUuid = mcpServerUuid;
@@ -118,19 +186,26 @@ class DbOAuthClientProvider implements OAuthClientProvider {
 
   async saveClientInformation(clientInformation: OAuthClientInformation) {
     this.ensureServerUrlStored();
+    const clientInformationToSave = this.pendingScope
+      ? ({
+          ...clientInformation,
+          scope: this.pendingScope,
+        } as OAuthClientInformation)
+      : clientInformation;
+
     // Save to session storage during OAuth flow
     const key = getServerSpecificKey(
       SESSION_KEYS.CLIENT_INFORMATION,
       this.serverUrl,
     );
-    sessionStorage.setItem(key, JSON.stringify(clientInformation));
+    sessionStorage.setItem(key, JSON.stringify(clientInformationToSave));
 
     // If server exists, also save to database
     if (await this.serverExists()) {
       try {
         await vanillaTrpcClient.frontend.oauth.upsert.mutate({
           mcp_server_uuid: this.mcpServerUuid,
-          client_information: clientInformation,
+          client_information: clientInformationToSave,
         });
       } catch (error) {
         console.error("Error saving client information to database:", error);
@@ -139,6 +214,10 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   }
 
   async tokens() {
+    // During a scope upgrade, hide the old token from the SDK so it starts a
+    // fresh authorization-code flow instead of silently refreshing old scopes.
+    if (this.forceAuthorization) return undefined;
+
     try {
       // Check if server exists in the database
       const exists = await this.serverExists();
@@ -165,6 +244,80 @@ class DbOAuthClientProvider implements OAuthClientProvider {
       console.error("Error retrieving tokens:", error);
       return undefined;
     }
+  }
+
+  /**
+   * Compare the token's granted scopes with the upstream's current scope
+   * catalogue before connecting. Workspace MCP publishes scopes_supported
+   * in its path-scoped RFC 9728 protected-resource metadata and in its local
+   * authorization-server metadata. Prefer resource metadata; only use the
+   * latter fallback when the authorization endpoint is hosted by the MCP
+   * server itself, since external AS scope catalogues are not necessarily
+   * required scopes.
+   *
+   * Returns true when the browser was redirected into a new OAuth flow.
+   */
+  async ensureRequiredScopes(): Promise<boolean> {
+    let requiredScopes: string[];
+
+    try {
+      const discovery = await discoverOAuthServerInfo(this.serverUrl);
+      const authorizationMetadata = discovery.authorizationServerMetadata;
+      const authorizationEndpoint =
+        authorizationMetadata?.authorization_endpoint;
+      const localAuthorizationProxy =
+        !!authorizationEndpoint &&
+        new URL(authorizationEndpoint).origin ===
+          new URL(this.serverUrl).origin;
+      const advertisedScopes =
+        discovery.resourceMetadata?.scopes_supported ??
+        (localAuthorizationProxy
+          ? authorizationMetadata?.scopes_supported
+          : undefined) ??
+        [];
+
+      requiredScopes = [...new Set(advertisedScopes)];
+    } catch (error) {
+      // Servers without OAuth discovery retain the existing connection path.
+      console.warn("Unable to discover upstream OAuth scopes:", error);
+      return false;
+    }
+
+    if (requiredScopes.length === 0) return false;
+
+    const storedTokens = await this.tokens();
+    const grantedScopes = expandGoogleScopes(
+      (storedTokens?.scope ?? "").split(" ").filter(Boolean),
+    );
+    const missingScopes = requiredScopes.filter(
+      (scope) => !grantedScopes.has(scope),
+    );
+
+    if (missingScopes.length === 0) return false;
+
+    console.info(
+      `Upstream OAuth scope upgrade required for ${this.mcpServerUuid}: ` +
+        `${missingScopes.length} of ${requiredScopes.length} supported scopes are missing`,
+    );
+
+    // Persist the requested scope set before redirecting. Some providers omit
+    // `scope` from a token response when it equals the requested scope; the
+    // backend uses this value as the standards-compliant fallback on exchange.
+    this.pendingScope = requiredScopes.join(" ");
+    const clientInformation = await this.clientInformation();
+    if (clientInformation) {
+      await this.saveClientInformation(clientInformation);
+    }
+
+    this.forceAuthorization = true;
+    const result = await auth(this, {
+      serverUrl: this.serverUrl,
+      // The SDK does not use authorization-server scopes_supported as its
+      // default requested scope when protected-resource metadata is absent.
+      scope: requiredScopes.join(" "),
+    });
+
+    return result === "REDIRECT";
   }
 
   async saveTokens(tokens: OAuthTokens) {
@@ -283,6 +436,8 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   }
 
   clear() {
+    this.forceAuthorization = false;
+    this.pendingScope = undefined;
     sessionStorage.removeItem(
       getServerSpecificKey(SESSION_KEYS.CLIENT_INFORMATION, this.serverUrl),
     );
