@@ -98,6 +98,7 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   private mcpServerUuid: string;
   protected serverUrl: string;
   private forceAuthorization = false;
+  private forceClientRegistration = false;
   private pendingScope?: string;
 
   constructor(mcpServerUuid: string, serverUrl: string) {
@@ -116,6 +117,9 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   private ensureServerUrlStored() {
     if (typeof window === "undefined") return;
     sessionStorage.setItem(SESSION_KEYS.SERVER_URL, this.serverUrl);
+    // Scope-upgrade authorization can be the first auth flow for a server.
+    // The callback needs both values to route the code exchange to this server.
+    sessionStorage.setItem(SESSION_KEYS.MCP_SERVER_UUID, this.mcpServerUuid);
   }
 
   get redirectUrl() {
@@ -149,6 +153,12 @@ class DbOAuthClientProvider implements OAuthClientProvider {
   // During OAuth flow, we use sessionStorage for temporary data
   // After successful authentication, we'll save to the database
   async clientInformation() {
+    // An upstream MCP authorization server binds allowed scopes to the DCR
+    // client record. A scope upgrade must register a new client with the
+    // expanded scope set; changing only our cached client metadata is not
+    // enough and the upstream will reject /authorize with invalid_scope.
+    if (this.forceClientRegistration) return undefined;
+
     try {
       // Check if server exists in the database
       const exists = await this.serverExists();
@@ -200,15 +210,42 @@ class DbOAuthClientProvider implements OAuthClientProvider {
     );
     sessionStorage.setItem(key, JSON.stringify(clientInformationToSave));
 
-    // If server exists, also save to database
+    // If server exists, also save to database. A new DCR client ID is issued
+    // when scope upgrades require a broader registration. Refresh tokens are
+    // bound to the old client, so never carry one across a client-ID change.
     if (await this.serverExists()) {
       try {
+        const existing = await vanillaTrpcClient.frontend.oauth.get.query({
+          mcp_server_uuid: this.mcpServerUuid,
+        });
+        const previousClientId =
+          existing.success && existing.data?.client_information?.client_id;
+        const clientIdChanged =
+          typeof previousClientId === "string" &&
+          previousClientId !== clientInformationToSave.client_id;
+        const previousTokens =
+          existing.success && existing.data?.tokens
+            ? existing.data.tokens
+            : undefined;
+        const tokensWithoutOldRefreshToken = (() => {
+          if (!clientIdChanged || !previousTokens?.refresh_token) {
+            return undefined;
+          }
+          const tokens = { ...previousTokens };
+          delete tokens.refresh_token;
+          return tokens;
+        })();
+
         await vanillaTrpcClient.frontend.oauth.upsert.mutate({
           mcp_server_uuid: this.mcpServerUuid,
           client_information: clientInformationToSave,
+          ...(tokensWithoutOldRefreshToken && {
+            tokens: tokensWithoutOldRefreshToken,
+          }),
         });
       } catch (error) {
         console.error("Error saving client information to database:", error);
+        throw error;
       }
     }
   }
@@ -304,20 +341,26 @@ class DbOAuthClientProvider implements OAuthClientProvider {
     // `scope` from a token response when it equals the requested scope; the
     // backend uses this value as the standards-compliant fallback on exchange.
     this.pendingScope = requiredScopes.join(" ");
-    const clientInformation = await this.clientInformation();
-    if (clientInformation) {
-      await this.saveClientInformation(clientInformation);
-    }
-
+    // Register a fresh upstream OAuth client for the expanded scope set.
+    // Keep the previous client record and token until registration succeeds;
+    // saveClientInformation atomically replaces the cached record afterward.
+    this.forceClientRegistration = true;
     this.forceAuthorization = true;
-    const result = await auth(this, {
-      serverUrl: this.serverUrl,
-      // The SDK does not use authorization-server scopes_supported as its
-      // default requested scope when protected-resource metadata is absent.
-      scope: requiredScopes.join(" "),
-    });
+    this.ensureServerUrlStored();
 
-    return result === "REDIRECT";
+    try {
+      const result = await auth(this, {
+        serverUrl: this.serverUrl,
+        // The SDK passes this scope to both DCR and /authorize.
+        scope: requiredScopes.join(" "),
+      });
+      return result === "REDIRECT";
+    } catch (error) {
+      this.forceClientRegistration = false;
+      this.forceAuthorization = false;
+      this.pendingScope = undefined;
+      throw error;
+    }
   }
 
   async saveTokens(tokens: OAuthTokens) {
@@ -437,6 +480,7 @@ class DbOAuthClientProvider implements OAuthClientProvider {
 
   clear() {
     this.forceAuthorization = false;
+    this.forceClientRegistration = false;
     this.pendingScope = undefined;
     sessionStorage.removeItem(
       getServerSpecificKey(SESSION_KEYS.CLIENT_INFORMATION, this.serverUrl),
