@@ -62,7 +62,7 @@ FROM base AS runner
 WORKDIR /app
 
 # OCI image labels
-LABEL org.opencontainers.image.source="https://github.com/metatool-ai/metamcp"
+LABEL org.opencontainers.image.source="https://github.com/DYung26/metamcp"
 LABEL org.opencontainers.image.description="MetaMCP - aggregates MCP servers into a unified MetaMCP"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.title="MetaMCP"
