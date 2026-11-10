@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import {
@@ -25,6 +27,12 @@ import {
 
 import logger from "@/utils/logger";
 
+import { db } from "../../db";
+import {
+  mcpServersTable,
+  namespaceToolMappingsTable,
+  toolsTable,
+} from "../../db/schema";
 import { namespacesRepository } from "../../db/repositories/namespaces.repo";
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { getAdminToolsContext } from "../admin-mcp/admin-session-context";
@@ -54,61 +62,98 @@ import { resolveToolIdentity } from "./metamcp-middleware/tool-identity";
 import {
   createToolOverridesCallToolMiddleware,
   createToolOverridesListToolsMiddleware,
-  mapOverrideNameToOriginal,
 } from "./metamcp-middleware/tool-overrides.functional";
 import { isRecoverableBackendError } from "./session-error";
 import { parseToolName } from "./tool-name-parser";
 import { toolsSyncCache } from "./tools-sync-cache";
 import { sanitizeName } from "./utils";
 
+// Reuse tool definitions for a short period per physical upstream connection.
+// WeakMap avoids retaining clients after their pooled connection is disposed.
+const upstreamToolsCache = new WeakMap<
+  ConnectedClient,
+  { expiresAt: number; tools?: Tool[]; pending?: Promise<Tool[]> }
+>();
+const upstreamToolsCacheTtlMs = Math.max(
+  1_000,
+  Number.parseInt(process.env.MCP_UPSTREAM_TOOLS_CACHE_TTL_MS || "15000", 10) || 15000,
+);
+
+async function getCachedUpstreamTools(
+  client: ConnectedClient,
+  fetchTools: () => Promise<Tool[]>,
+): Promise<Tool[]> {
+  const cached = upstreamToolsCache.get(client);
+  if (cached && cached.expiresAt > Date.now()) {
+    if (cached.tools) return cached.tools;
+    if (cached.pending) return cached.pending;
+  }
+
+  const pending = fetchTools();
+  const entry = { expiresAt: Date.now() + upstreamToolsCacheTtlMs, pending };
+  upstreamToolsCache.set(client, entry);
+  try {
+    const tools = await pending;
+    upstreamToolsCache.set(client, {
+      tools,
+      expiresAt: Date.now() + upstreamToolsCacheTtlMs,
+    });
+    return tools;
+  } catch (error) {
+    if (upstreamToolsCache.get(client) === entry) upstreamToolsCache.delete(client);
+    throw error;
+  }
+}
+
 /**
- * Filter out tools that are overrides of existing tools to prevent duplicates in database
- * Uses the existing tool overrides cache for optimal performance
+ * Filter out override aliases before synchronizing canonical tools to the database.
  */
 async function filterOutOverrideTools(
   tools: Tool[],
   namespaceUuid: string,
   serverName: string,
 ): Promise<Tool[]> {
-  if (!tools || tools.length === 0) {
+  if (!tools || tools.length === 0) return tools;
+
+  try {
+    // Check all override names for this server in one query. The former
+    // implementation issued one reverse-lookup query for every tool on a
+    // cold cache, which was especially expensive during initial provisioning.
+    const mappings = await db
+      .select({
+        originalName: toolsTable.name,
+        overrideName: namespaceToolMappingsTable.override_name,
+      })
+      .from(namespaceToolMappingsTable)
+      .innerJoin(
+        toolsTable,
+        eq(toolsTable.uuid, namespaceToolMappingsTable.tool_uuid),
+      )
+      .innerJoin(
+        mcpServersTable,
+        eq(mcpServersTable.uuid, namespaceToolMappingsTable.mcp_server_uuid),
+      )
+      .where(
+        and(
+          eq(namespaceToolMappingsTable.namespace_uuid, namespaceUuid),
+          eq(mcpServersTable.name, sanitizeName(serverName)),
+        ),
+      );
+
+    const overrideNames = new Set(
+      mappings
+        .filter(
+          (mapping) =>
+            !!mapping.overrideName && mapping.overrideName !== mapping.originalName,
+        )
+        .map((mapping) => mapping.overrideName as string),
+    );
+    return tools.filter((tool) => !overrideNames.has(tool.name));
+  } catch (error) {
+    logger.error("Error checking tool overrides for server " + serverName + ":", error);
+    // Preserve the existing fail-safe behavior: keep tools if lookup fails.
     return tools;
   }
-
-  const filteredTools: Tool[] = [];
-
-  await Promise.allSettled(
-    tools.map(async (tool) => {
-      try {
-        // Check if this tool name is actually an override name for an existing tool
-        // by using the existing mapOverrideNameToOriginal function
-        const fullToolName = `${sanitizeName(serverName)}__${tool.name}`;
-        const originalName = await mapOverrideNameToOriginal(
-          fullToolName,
-          namespaceUuid,
-          true, // use cache
-        );
-
-        // If the original name is different from the current name,
-        // this tool is an override and should be filtered out
-        if (originalName !== fullToolName) {
-          // This is an override, skip it (don't save to database)
-          return;
-        }
-
-        // This is not an override, include it
-        filteredTools.push(tool);
-      } catch (error) {
-        logger.error(
-          `Error checking if tool ${tool.name} is an override:`,
-          error,
-        );
-        // On error, include the tool (fail-safe behavior)
-        filteredTools.push(tool);
-      }
-    }),
-  );
-
-  return filteredTools;
 }
 
 export const createServer = async (
@@ -345,7 +390,8 @@ export const createServer = async (
             operation: "tools/list",
             serverName,
             session,
-            attempt: fetchAllToolPages,
+            attempt: (active) =>
+              getCachedUpstreamTools(active, () => fetchAllToolPages(active)),
             onFreshSession: (fresh) => {
               activeSession = fresh;
             },
@@ -659,10 +705,7 @@ export const createServer = async (
 
   // Compose middleware with handlers - this is the Express-like functional approach
   const listToolsWithMiddleware = compose(
-    createToolOverridesListToolsMiddleware({
-      cacheEnabled: true,
-      persistentCacheOnListTools: true,
-    }),
+    createToolOverridesListToolsMiddleware({ cacheEnabled: true }),
     createFilterListToolsMiddleware({ cacheEnabled: true }),
     // Add more middleware here as needed
     // createLoggingMiddleware(),
@@ -681,16 +724,108 @@ export const createServer = async (
     // createAuthorizationMiddleware(),
   )(originalCallToolHandler);
 
-  // Set up the handlers with middleware
-  server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-    const result = await listToolsWithMiddleware(request, handlerContext);
-    const adminContext = getAdminToolsContext(handlerContext.sessionId);
+  // Cache the processed namespace snapshot and expose it through MCP cursor
+  // pagination. Large tool registries no longer require one enormous payload.
+  const toolListSnapshots = new Map<
+    string,
+    { result: ListToolsResult; expiresAt: number }
+  >();
+  let latestToolListSnapshotId: string | undefined;
+  let pendingToolListSnapshot: Promise<string> | undefined;
+  const snapshotTtlMs = Math.max(
+    5_000,
+    Number.parseInt(process.env.MCP_TOOLS_LIST_SNAPSHOT_TTL_MS || "60000", 10) || 60000,
+  );
+  const configuredPageSize = Number.parseInt(process.env.MCP_TOOLS_LIST_PAGE_SIZE || "100", 10);
+  const toolListPageSize = Number.isFinite(configuredPageSize) && configuredPageSize > 0
+    ? Math.min(configuredPageSize, 500)
+    : 100;
 
+  const createToolListSnapshot = async (request: Parameters<typeof listToolsWithMiddleware>[0]): Promise<string> => {
+    const result = await listToolsWithMiddleware(
+      { ...request, params: { ...request.params, cursor: undefined } },
+      handlerContext,
+    );
+    const adminContext = getAdminToolsContext(handlerContext.sessionId);
     if (adminContext?.enabled && adminContext.userId) {
       result.tools.push(...getAdminToolsForMcp());
     }
 
-    return result;
+    const snapshotId = randomUUID();
+    toolListSnapshots.set(snapshotId, {
+      result,
+      expiresAt: Date.now() + snapshotTtlMs,
+    });
+    latestToolListSnapshotId = snapshotId;
+
+    for (const [id, snapshot] of toolListSnapshots) {
+      if (snapshot.expiresAt <= Date.now() || toolListSnapshots.size > 4) {
+        toolListSnapshots.delete(id);
+      }
+    }
+    return snapshotId;
+  };
+
+  server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+    let snapshotId: string | undefined;
+    let offset = 0;
+    const cursor = request.params?.cursor;
+
+    if (cursor) {
+      try {
+        const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+          snapshotId?: string;
+          offset?: number;
+        };
+        if (
+          typeof decoded.snapshotId === "string" &&
+          Number.isSafeInteger(decoded.offset) &&
+          (decoded.offset ?? -1) >= 0
+        ) {
+          snapshotId = decoded.snapshotId;
+          offset = decoded.offset ?? 0;
+        }
+      } catch {
+        // Invalid cursors start a fresh snapshot.
+      }
+    }
+
+    let snapshot = snapshotId ? toolListSnapshots.get(snapshotId) : undefined;
+    if (!snapshot || snapshot.expiresAt <= Date.now()) {
+      if (cursor) offset = 0;
+      const latest = latestToolListSnapshotId
+        ? toolListSnapshots.get(latestToolListSnapshotId)
+        : undefined;
+      if (!cursor && latest && latest.expiresAt > Date.now()) {
+        snapshotId = latestToolListSnapshotId;
+        snapshot = latest;
+      } else {
+        if (!pendingToolListSnapshot) {
+          pendingToolListSnapshot = createToolListSnapshot(request).finally(() => {
+            pendingToolListSnapshot = undefined;
+          });
+        }
+        snapshotId = await pendingToolListSnapshot;
+        snapshot = toolListSnapshots.get(snapshotId);
+      }
+    }
+
+    if (!snapshot || !snapshotId) {
+      throw new Error("Unable to create MCP tools/list snapshot");
+    }
+
+    const tools = snapshot.result.tools;
+    const page = tools.slice(offset, offset + toolListPageSize);
+    const nextOffset = offset + page.length;
+    const nextCursor = nextOffset < tools.length
+      ? Buffer.from(JSON.stringify({ snapshotId, offset: nextOffset })).toString("base64url")
+      : undefined;
+
+    return {
+      ...snapshot.result,
+      tools: page,
+      ...(nextCursor ? { nextCursor } : { nextCursor: undefined }),
+    };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {

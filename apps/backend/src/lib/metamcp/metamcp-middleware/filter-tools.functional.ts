@@ -168,52 +168,28 @@ async function getServerUuidByName(serverName: string): Promise<string | null> {
 async function filterActiveTools(
   tools: Tool[],
   namespaceUuid: string,
-  useCache: boolean = true,
+  _useCache: boolean = true,
 ): Promise<Tool[]> {
-  if (!tools || tools.length === 0) {
+  if (!tools || tools.length === 0) return tools;
+  try {
+    const inactiveMappings = await db
+      .select({ toolName: toolsTable.name, serverName: mcpServersTable.name })
+      .from(namespaceToolMappingsTable)
+      .innerJoin(toolsTable, eq(toolsTable.uuid, namespaceToolMappingsTable.tool_uuid))
+      .innerJoin(mcpServersTable, eq(mcpServersTable.uuid, namespaceToolMappingsTable.mcp_server_uuid))
+      .where(and(
+        eq(namespaceToolMappingsTable.namespace_uuid, namespaceUuid),
+        eq(namespaceToolMappingsTable.status, "INACTIVE"),
+      ));
+    if (inactiveMappings.length === 0) return tools;
+    const inactiveNames = new Set(
+      inactiveMappings.map(({ serverName, toolName }) => serverName + "__" + toolName),
+    );
+    return tools.filter((tool) => !inactiveNames.has(tool.name));
+  } catch (error) {
+    logger.error("Error fetching inactive tool mappings for namespace " + namespaceUuid + ":", error);
     return tools;
   }
-
-  const activeTools: Tool[] = [];
-
-  await Promise.allSettled(
-    tools.map(async (tool) => {
-      try {
-        const parsed = parseToolName(tool.name);
-        if (!parsed) {
-          // If tool name doesn't follow expected format, include it
-          activeTools.push(tool);
-          return;
-        }
-
-        const serverUuid = await getServerUuidByName(parsed.serverName);
-        if (!serverUuid) {
-          // If server not found, include the tool (fallback behavior)
-          activeTools.push(tool);
-          return;
-        }
-
-        const status = await getToolStatus(
-          namespaceUuid,
-          parsed.originalToolName,
-          serverUuid,
-          useCache,
-        );
-
-        // If no mapping exists or tool is active, include it
-        if (status === null || status === "ACTIVE") {
-          activeTools.push(tool);
-        }
-        // If status is "INACTIVE", tool is filtered out
-      } catch (error) {
-        logger.error(`Error checking tool status for ${tool.name}:`, error);
-        // On error, include the tool (fail-safe behavior)
-        activeTools.push(tool);
-      }
-    }),
-  );
-
-  return activeTools;
 }
 
 /**
