@@ -227,14 +227,14 @@ class DbOAuthClientProvider implements OAuthClientProvider {
           existing.success && existing.data?.tokens
             ? existing.data.tokens
             : undefined;
-        const tokensWithoutOldRefreshToken =
-          clientIdChanged && previousTokens?.refresh_token
-            ? Object.fromEntries(
-                Object.entries(previousTokens).filter(
-                  ([key]) => key !== "refresh_token",
-                ),
-              )
-            : undefined;
+        const tokensWithoutOldRefreshToken = (() => {
+          if (!clientIdChanged || !previousTokens?.refresh_token) {
+            return undefined;
+          }
+          const tokens = { ...previousTokens };
+          delete tokens.refresh_token;
+          return tokens;
+        })();
 
         await vanillaTrpcClient.frontend.oauth.upsert.mutate({
           mcp_server_uuid: this.mcpServerUuid,
