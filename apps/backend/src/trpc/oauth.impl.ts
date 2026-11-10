@@ -19,8 +19,8 @@ import {
 } from "../db/repositories";
 import { OAuthSessionsSerializer } from "../db/serializers";
 import { mcpServerPool } from "../lib/metamcp/mcp-server-pool";
-import { tryRefreshUpstreamTokens } from "../lib/oauth-upstream/refresh-on-401";
 import { serverErrorTracker } from "../lib/metamcp/server-error-tracker";
+import { tryRefreshUpstreamTokens } from "../lib/oauth-upstream/refresh-on-401";
 import {
   discoverAuthorizationServerMetadata,
   exchangeAuthorizationCode,
