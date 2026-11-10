@@ -87,7 +87,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/backend/drizzle.config.ts ./
 
 # Copy built packages
 COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-lock.yaml ./
