@@ -400,6 +400,31 @@ describe("isUpstreamUnauthorizedError", () => {
     );
   });
 
+  it("recognises the SDK StreamableHTTPError numeric 401 code when the message omits it", () => {
+    const error = Object.assign(new Error("Error POSTing to endpoint: "), {
+      code: 401,
+    });
+    expect(isUpstreamUnauthorizedError(error)).toBe(true);
+  });
+
+  it("recognises a string 401 code on a wrapped SDK error object", () => {
+    expect(
+      isUpstreamUnauthorizedError({
+        name: "StreamableHTTPError",
+        code: "401",
+        message: "Error POSTing to endpoint: ",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not classify an unqualified numeric 403 code as an expired token", () => {
+    expect(
+      isUpstreamUnauthorizedError(
+        Object.assign(new Error("Forbidden"), { code: 403 }),
+      ),
+    ).toBe(false);
+  });
+
   it("recognises errors whose message mentions 401 or unauthorized", () => {
     expect(
       isUpstreamUnauthorizedError(new Error("HTTP 401: token expired")),

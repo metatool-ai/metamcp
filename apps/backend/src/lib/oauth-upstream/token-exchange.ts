@@ -340,6 +340,17 @@ const INVALID_TOKEN_OAUTH_ERROR_CODES = [
 // would be worse than no-op.
 export function isUpstreamUnauthorizedError(error: unknown): boolean {
   if (!error) return false;
+
+  // The MCP SDK's StreamableHTTPError exposes the HTTP status as a numeric
+  // `code` property while its message can be only "Error POSTing to endpoint:",
+  // with no status text or response body. In that shape the old message-only
+  // detector missed real 401s, so the refresh-on-401 recovery never ran.
+  // Match the explicit status code before falling back to message heuristics.
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (code === 401 || code === "401") return true;
+  }
+
   if (
     typeof error === "object" &&
     "name" in error &&
