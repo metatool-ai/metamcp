@@ -60,3 +60,5 @@ docs
 **/*.test.ts
 **/*.spec.js
 **/*.spec.ts
+# Generated artifacts are not required in the Docker build context
+artifacts/

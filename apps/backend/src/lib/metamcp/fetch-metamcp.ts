@@ -3,13 +3,16 @@ import {
   McpServerStatusEnum,
   ServerParameters,
 } from "@repo/zod-types";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import logger from "@/utils/logger";
 
 import { db } from "../../db/index";
-import { oauthSessionsRepository } from "../../db/repositories/index";
-import { mcpServersTable, namespaceServerMappingsTable } from "../../db/schema";
+import {
+  mcpServersTable,
+  namespaceServerMappingsTable,
+  oauthSessionsTable,
+} from "../../db/schema";
 import { getDefaultEnvironment } from "./utils";
 
 // Define IOType for stderr handling
@@ -66,11 +69,27 @@ export async function getMcpServers(
       .where(and(...whereConditions));
 
     const serverDict: Record<string, ServerParameters> = {};
+    const oauthSessions = servers.length
+      ? await db
+          .select({
+            mcp_server_uuid: oauthSessionsTable.mcp_server_uuid,
+            tokens: oauthSessionsTable.tokens,
+          })
+          .from(oauthSessionsTable)
+          .where(
+            inArray(
+              oauthSessionsTable.mcp_server_uuid,
+              servers.map((server) => server.uuid),
+            ),
+          )
+      : [];
+    const oauthSessionByServer = new Map(
+      oauthSessions.map((session) => [session.mcp_server_uuid, session]),
+    );
+
     for (const server of servers) {
-      // Fetch OAuth tokens from OAuth sessions table
-      const oauthSession = await oauthSessionsRepository.findByMcpServerUuid(
-        server.uuid,
-      );
+      // OAuth tokens are fetched in one query for the namespace, not N+1 queries.
+      const oauthSession = oauthSessionByServer.get(server.uuid);
       let oauthTokens = null;
 
       if (oauthSession && oauthSession.tokens) {
