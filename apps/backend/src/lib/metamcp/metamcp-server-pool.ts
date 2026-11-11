@@ -87,7 +87,10 @@ export class MetaMcpServerPool {
     includeInactiveServers: boolean = false,
     clientRequestHeaders?: Record<string, string>,
     adminTools?: AdminToolsOptions,
-    requestContext?: Pick<MetaMCPHandlerContext, "endpointName" | "auth">,
+    requestContext?: Pick<
+      MetaMCPHandlerContext,
+      "endpointName" | "auth" | "toolPartition"
+    >,
   ): Promise<MetaMcpServerInstance | undefined> {
     // Check if we already have an active server for this sessionId
     if (this.activeServers[sessionId]) {
@@ -205,7 +208,10 @@ export class MetaMcpServerPool {
     namespaceUuid: string,
     includeInactiveServers: boolean = false,
     clientRequestHeaders?: Record<string, string>,
-    requestContext?: Pick<MetaMCPHandlerContext, "endpointName" | "auth">,
+    requestContext?: Pick<
+      MetaMCPHandlerContext,
+      "endpointName" | "auth" | "toolPartition"
+    >,
   ): Promise<MetaMcpServerInstance | undefined> {
     try {
       // Create the MetaMCP server - MCP server pool is pre-warmed during startup

@@ -12,6 +12,7 @@ export interface MetaMCPHandlerContext {
   /** Raw headers from the client request, used for per-server header forwarding */
   clientRequestHeaders?: Record<string, string>;
   endpointName: string;
+  toolPartition?: { index: number; total: number };
   auth?: {
     method: "api_key" | "oauth" | "none";
     apiKeyUuid?: string;

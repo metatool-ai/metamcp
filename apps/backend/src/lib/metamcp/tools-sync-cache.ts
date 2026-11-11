@@ -4,26 +4,50 @@ import crypto from "crypto";
  * Simple in-memory cache for tool synchronization
  * Tracks the hash of tools per MCP server to avoid unnecessary DB operations
  */
+type SyncableTool = {
+  name: string;
+  description?: string | null;
+  inputSchema?: unknown;
+  annotations?: Record<string, unknown> | null;
+};
+
 export class ToolsSyncCache {
   private cache: Map<string, string> = new Map();
 
-  /**
-   * Generate a hash from tool names
-   * Only tool names are used since they uniquely identify tools per server
-   */
-  hashTools(toolNames: string[]): string {
-    // Sort to ensure consistent hash regardless of order
-    const sorted = [...toolNames].sort();
-    const joined = sorted.join("|");
-    return crypto.createHash("sha256").update(joined).digest("hex");
+  /** Hash all persisted client-visible tool fields, not just names. */
+  hashTools(tools: Array<SyncableTool | string>): string {
+    const canonical = [...tools]
+      .map((tool) =>
+        typeof tool === "string"
+          ? {
+              name: tool,
+              description: "",
+              inputSchema: null,
+              annotations: null,
+            }
+          : {
+              name: tool.name,
+              description: tool.description ?? "",
+              inputSchema: tool.inputSchema ?? null,
+              annotations: tool.annotations ?? null,
+            },
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return crypto
+      .createHash("sha256")
+      .update(JSON.stringify(canonical))
+      .digest("hex");
   }
 
   /**
    * Check if tools have changed since last sync
    * @returns true if tools changed or no cache exists, false if unchanged
    */
-  hasChanged(mcpServerUuid: string, toolNames: string[]): boolean {
-    const currentHash = this.hashTools(toolNames);
+  hasChanged(
+    mcpServerUuid: string,
+    tools: Array<SyncableTool | string>,
+  ): boolean {
+    const currentHash = this.hashTools(tools);
     const cachedHash = this.cache.get(mcpServerUuid);
 
     return cachedHash !== currentHash;
@@ -32,8 +56,8 @@ export class ToolsSyncCache {
   /**
    * Update the cache with current tool state
    */
-  update(mcpServerUuid: string, toolNames: string[]): void {
-    const hash = this.hashTools(toolNames);
+  update(mcpServerUuid: string, tools: Array<SyncableTool | string>): void {
+    const hash = this.hashTools(tools);
     this.cache.set(mcpServerUuid, hash);
   }
 
@@ -41,11 +65,14 @@ export class ToolsSyncCache {
    * Check if sync is needed and update cache if it is
    * @returns true if sync needed, false if cache hit
    */
-  shouldSync(mcpServerUuid: string, toolNames: string[]): boolean {
-    const needsSync = this.hasChanged(mcpServerUuid, toolNames);
+  shouldSync(
+    mcpServerUuid: string,
+    tools: Array<SyncableTool | string>,
+  ): boolean {
+    const needsSync = this.hasChanged(mcpServerUuid, tools);
 
     if (needsSync) {
-      this.update(mcpServerUuid, toolNames);
+      this.update(mcpServerUuid, tools);
     }
 
     return needsSync;

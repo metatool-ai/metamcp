@@ -85,21 +85,18 @@ export const toolsImplementations = {
       }
 
       // Check if tools changed using hash
-      const toolNames = input.tools.map((tool) => tool.name);
       const hasChanged = toolsSyncCache.hasChanged(
         input.mcpServerUuid,
-        toolNames,
+        input.tools,
       );
 
       if (hasChanged) {
-        // Update cache
-        toolsSyncCache.update(input.mcpServerUuid, toolNames);
-
-        // Perform sync with cleanup
+        // Persist first; only mark the cache current after the DB transaction succeeds.
         const { upserted, deleted } = await toolsRepository.syncTools({
           tools: input.tools,
           mcpServerUuid: input.mcpServerUuid,
         });
+        toolsSyncCache.update(input.mcpServerUuid, input.tools);
 
         const message =
           deleted.length > 0

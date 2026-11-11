@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import {
@@ -24,16 +24,17 @@ import {
   ResourceTemplate,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { and, eq, inArray } from "drizzle-orm";
 
 import logger from "@/utils/logger";
 
 import { db } from "../../db";
+import { namespacesRepository } from "../../db/repositories/namespaces.repo";
 import {
   mcpServersTable,
   namespaceToolMappingsTable,
   toolsTable,
 } from "../../db/schema";
-import { namespacesRepository } from "../../db/repositories/namespaces.repo";
 import { toolsImplementations } from "../../trpc/tools.impl";
 import { getAdminToolsContext } from "../admin-mcp/admin-session-context";
 import {
@@ -43,6 +44,7 @@ import {
 } from "../admin-mcp/tools-registry";
 import { configService } from "../config.service";
 import { ConnectedClient } from "./client";
+import { createConcurrencyLimiter } from "./discovery-concurrency";
 import { getMcpServers } from "./fetch-metamcp";
 import { extractForwardedHeaders, mergeHeaders } from "./header-forwarding";
 import { requestWithSessionRecovery } from "./list-handler-recovery";
@@ -65,8 +67,20 @@ import {
 } from "./metamcp-middleware/tool-overrides.functional";
 import { isRecoverableBackendError } from "./session-error";
 import { parseToolName } from "./tool-name-parser";
+import { isToolInPartition } from "./tool-partition";
 import { toolsSyncCache } from "./tools-sync-cache";
 import { sanitizeName } from "./utils";
+
+const maxConcurrentDiscoveryTasks = Math.max(
+  1,
+  Math.min(
+    16,
+    Number.parseInt(process.env.MCP_DISCOVERY_CONCURRENCY || "4", 10) || 4,
+  ),
+);
+const withDiscoveryConcurrency = createConcurrencyLimiter(
+  maxConcurrentDiscoveryTasks,
+);
 
 const namespaceDiscoveryRefreshes = new Map<string, number>();
 const namespaceDiscoveryRefreshCooldownMs = Math.max(
@@ -195,7 +209,10 @@ export const createServer = async (
   sessionId: string,
   includeInactiveServers: boolean = false,
   clientRequestHeaders?: Record<string, string>,
-  requestContext?: Pick<MetaMCPHandlerContext, "endpointName" | "auth">,
+  requestContext?: Pick<
+    MetaMCPHandlerContext,
+    "endpointName" | "auth" | "toolPartition"
+  >,
 ) => {
   const toolToClient: Record<string, ConnectedClient> = {};
   const toolToServerUuid: Record<string, string> = {};
@@ -246,6 +263,7 @@ export const createServer = async (
     clientRequestHeaders,
     endpointName: requestContext?.endpointName || "unknown",
     auth: requestContext?.auth,
+    toolPartition: requestContext?.toolPartition,
   };
 
   // Original List Tools Handler
@@ -273,6 +291,7 @@ export const createServer = async (
           .select({
             name: toolsTable.name,
             description: toolsTable.description,
+            annotations: toolsTable.annotations,
             toolSchema: toolsTable.toolSchema,
             mcpServerUuid: toolsTable.mcp_server_uuid,
           })
@@ -291,6 +310,7 @@ export const createServer = async (
       return {
         name: toolName,
         description: stored.description || "",
+        annotations: stored.annotations ?? undefined,
         inputSchema: stored.toolSchema,
       } as Tool;
     });
@@ -305,68 +325,70 @@ export const createServer = async (
           ? extractForwardedHeaders(context.clientRequestHeaders, serverParams)
           : {};
         await Promise.allSettled(
-          serverEntries.map(async ([serverUuid, params]) => {
-            if (isSameServerInstance(params, serverUuid)) return;
-            const effectiveParams = forwardedHeadersByServer[serverUuid]
-              ? {
-                  ...params,
-                  headers: mergeHeaders(
-                    params.headers,
-                    forwardedHeadersByServer[serverUuid],
-                  ),
-                }
-              : params;
-            try {
-              const session = await withTimeout(
-                mcpServerPool.getSession(
-                  context.sessionId,
-                  serverUuid,
-                  effectiveParams,
-                  namespaceUuid,
-                ),
-                10_000,
-                "Backend discovery connection timed out after 10s",
-              );
-              if (!session || !session.client.getServerCapabilities()?.tools)
-                return;
-              const serverName =
-                params.name || session.client.getServerVersion()?.name || "";
-              const discovered: Tool[] = [];
-              let cursor: string | undefined;
-              do {
-                const result: ListToolsResult = await withTimeout(
-                  session.client.request(
-                    { method: "tools/list", params: { cursor } },
-                    ListToolsResultSchema,
+          serverEntries.map(async ([serverUuid, params]) =>
+            withDiscoveryConcurrency(async () => {
+              if (isSameServerInstance(params, serverUuid)) return;
+              const effectiveParams = forwardedHeadersByServer[serverUuid]
+                ? {
+                    ...params,
+                    headers: mergeHeaders(
+                      params.headers,
+                      forwardedHeadersByServer[serverUuid],
+                    ),
+                  }
+                : params;
+              try {
+                const session = await withTimeout(
+                  mcpServerPool.getSession(
+                    context.sessionId,
+                    serverUuid,
+                    effectiveParams,
+                    namespaceUuid,
                   ),
                   10_000,
-                  "Backend tools/list timed out after 10s",
+                  "Backend discovery connection timed out after 10s",
                 );
-                discovered.push(...(result.tools || []));
-                cursor = result.nextCursor;
-              } while (cursor);
-              const names = discovered.map((tool) => tool.name);
-              if (toolsSyncCache.hasChanged(serverUuid, names)) {
-                const toolsToSave = await filterOutOverrideTools(
-                  discovered,
-                  namespaceUuid,
-                  serverName,
-                );
-                if (toolsToSave.length) {
-                  const sync = await toolsImplementations.sync({
-                    tools: toolsToSave,
-                    mcpServerUuid: serverUuid,
-                  });
-                  if (sync.success) toolsSyncCache.update(serverUuid, names);
+                if (!session || !session.client.getServerCapabilities()?.tools)
+                  return;
+                const serverName =
+                  params.name || session.client.getServerVersion()?.name || "";
+                const discovered: Tool[] = [];
+                let cursor: string | undefined;
+                do {
+                  const result: ListToolsResult = await withTimeout(
+                    session.client.request(
+                      { method: "tools/list", params: { cursor } },
+                      ListToolsResultSchema,
+                    ),
+                    10_000,
+                    "Backend tools/list timed out after 10s",
+                  );
+                  discovered.push(...(result.tools || []));
+                  cursor = result.nextCursor;
+                } while (cursor);
+                if (toolsSyncCache.hasChanged(serverUuid, discovered)) {
+                  const toolsToSave = await filterOutOverrideTools(
+                    discovered,
+                    namespaceUuid,
+                    serverName,
+                  );
+                  if (toolsToSave.length) {
+                    const sync = await toolsImplementations.sync({
+                      tools: toolsToSave,
+                      mcpServerUuid: serverUuid,
+                    });
+                    if (!sync.success) return;
+                  }
+                  toolsSyncCache.update(serverUuid, discovered);
                 }
+              } catch (error) {
+                logger.warn(
+                  `Background tool discovery failed for ${params.name || serverUuid}:`,
+                  error,
+                );
               }
-            } catch (error) {
-              logger.warn(
-                `Background tool discovery failed for ${params.name || serverUuid}:`,
-                error,
-              );
-            }
-          }),
+            }),
+          ),
         );
       })().catch((error) =>
         logger.error(
@@ -668,10 +690,23 @@ export const createServer = async (
     }
 
     const totalToolCount = result.tools.length;
-    if (totalToolCount > maxExposedTools) {
+    const partition = handlerContext.toolPartition;
+    if (partition) {
+      result.tools = result.tools.filter((tool) =>
+        isToolInPartition(tool.name, partition),
+      );
+      if (result.tools.length > maxExposedTools) {
+        throw new Error(
+          `Tool partition ${partition.index + 1}/${partition.total} contains ${result.tools.length} tools, exceeding the ${maxExposedTools}-tool client limit. Increase toolPartitions.`,
+        );
+      }
+      logger.info(
+        `Namespace ${namespaceUuid} exposes partition ${partition.index + 1}/${partition.total}: ${result.tools.length}/${totalToolCount} tools.`,
+      );
+    } else if (totalToolCount > maxExposedTools) {
       result.tools = limitToolsFairly(result.tools, maxExposedTools);
       logger.warn(
-        `Namespace ${namespaceUuid} exposes ${totalToolCount} tools; limiting this endpoint to ${maxExposedTools} (${totalToolCount - maxExposedTools} omitted) to satisfy client connector limits.`,
+        `Namespace ${namespaceUuid} exposes ${totalToolCount} tools; limiting this endpoint to ${maxExposedTools} (${totalToolCount - maxExposedTools} omitted). Configure toolPartition and toolPartitions query parameters to expose the complete tool set across multiple endpoints.`,
       );
     }
 
@@ -760,6 +795,15 @@ export const createServer = async (
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    if (
+      handlerContext.toolPartition &&
+      !isToolInPartition(request.params.name, handlerContext.toolPartition)
+    ) {
+      throw new Error(
+        `Tool ${request.params.name} is not available in partition ${handlerContext.toolPartition.index + 1}/${handlerContext.toolPartition.total}.`,
+      );
+    }
+
     if (isExposedAdminToolName(request.params.name)) {
       const adminContext = getAdminToolsContext(handlerContext.sessionId);
       if (!adminContext?.enabled || !adminContext.userId) {

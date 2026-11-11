@@ -60,6 +60,7 @@ export class NamespacesSerializer {
       uuid: dbTool.uuid,
       name: dbTool.name,
       description: dbTool.description,
+      annotations: dbTool.annotations ?? undefined,
       toolSchema: dbTool.toolSchema,
       created_at: dbTool.created_at.toISOString(),
       updated_at: dbTool.updated_at.toISOString(),

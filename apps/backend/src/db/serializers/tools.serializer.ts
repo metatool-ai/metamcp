@@ -4,10 +4,10 @@ type DatabaseTool = {
   uuid: string;
   name: string;
   description: string | null;
+  annotations?: Record<string, unknown> | null;
   toolSchema: {
     type: "object";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    properties?: Record<string, any>;
+    [key: string]: unknown;
   };
   created_at: Date;
   updated_at: Date;
@@ -20,6 +20,7 @@ export class ToolsSerializer {
       uuid: dbTool.uuid,
       name: dbTool.name,
       description: dbTool.description,
+      annotations: dbTool.annotations ?? undefined,
       toolSchema: dbTool.toolSchema,
       created_at: dbTool.created_at.toISOString(),
       updated_at: dbTool.updated_at.toISOString(),

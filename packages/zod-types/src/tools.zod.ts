@@ -10,11 +10,14 @@ export const ToolSchema = z.object({
   name: z.string(),
   title: z.string().nullable().optional(),
   description: z.string().nullable(),
-  toolSchema: z.object({
-    type: z.literal("object"),
-    properties: z.record(z.string(), z.any()).optional(),
-    required: z.array(z.string()).optional(),
-  }),
+  annotations: z.record(z.string(), z.unknown()).nullable().optional(),
+  toolSchema: z
+    .object({
+      type: z.literal("object"),
+      properties: z.record(z.string(), z.any()).optional(),
+      required: z.array(z.string()).optional(),
+    })
+    .passthrough(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
   mcp_server_uuid: z.string().uuid(),
@@ -40,11 +43,14 @@ export const CreateToolRequestSchema = z.object({
     z.object({
       name: z.string(),
       description: z.string().optional(),
-      inputSchema: z.object({
-        type: z.literal("object").optional(),
-        properties: z.record(z.string(), z.any()).optional(),
-        required: z.array(z.string()).optional(),
-      }),
+      annotations: z.record(z.string(), z.unknown()).optional(),
+      inputSchema: z
+        .object({
+          type: z.literal("object").optional(),
+          properties: z.record(z.string(), z.any()).optional(),
+          required: z.array(z.string()).optional(),
+        })
+        .passthrough(),
     }),
   ),
 });
@@ -71,11 +77,14 @@ export type CreateToolResponse = z.infer<typeof CreateToolResponseSchema>;
 export const ToolCreateInputSchema = z.object({
   name: z.string(),
   description: z.string().nullable().optional(),
-  toolSchema: z.object({
-    type: z.literal("object"),
-    properties: z.record(z.string(), z.any()).optional(),
-    required: z.array(z.string()).optional(),
-  }),
+  annotations: z.record(z.string(), z.unknown()).nullable().optional(),
+  toolSchema: z
+    .object({
+      type: z.literal("object"),
+      properties: z.record(z.string(), z.any()).optional(),
+      required: z.array(z.string()).optional(),
+    })
+    .passthrough(),
   mcp_server_uuid: z.string(),
 });
 
@@ -84,11 +93,14 @@ export const ToolUpsertInputSchema = z.object({
     z.object({
       name: z.string(),
       description: z.string().nullable().optional(),
+      annotations: z.record(z.string(), z.unknown()).optional(),
       inputSchema: z
         .object({
+          type: z.literal("object").optional(),
           properties: z.record(z.string(), z.any()).optional(),
           required: z.array(z.string()).optional(),
         })
+        .passthrough()
         .optional(),
     }),
   ),
@@ -104,11 +116,14 @@ export const DatabaseToolSchema = z.object({
   name: z.string(),
   title: z.string().nullable().optional(),
   description: z.string().nullable(),
-  toolSchema: z.object({
-    type: z.literal("object"),
-    properties: z.record(z.string(), z.any()).optional(),
-    required: z.array(z.string()).optional(),
-  }),
+  annotations: z.record(z.string(), z.unknown()).nullable().optional(),
+  toolSchema: z
+    .object({
+      type: z.literal("object"),
+      properties: z.record(z.string(), z.any()).optional(),
+      required: z.array(z.string()).optional(),
+    })
+    .passthrough(),
   created_at: z.date(),
   updated_at: z.date(),
   mcp_server_uuid: z.string(),

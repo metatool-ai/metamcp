@@ -250,6 +250,7 @@ export class NamespacesRepository {
         uuid: toolsTable.uuid,
         name: toolsTable.name,
         description: toolsTable.description,
+        annotations: toolsTable.annotations,
         toolSchema: toolsTable.toolSchema,
         created_at: toolsTable.created_at,
         updated_at: toolsTable.updated_at,

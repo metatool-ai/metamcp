@@ -141,12 +141,11 @@ export const toolsTable = pgTable(
     uuid: uuid("uuid").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     description: text("description"),
+    annotations: jsonb("annotations").$type<Record<string, unknown> | null>(),
     toolSchema: jsonb("tool_schema")
       .$type<{
         type: "object";
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        properties?: Record<string, any>;
-        required?: string[];
+        [key: string]: unknown;
       }>()
       .notNull(),
     created_at: timestamp("created_at", { withTimezone: true })

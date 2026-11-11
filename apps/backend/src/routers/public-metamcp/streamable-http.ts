@@ -15,6 +15,7 @@ import { buildAdminToolsOptions } from "../../lib/admin-mcp/build-admin-tools-op
 import { extractClientHeaders } from "../../lib/metamcp/header-forwarding";
 import { MetaMCPHandlerContext } from "../../lib/metamcp/metamcp-middleware/functional-middleware";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
+import { parseToolPartition } from "../../lib/metamcp/tool-partition";
 import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
 
 const streamableHttpRouter = express.Router();
@@ -27,9 +28,11 @@ const sessionManager =
 
 function getRequestContext(
   req: ApiKeyAuthenticatedRequest,
-): Pick<MetaMCPHandlerContext, "endpointName" | "auth"> {
+  toolPartition?: { index: number; total: number },
+): Pick<MetaMCPHandlerContext, "endpointName" | "auth" | "toolPartition"> {
   return {
     endpointName: req.endpointName,
+    toolPartition,
     auth: {
       method: req.authMethod || "none",
       apiKeyUuid: req.apiKeyUuid,
@@ -37,6 +40,24 @@ function getRequestContext(
       oauthUserId: req.oauthUserId,
     },
   };
+}
+
+function parseRequestToolPartition(
+  req: express.Request,
+  res: express.Response,
+): { index: number; total: number } | undefined | null {
+  const result = parseToolPartition(
+    req.query.toolPartition,
+    req.query.toolPartitions,
+  );
+  if (result.error) {
+    res.status(400).json({
+      error: "Invalid tool partition",
+      message: result.error,
+    });
+    return null;
+  }
+  return result.partition;
 }
 
 function normalizeStreamableHttpAcceptHeader(req: express.Request) {
@@ -162,6 +183,8 @@ streamableHttpRouter.post(
     const authReq = req as ApiKeyAuthenticatedRequest;
     const { namespaceUuid, endpointName } = authReq;
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    const toolPartition = parseRequestToolPartition(req, res);
+    if (toolPartition === null) return;
 
     // Log authentication information for debugging
     logger.info(`POST /mcp request for endpoint: ${endpointName}`);
@@ -203,7 +226,7 @@ streamableHttpRouter.post(
           false,
           clientRequestHeaders,
           adminTools,
-          getRequestContext(authReq),
+          getRequestContext(authReq, toolPartition),
         );
         if (!mcpServerInstance) {
           throw new Error("Failed to get MetaMCP server instance from pool");

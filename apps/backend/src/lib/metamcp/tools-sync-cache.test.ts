@@ -239,3 +239,52 @@ describe("ToolsSyncCache", () => {
     });
   });
 });
+
+describe("ToolsSyncCache metadata invalidation", () => {
+  it("invalidates when descriptions, schemas, or annotations change", () => {
+    const cache = new ToolsSyncCache();
+    const original = [
+      {
+        name: "lookup",
+        description: "Find a record",
+        inputSchema: {
+          type: "object" as const,
+          properties: { id: { type: "string" } },
+        },
+        annotations: { readOnlyHint: true },
+      },
+    ];
+
+    expect(cache.hasChanged("server-1", original)).toBe(true);
+    cache.update("server-1", original);
+    expect(cache.hasChanged("server-1", original)).toBe(false);
+    expect(
+      cache.hasChanged("server-1", [
+        { ...original[0], description: "Find a user" },
+      ]),
+    ).toBe(true);
+    expect(
+      cache.hasChanged("server-1", [
+        { ...original[0], annotations: { readOnlyHint: false } },
+      ]),
+    ).toBe(true);
+    expect(
+      cache.hasChanged("server-1", [
+        {
+          ...original[0],
+          inputSchema: { type: "object" as const, required: ["id"] },
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it("is independent of discovery order", () => {
+    const cache = new ToolsSyncCache();
+    const tools = [
+      { name: "b", inputSchema: { type: "object" as const } },
+      { name: "a", inputSchema: { type: "object" as const } },
+    ];
+    cache.update("server-1", tools);
+    expect(cache.hasChanged("server-1", [...tools].reverse())).toBe(false);
+  });
+});

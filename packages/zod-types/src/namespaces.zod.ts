@@ -318,10 +318,13 @@ export const DatabaseNamespaceToolSchema = z.object({
   uuid: z.string(),
   name: z.string(),
   description: z.string().nullable(),
-  toolSchema: z.object({
-    type: z.literal("object"),
-    properties: z.record(z.string(), z.any()).optional(),
-  }),
+  annotations: z.record(z.string(), z.unknown()).nullable().optional(),
+  toolSchema: z
+    .object({
+      type: z.literal("object"),
+      properties: z.record(z.string(), z.any()).optional(),
+    })
+    .passthrough(),
   created_at: z.date(),
   updated_at: z.date(),
   mcp_server_uuid: z.string(),

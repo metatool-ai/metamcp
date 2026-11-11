@@ -32,6 +32,7 @@ export class ToolsRepository {
     const toolsToInsert = input.tools.map((tool) => ({
       name: tool.name,
       description: tool.description || "",
+      annotations: tool.annotations ?? null,
       toolSchema: {
         type: "object" as const,
         ...tool.inputSchema,
@@ -47,6 +48,7 @@ export class ToolsRepository {
         target: [toolsTable.mcp_server_uuid, toolsTable.name],
         set: {
           description: sql`excluded.description`,
+          annotations: sql`excluded.annotations`,
           toolSchema: sql`excluded.tool_schema`,
           updated_at: new Date(),
         },
