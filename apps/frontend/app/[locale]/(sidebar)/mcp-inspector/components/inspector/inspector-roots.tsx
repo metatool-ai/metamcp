@@ -14,12 +14,14 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useTranslations } from "@/hooks/useTranslations";
 
 interface InspectorRootsProps {
   enabled?: boolean;
 }
 
 export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
+  const { t } = useTranslations();
   const [roots, setRoots] = useState<Root[]>([]);
   const [loading, setLoading] = useState(false);
   const [customRoots, setCustomRoots] = useState<Root[]>([]);
@@ -51,12 +53,12 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
   const refreshRoots = () => {
     // Refresh the roots list by calling fetchRoots again
     fetchRoots();
-    toast.success("Refreshing roots list");
+    toast.success(t("inspector:extraRoots.refreshing"));
   };
 
   const addCustomRoot = () => {
     if (!newRootUri.trim()) {
-      toast.error("Please enter a root URI");
+      toast.error(t("inspector:extraRoots.uriRequired"));
       return;
     }
 
@@ -68,13 +70,13 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
     setCustomRoots((prev) => [...prev, newRoot]);
     setNewRootUri("");
     setNewRootName("");
-    toast.success(`Added custom root: ${newRoot.uri}`);
+    toast.success(t("inspector:extraRoots.added", { uri: newRoot.uri }));
   };
 
   const removeCustomRoot = (index: number) => {
     const root = customRoots[index];
     setCustomRoots((prev) => prev.filter((_, i) => i !== index));
-    toast.success(`Removed custom root: ${root?.uri}`);
+    toast.success(t("inspector:extraRoots.removed", { uri: root?.uri || "" }));
   };
 
   // Roots are loaded manually by clicking the button
@@ -94,11 +96,11 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
   };
 
   const getRootType = (uri: string) => {
-    if (uri.startsWith("file://")) return "File System";
+    if (uri.startsWith("file://")) return t("inspector:extraRoots.fileSystem");
     if (uri.startsWith("http://") || uri.startsWith("https://")) return "HTTP";
     if (uri.startsWith("ftp://")) return "FTP";
     if (uri.startsWith("sftp://")) return "SFTP";
-    return "Other";
+    return t("inspector:extraRoots.other");
   };
 
   const allRoots = [...roots, ...customRoots];
@@ -107,9 +109,11 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
     return (
       <div className="rounded-lg border border-dashed p-8 text-center">
         <AlertTriangle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-        <h4 className="text-sm font-medium">Roots Not Supported</h4>
+        <h4 className="text-sm font-medium">
+          {t("inspector:extraRoots.notSupported")}
+        </h4>
         <p className="text-xs text-muted-foreground mt-1">
-          This MCP server doesn&apos;t support root listing.
+          {t("inspector:extraRoots.notSupportedDescription")}
         </p>
       </div>
     );
@@ -121,7 +125,9 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FolderTree className="h-5 w-5 text-orange-500" />
-          <span className="text-sm font-medium">Roots ({allRoots.length})</span>
+          <span className="text-sm font-medium">
+            {t("inspector:extraRoots.count", { count: allRoots.length })}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -131,17 +137,21 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
             disabled={loading}
           >
             <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh Roots
+            {t("inspector:extraRoots.refresh")}
           </Button>
         </div>
       </div>
 
       {/* Add Custom Root */}
       <div className="rounded-lg border p-4">
-        <h4 className="text-sm font-semibold mb-3">Add Custom Root</h4>
+        <h4 className="text-sm font-semibold mb-3">
+          {t("inspector:extraRoots.addCustom")}
+        </h4>
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium">Root URI</label>
+            <label className="text-xs font-medium">
+              {t("inspector:extraRoots.uri")}
+            </label>
             <Input
               value={newRootUri}
               onChange={(e) => setNewRootUri(e.target.value)}
@@ -150,11 +160,13 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
             />
           </div>
           <div>
-            <label className="text-xs font-medium">Name (optional)</label>
+            <label className="text-xs font-medium">
+              {t("inspector:extraRoots.nameOptional")}
+            </label>
             <Input
               value={newRootName}
               onChange={(e) => setNewRootName(e.target.value)}
-              placeholder="Friendly name for this root"
+              placeholder={t("inspector:extraRoots.namePlaceholder")}
               className="text-xs"
             />
           </div>
@@ -165,23 +177,28 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
             className="w-full"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Root
+            {t("inspector:extraRoots.add")}
           </Button>
         </div>
       </div>
 
       {/* Roots List */}
       <div className="space-y-2">
-        <h4 className="text-sm font-semibold">Available Roots</h4>
+        <h4 className="text-sm font-semibold">
+          {t("inspector:extraRoots.available")}
+        </h4>
         {loading ? (
-          <div className="text-sm text-muted-foreground">Loading roots...</div>
+          <div className="text-sm text-muted-foreground">
+            {t("inspector:extraRoots.loading")}
+          </div>
         ) : allRoots.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center">
             <FolderTree className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <h4 className="text-sm font-medium">No Roots Configured</h4>
+            <h4 className="text-sm font-medium">
+              {t("inspector:extraRoots.empty")}
+            </h4>
             <p className="text-xs text-muted-foreground mt-1">
-              Add custom roots above to define accessible paths for the MCP
-              server.
+              {t("inspector:extraRoots.emptyDescription")}
             </p>
           </div>
         ) : (
@@ -203,12 +220,12 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
                         </span>
                         {root.name && root.name !== root.uri && (
                           <span className="text-xs text-muted-foreground bg-gray-100 px-2 py-1 rounded">
-                            Named
+                            {t("inspector:extraRoots.named")}
                           </span>
                         )}
                         {isCustom && (
                           <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                            Custom
+                            {t("inspector:extraRoots.custom")}
                           </span>
                         )}
                       </div>
@@ -219,13 +236,22 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
 
                       {/* Additional info based on URI type */}
                       <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                        <span>Type: {getRootType(root.uri)}</span>
+                        <span>
+                          {t("inspector:extraRoots.type")}{" "}
+                          {getRootType(root.uri)}
+                        </span>
                         {root.uri.startsWith("file://") && (
-                          <span>Path: {root.uri.replace("file://", "")}</span>
+                          <span>
+                            {t("inspector:extraRoots.path")}{" "}
+                            {root.uri.replace("file://", "")}
+                          </span>
                         )}
                         {(root.uri.startsWith("http://") ||
                           root.uri.startsWith("https://")) && (
-                          <span>Domain: {new URL(root.uri).hostname}</span>
+                          <span>
+                            {t("inspector:extraRoots.domain")}{" "}
+                            {new URL(root.uri).hostname}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -254,18 +280,14 @@ export function InspectorRoots({ enabled = true }: InspectorRootsProps) {
           <FolderTree className="h-5 w-5 text-orange-500 mt-0.5" />
           <div>
             <h4 className="text-sm font-medium text-orange-900 mb-1">
-              About Roots
+              {t("inspector:extraRoots.about")}
             </h4>
             <p className="text-xs text-orange-700 mb-2">
-              Roots represent the base directories or paths that the MCP server
-              can access. These define the scope of resources and operations
-              that the server can perform.
+              {t("inspector:extraRoots.aboutDescription")}
             </p>
             <p className="text-xs text-orange-700">
-              <strong>Note:</strong> The MCP protocol handles roots through
-              server notifications and capabilities rather than a standard list
-              method. The roots shown here are for demonstration and testing
-              purposes.
+              <strong>{t("inspector:extraRoots.note")}</strong>{" "}
+              {t("inspector:extraRoots.noteDescription")}
             </p>
           </div>
         </div>

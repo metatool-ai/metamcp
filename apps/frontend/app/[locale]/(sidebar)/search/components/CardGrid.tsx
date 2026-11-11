@@ -219,11 +219,11 @@ function CreateServerDialog({
     } catch (error) {
       setIsSubmitting(false);
       console.error("Error preparing server data:", error);
-      toast.error("Failed to Create Server", {
+      toast.error(t("search:dialog.messages.createFailed"), {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred",
+            : t("search:dialog.messages.unexpectedError"),
       });
     }
   };

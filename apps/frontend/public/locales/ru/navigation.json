@@ -1,0 +1,14 @@
+{
+  "exploreMcpServers": "Обзор MCP-серверов (бета)",
+  "mcpServers": "MCP-серверы",
+  "metamcpNamespaces": "Пространства имён MetaMCP",
+  "metamcpEndpoints": "Конечные точки MetaMCP",
+  "mcpInspector": "Инспектор MCP",
+  "apiKeys": "Ключи API",
+  "auditLogs": "Журнал аудита",
+  "settings": "Настройки",
+  "liveLogs": "Журнал событий",
+  "application": "Приложение",
+  "logout": "Выйти",
+  "profile": "Профиль"
+}

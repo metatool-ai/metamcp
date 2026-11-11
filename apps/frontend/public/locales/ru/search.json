@@ -1,0 +1,79 @@
+{
+  "title": "Поиск MCP-серверов (бета)",
+  "searchPlaceholder": "Поиск...",
+  "loading": "Загрузка...",
+  "error": "Ошибка",
+  "noResults": "Ничего не найдено",
+  "searchResults": "Результаты поиска",
+  "resultsCount": "Найдено результатов: {{count}}",
+  "previousPage": "Назад",
+  "nextPage": "Далее",
+  "page": "Страница {{current}} из {{total}}",
+  "searchError": "При поиске произошла ошибка. Попробуйте ещё раз.",
+  "tryAgain": "Повторить",
+  "clearSearch": "Очистить поиск",
+  "searchHint": "Введите ключевые слова для поиска MCP-серверов",
+  "popularServers": "Популярные серверы",
+  "recentServers": "Недавно добавленные серверы",
+  "categories": "Категории",
+  "filters": "Фильтры",
+  "sortBy": "Сортировать по",
+  "relevance": "Релевантности",
+  "created": "Дате создания",
+  "updated": "Дате обновления",
+  "rating": "Рейтингу",
+  "card": {
+    "package": "Пакет:",
+    "command": "Команда:",
+    "args": "Аргументы:",
+    "envVars": "Переменные окружения:",
+    "registry": "Реестр:",
+    "github": "GitHub",
+    "addServer": "Добавить сервер"
+  },
+  "dialog": {
+    "title": "Создать MCP-сервер",
+    "description": "Настройте новый сервер Model Context Protocol.",
+    "form": {
+      "name": "Название",
+      "description": "Описание",
+      "type": "Тип",
+      "command": "Команда",
+      "arguments": "Аргументы",
+      "envVars": "Переменные окружения",
+      "url": "URL",
+      "bearerToken": "Bearer-токен (необязательно)",
+      "ownershipLabel": "Область доступа",
+      "placeholders": {
+        "name": "Введите название сервера",
+        "description": "Введите описание сервера",
+        "selectType": "Выберите тип",
+        "command": "Например, npx",
+        "arguments": "Аргументы через пробел",
+        "envVars": "KEY=value (по одному на строку)",
+        "url": "https://example.com",
+        "bearerToken": "Bearer-токен"
+      },
+      "ownership": {
+        "private": "Только для меня (приватный)",
+        "public": "Для всех (публичный)",
+        "helpText": "Приватные серверы доступны только вам. Публичные — всем пользователям."
+      }
+    },
+    "buttons": {
+      "cancel": "Отмена",
+      "create": "Создать сервер",
+      "creating": "Создание..."
+    },
+    "messages": {
+      "success": "MCP-сервер создан",
+      "successDescription": "Сервер «{{name}}» создан",
+      "nameExists": "Сервер с таким названием уже существует",
+      "nameExistsDescription": "Укажите другое название сервера",
+      "invalidName": "Название сервера может содержать только буквы, цифры, подчёркивания и дефисы",
+      "invalidNameDescription": "Некорректное название сервера",
+      "createFailed": "Не удалось создать сервер",
+      "unexpectedError": "Произошла непредвиденная ошибка"
+    }
+  }
+}
