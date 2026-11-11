@@ -77,6 +77,46 @@ const namespaceDiscoveryRefreshCooldownMs = Math.max(
   ) || 30000,
 );
 
+const configuredToolListLimit = Number.parseInt(
+  process.env.MCP_TOOLS_LIST_MAX_TOOLS || "1000",
+  10,
+);
+const maxExposedTools = Number.isFinite(configuredToolListLimit)
+  ? Math.max(1, Math.min(configuredToolListLimit, 1000))
+  : 1000;
+
+function limitToolsFairly(tools: Tool[], limit: number): Tool[] {
+  if (tools.length <= limit) return tools;
+
+  const groups = new Map<string, Tool[]>();
+  for (const tool of tools) {
+    const separator = tool.name.indexOf("__");
+    const key = separator > 0 ? tool.name.slice(0, separator) : "_meta";
+    groups.set(key, [...(groups.get(key) || []), tool]);
+  }
+
+  const queues = [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, items]) => ({
+      items: items.sort((a, b) => a.name.localeCompare(b.name)),
+      index: 0,
+    }));
+  const selected: Tool[] = [];
+  while (selected.length < limit) {
+    let added = false;
+    for (const queue of queues) {
+      const tool = queue.items[queue.index];
+      if (!tool) continue;
+      selected.push(tool);
+      queue.index += 1;
+      added = true;
+      if (selected.length === limit) break;
+    }
+    if (!added) break;
+  }
+  return selected;
+}
+
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -625,6 +665,14 @@ export const createServer = async (
     const adminContext = getAdminToolsContext(handlerContext.sessionId);
     if (adminContext?.enabled && adminContext.userId) {
       result.tools.push(...getAdminToolsForMcp());
+    }
+
+    const totalToolCount = result.tools.length;
+    if (totalToolCount > maxExposedTools) {
+      result.tools = limitToolsFairly(result.tools, maxExposedTools);
+      logger.warn(
+        `Namespace ${namespaceUuid} exposes ${totalToolCount} tools; limiting this endpoint to ${maxExposedTools} (${totalToolCount - maxExposedTools} omitted) to satisfy client connector limits.`,
+      );
     }
 
     const snapshotId = randomUUID();
