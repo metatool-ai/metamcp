@@ -24,11 +24,9 @@ import {
   Progress,
   PromptListChangedNotificationSchema,
   PromptReference,
-  Request,
   ResourceListChangedNotificationSchema,
   ResourceReference,
   ResourceUpdatedNotificationSchema,
-  Result,
   ServerCapabilities,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";

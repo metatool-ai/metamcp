@@ -1,12 +1,11 @@
 "use client";
 
-import { useTranslations } from "@/hooks/useTranslations";
-
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "@/hooks/useTranslations";
 import { getAppUrl } from "@/lib/env";
 
 interface DomainWarningBannerProps {

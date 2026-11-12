@@ -91,7 +91,11 @@
     "toggleTooFast": "Слишком частое переключение",
     "toggleTooFastDescription": "Подождите перед повторным переключением, чтобы сеанс успел инициализироваться.",
     "forceReset": "Принудительный сброс",
-    "anErrorOccurredWhileDeleting": "При удалении пространства имён произошла ошибка"
+    "anErrorOccurredWhileDeleting": "При удалении пространства имён произошла ошибка",
+    "exportNamespace": "Экспорт",
+    "namespaceExported": "Пространство имён экспортировано",
+    "namespaceExportedDescription": "Конфигурация пространства имён загружена",
+    "exportFailed": "Не удалось экспортировать пространство имён"
   },
   "enhancedToolsTable": {
     "toolName": "Название инструмента",

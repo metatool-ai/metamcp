@@ -1098,7 +1098,8 @@ export class McpServerPool {
         //   -- spec 2025-11-25, basic/utilities/ping
         // Without this guard the pool destroys and recreates a healthy idle
         // connection every 60s, forever, for every server that lacks `ping`.
-        const pingError = error instanceof Error ? error.message : String(error);
+        const pingError =
+          error instanceof Error ? error.message : String(error);
         const pingCode = (error as { code?: unknown })?.code;
         if (
           pingCode === -32601 ||

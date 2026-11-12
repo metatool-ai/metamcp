@@ -1,10 +1,9 @@
 "use client";
 
-import { useTranslations } from "@/hooks/useTranslations";
-
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { useTranslations } from "@/hooks/useTranslations";
 import { useLogsStore } from "@/lib/stores/logs-store";
 
 export function LogsStatusIndicator() {
