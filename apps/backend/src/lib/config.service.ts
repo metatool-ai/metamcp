@@ -108,6 +108,23 @@ export const configService = {
     );
   },
 
+  async isMcpListStrict(): Promise<boolean> {
+    const config = await configRepo.getConfig(
+      ConfigKeyEnum.enum.MCP_LIST_STRICT,
+    );
+    // Default to false: preserve the existing behaviour (a degraded aggregate
+    // list is still returned) for everyone who has not opted in.
+    return config?.value === "true";
+  },
+
+  async setMcpListStrict(strict: boolean): Promise<void> {
+    await configRepo.setConfig(
+      ConfigKeyEnum.enum.MCP_LIST_STRICT,
+      strict.toString(),
+      "Whether an aggregate list request fails instead of returning an empty result when every backend server failed",
+    );
+  },
+
   async getSessionLifetime(): Promise<number | null> {
     const config = await configRepo.getConfig(
       ConfigKeyEnum.enum.SESSION_LIFETIME,

@@ -38,6 +38,7 @@ import { ConnectedClient } from "./client";
 import { getMcpServers } from "./fetch-metamcp";
 import { extractForwardedHeaders, mergeHeaders } from "./header-forwarding";
 import { requestWithSessionRecovery } from "./list-handler-recovery";
+import { listStrictError } from "./list-strict";
 import { mcpServerPool } from "./mcp-server-pool";
 import { createAuditCallToolMiddleware } from "./metamcp-middleware/audit-requests.functional";
 import {
@@ -60,6 +61,31 @@ import { isBackendSessionLostError } from "./session-error";
 import { parseToolName } from "./tool-name-parser";
 import { toolsSyncCache } from "./tools-sync-cache";
 import { sanitizeName } from "./utils";
+
+/**
+ * Throw when an aggregate list is fully degraded and MCP_LIST_STRICT is on.
+ *
+ * Opt-in: the config key defaults to false, so the existing behaviour (return
+ * the degraded response as a success) is unchanged for anyone who has not
+ * enabled it. The decision itself lives in `listStrictError`.
+ */
+async function failIfListFullyDegraded(
+  method: string,
+  namespaceUuid: string,
+  failedServers: string[],
+  resultCount: number,
+): Promise<void> {
+  const error = listStrictError(
+    method,
+    namespaceUuid,
+    failedServers,
+    resultCount,
+  );
+  if (!error) return;
+  if (!(await configService.isMcpListStrict())) return;
+
+  throw error;
+}
 
 /**
  * Filter out tools that are overrides of existing tools to prevent duplicates in database
@@ -430,6 +456,13 @@ export const createServer = async (
         `tools/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length}/${allServerEntries.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allTools.length} tools`,
       );
     }
+
+    await failIfListFullyDegraded(
+      "tools/list",
+      namespaceUuid,
+      failedServers,
+      allTools.length,
+    );
 
     return { tools: allTools };
   };
@@ -878,6 +911,13 @@ export const createServer = async (
       );
     }
 
+    await failIfListFullyDegraded(
+      "prompts/list",
+      namespaceUuid,
+      failedServers,
+      allPrompts.length,
+    );
+
     return {
       prompts: allPrompts,
       nextCursor: request.params?.cursor,
@@ -1023,6 +1063,13 @@ export const createServer = async (
         `resources/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allResources.length} resources`,
       );
     }
+
+    await failIfListFullyDegraded(
+      "resources/list",
+      namespaceUuid,
+      failedServers,
+      allResources.length,
+    );
 
     return {
       resources: allResources,
@@ -1204,6 +1251,13 @@ export const createServer = async (
           `resources/templates/list DEGRADED for namespace ${namespaceUuid}: ${failedServers.length} backend server(s) failed (${failedServers.join(", ")}); returning ${allTemplates.length} templates`,
         );
       }
+
+      await failIfListFullyDegraded(
+        "resources/templates/list",
+        namespaceUuid,
+        failedServers,
+        allTemplates.length,
+      );
 
       return {
         resourceTemplates: allTemplates,
