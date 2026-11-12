@@ -497,43 +497,68 @@ export class McpServerPool {
       return;
     }
 
+    // Detach the public session synchronously, before any client cleanup can
+    // yield. The per-server cap may assign the same ConnectedClient to more
+    // than one public session, so this map is an ownership graph rather than
+    // a one-session/one-client relationship. Detaching first makes concurrent
+    // DELETEs observe a single, current set of remaining owners and also makes
+    // a repeated DELETE a no-op while teardown is still in progress.
+    delete this.activeSessions[sessionId];
+    delete this.sessionTimestamps[sessionId];
+    delete this.sessionToServers[sessionId];
+
     let recycled = 0;
     let destroyed = 0;
+    let borrowed = 0;
+    const cleanupPromises: Promise<void>[] = [];
 
-    // Try to recycle each connection back to idle pool
+    // Decide ownership for every connection without awaiting. This prevents
+    // two concurrent cleanups from both deciding that they own the last
+    // reference after one of them pauses on an earlier, slow teardown.
     for (const [serverUuid, client] of Object.entries(activeSession)) {
-      if (!this.idleSessions[serverUuid]) {
+      const stillActive = Object.values(this.activeSessions).some(
+        (servers) => servers[serverUuid] === client,
+      );
+
+      if (stillActive) {
+        // Repair a legacy duplicate idle alias if one exists. A client that is
+        // still active must not be handed to a third session as idle.
+        if (this.idleSessions[serverUuid] === client) {
+          delete this.idleSessions[serverUuid];
+        }
+        borrowed++;
+      } else if (!this.idleSessions[serverUuid]) {
         // No idle session for this server — recycle the connection
         this.idleSessions[serverUuid] = client;
         recycled++;
         logger.info(
           `Recycled active connection for server ${serverUuid} to idle pool (session ${sessionId})`,
         );
-      } else {
+      } else if (this.idleSessions[serverUuid] !== client) {
         // Already have an idle session — destroy the extra
-        try {
-          await client.cleanup();
-        } catch (error) {
-          logger.error(
-            `Error cleaning up extra connection for server ${serverUuid}:`,
-            error,
-          );
-        }
+        cleanupPromises.push(
+          (async () => {
+            try {
+              await client.cleanup();
+            } catch (error) {
+              logger.error(
+                `Error cleaning up extra connection for server ${serverUuid}:`,
+                error,
+              );
+            }
+          })(),
+        );
         destroyed++;
+      } else {
+        // A previous owner already retained this exact client as idle.
+        recycled++;
       }
     }
 
-    // Remove from active sessions
-    delete this.activeSessions[sessionId];
-
-    // Clean up session timestamp
-    delete this.sessionTimestamps[sessionId];
-
-    // Clean up session to servers mapping
-    delete this.sessionToServers[sessionId];
+    await Promise.allSettled(cleanupPromises);
 
     logger.info(
-      `Cleaned up session ${sessionId} (recycled: ${recycled}, destroyed: ${destroyed})`,
+      `Cleaned up session ${sessionId} (borrowed: ${borrowed}, recycled: ${recycled}, destroyed: ${destroyed})`,
     );
   }
 
