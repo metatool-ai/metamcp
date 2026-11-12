@@ -172,7 +172,7 @@ export default function SidebarLayout({
             <div className="flex items-center gap-4">
               <Image
                 src="/favicon.ico"
-                alt="MetaMCP Logo"
+                alt={t("common:logoAlt")}
                 width={256}
                 height={256}
                 className="h-12 w-12"

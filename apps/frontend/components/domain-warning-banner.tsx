@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "@/hooks/useTranslations";
+
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -14,6 +16,7 @@ interface DomainWarningBannerProps {
 export function DomainWarningBanner({
   className = "",
 }: DomainWarningBannerProps) {
+  const { t } = useTranslations();
   const [showDomainWarning, setShowDomainWarning] = useState(false);
   const [domainInfo, setDomainInfo] = useState<{
     current: string;
@@ -72,15 +75,15 @@ export function DomainWarningBanner({
   return (
     <Alert className={`mb-6 ${className}`} variant="destructive">
       <AlertTriangle className="h-4 w-4" />
-      <AlertTitle>Domain Mismatch Warning</AlertTitle>
+      <AlertTitle>{t("common:domainWarningTitle")}</AlertTitle>
       <AlertDescription>
         <div className="mt-2">
           <p>
-            You&apos;re accessing this app from{" "}
+            {t("common:domainWarningAccessedFrom")}{" "}
             <span className="font-mono font-semibold">
               {domainInfo.current}
             </span>{" "}
-            but it&apos;s configured for{" "}
+            {t("common:domainWarningConfiguredFor")}{" "}
             <span className="font-mono font-semibold">
               {domainInfo.expected}
             </span>
@@ -93,7 +96,7 @@ export function DomainWarningBanner({
               onClick={handleViewDetails}
               className="h-auto p-0 text-sm underline"
             >
-              View Details
+              {t("common:domainWarningViewDetails")}
             </Button>
             <Button
               variant="outline"
@@ -101,7 +104,7 @@ export function DomainWarningBanner({
               onClick={handleDismissWarning}
               className="h-auto p-0 text-sm"
             >
-              Dismiss
+              {t("common:domainWarningDismiss")}
             </Button>
           </div>
         </div>

@@ -113,22 +113,22 @@ export default function McpServerDetailPage({
       if (result.success) {
         // Invalidate the list cache since server was deleted
         utils.frontend.mcpServers.list.invalidate();
-        toast.success(t("mcp-servers:detail.deleteServerSuccess"));
+        toast.success(t("mcp-servers:list.deleteServerSuccess"));
         // Navigate back to the servers list
         router.push("/mcp-servers");
       } else {
         // Handle business logic failures
         console.error("Delete failed:", result.message);
-        toast.error(t("mcp-servers:detail.deleteServerError"), {
+        toast.error(t("mcp-servers:list.deleteServerError"), {
           description:
-            result.message || t("mcp-servers:detail.deleteServerError"),
+            result.message || t("mcp-servers:list.deleteServerError"),
         });
         setShowDeleteDialog(false);
       }
     },
     onError: (error) => {
       console.error("Error deleting server:", error);
-      toast.error(t("mcp-servers:detail.deleteServerError"), {
+      toast.error(t("mcp-servers:list.deleteServerError"), {
         description: error.message,
       });
       setShowDeleteDialog(false);

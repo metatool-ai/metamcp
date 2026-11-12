@@ -78,5 +78,18 @@
     "of": "of",
     "goToPage": "Go to page {{page}}",
     "morePages": "More pages"
-  }
+  },
+  "openMenu": "Open menu",
+  "liveUpdatesActive": "Live updates active",
+  "customToolNamePlaceholder": "Enter custom tool name",
+  "customToolTitlePlaceholder": "Enter custom tool title",
+  "customToolDescriptionPlaceholder": "Enter custom tool description",
+  "toolTitle": "Tool Title",
+  "originalLabel": "Original:",
+  "domainWarningTitle": "Domain Mismatch Warning",
+  "domainWarningAccessedFrom": "You're accessing this app from",
+  "domainWarningConfiguredFor": "but it's configured for",
+  "domainWarningViewDetails": "View Details",
+  "domainWarningDismiss": "Dismiss",
+  "logoAlt": "MetaMCP Logo"
 }

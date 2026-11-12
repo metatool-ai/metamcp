@@ -1,5 +1,5 @@
 // Client-side i18n utilities
-export const SUPPORTED_LOCALES = ["en", "zh", "ko", "pt", "es"] as const;
+export const SUPPORTED_LOCALES = ["en", "zh", "ko", "pt", "es", "ru"] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 export const LOCALE_NAMES = {
@@ -8,6 +8,7 @@ export const LOCALE_NAMES = {
   ko: "한국어",
   pt: "Português",
   es: "Español",
+  ru: "Русский",
 } as const;
 
 // Translation dictionaries are arbitrarily nested string trees loaded from JSON
@@ -350,6 +351,77 @@ export async function loadTranslations(
       validation: { ...englishDict.validation, ...validationEs.default },
       "audit-logs": { ...englishDict["audit-logs"] },
     };
+  } else if (locale === "ru") {
+    // Load Russian translations with fallback to English
+    const [
+      commonRu,
+      authRu,
+      navigationRu,
+      mcpServersRu,
+      namespacesRu,
+      endpointsRu,
+      apiKeysRu,
+      settingsRu,
+      searchRu,
+      inspectorRu,
+      logsRu,
+      auditLogsRu,
+      validationRu,
+    ] = await Promise.all([
+      import("../public/locales/ru/common.json").catch(() => ({ default: {} })),
+      import("../public/locales/ru/auth.json").catch(() => ({ default: {} })),
+      import("../public/locales/ru/navigation.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ru/mcp-servers.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ru/namespaces.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ru/endpoints.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ru/api-keys.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ru/settings.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ru/search.json").catch(() => ({ default: {} })),
+      import("../public/locales/ru/inspector.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ru/logs.json").catch(() => ({ default: {} })),
+      import("../public/locales/ru/audit-logs.json").catch(() => ({
+        default: {},
+      })),
+      import("../public/locales/ru/validation.json").catch(() => ({
+        default: {},
+      })),
+    ]);
+
+    // Get English fallback
+    const englishDict = await loadTranslations("en");
+
+    return {
+      common: { ...englishDict.common, ...commonRu.default },
+      auth: { ...englishDict.auth, ...authRu.default },
+      navigation: { ...englishDict.navigation, ...navigationRu.default },
+      "mcp-servers": { ...englishDict["mcp-servers"], ...mcpServersRu.default },
+      namespaces: { ...englishDict.namespaces, ...namespacesRu.default },
+      endpoints: { ...englishDict.endpoints, ...endpointsRu.default },
+      "api-keys": { ...englishDict["api-keys"], ...apiKeysRu.default },
+      settings: { ...englishDict.settings, ...settingsRu.default },
+      search: { ...englishDict.search, ...searchRu.default },
+      inspector: { ...englishDict.inspector, ...inspectorRu.default },
+      logs: { ...englishDict.logs, ...logsRu.default },
+      "audit-logs": {
+        ...englishDict["audit-logs"],
+        ...auditLogsRu.default,
+      },
+      validation: { ...englishDict.validation, ...validationRu.default },
+    };
   } else {
     // Fallback to English for unsupported locales
     return loadTranslations("en");
@@ -402,7 +474,7 @@ export function getTranslation(
   // Simple parameter interpolation
   if (params) {
     return value.replace(/\{\{(\w+)\}\}/g, (match, paramKey) => {
-      return params[paramKey]?.toString() || match;
+      return params[paramKey]?.toString() ?? match;
     });
   }
 

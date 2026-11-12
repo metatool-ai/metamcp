@@ -1138,7 +1138,7 @@ export function EnhancedNamespaceToolsTable({
                                   <div className="space-y-3">
                                     <div>
                                       <label className="text-xs font-medium text-muted-foreground">
-                                        Tool Name
+                                        {t("inspector:toolName")}
                                       </label>
                                       <Input
                                         value={
@@ -1151,16 +1151,18 @@ export function EnhancedNamespaceToolsTable({
                                             e.target.value,
                                           )
                                         }
-                                        placeholder="Enter custom tool name"
+                                        placeholder={t(
+                                          "common:customToolNamePlaceholder",
+                                        )}
                                         className="mt-1"
                                       />
                                       <p className="text-xs text-muted-foreground mt-1">
-                                        Original: {tool.name}
+                                        {t("common:originalLabel")} {tool.name}
                                       </p>
                                     </div>
                                     <div>
                                       <label className="text-xs font-medium text-muted-foreground">
-                                        Tool Title
+                                        {t("common:toolTitle")}
                                       </label>
                                       <Input
                                         value={
@@ -1173,17 +1175,19 @@ export function EnhancedNamespaceToolsTable({
                                             e.target.value,
                                           )
                                         }
-                                        placeholder="Enter custom tool title"
+                                        placeholder={t(
+                                          "common:customToolTitlePlaceholder",
+                                        )}
                                         className="mt-1"
                                       />
                                       <p className="text-xs text-muted-foreground mt-1">
-                                        Original:{" "}
+                                        {t("common:originalLabel")}{" "}
                                         {tool.title || tool.name || "N/A"}
                                       </p>
                                     </div>
                                     <div>
                                       <label className="text-xs font-medium text-muted-foreground">
-                                        Tool Description
+                                        {t("inspector:toolDescription")}
                                       </label>
                                       <Textarea
                                         value={
@@ -1197,12 +1201,14 @@ export function EnhancedNamespaceToolsTable({
                                             e.target.value,
                                           )
                                         }
-                                        placeholder="Enter custom tool description"
+                                        placeholder={t(
+                                          "common:customToolDescriptionPlaceholder",
+                                        )}
                                         className="mt-1 min-h-[60px] max-h-[120px] resize-none"
                                         rows={3}
                                       />
                                       {/* <p className="text-xs text-muted-foreground mt-1">
-                                        Original:{" "}
+                                        {t("common:originalLabel")}{" "}
                                         {tool.description || "No description"}
                                       </p> */}
                                     </div>

@@ -23,7 +23,7 @@ import { useTranslations } from "@/hooks/useTranslations";
 import { trpc } from "@/lib/trpc";
 
 export function ExportImportButtons() {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const [importOpen, setImportOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [importJson, setImportJson] = useState("");
@@ -46,7 +46,7 @@ export function ExportImportButtons() {
         toast.success(t("mcp-servers:import.imported"), {
           description: t("mcp-servers:import.importedDescription", {
             count: result.imported,
-            plural,
+            plural: locale === "ru" ? "" : plural,
           }),
         });
         if (result.errors && result.errors.length > 0) {
@@ -57,7 +57,7 @@ export function ExportImportButtons() {
               "mcp-servers:import.importedWithWarningsDescription",
               {
                 count: result.errors.length,
-                plural: errorPlural,
+                plural: locale === "ru" ? "" : errorPlural,
               },
             ),
           });

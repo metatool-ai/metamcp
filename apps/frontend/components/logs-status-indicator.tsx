@@ -1,11 +1,14 @@
 "use client";
 
+import { useTranslations } from "@/hooks/useTranslations";
+
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { useLogsStore } from "@/lib/stores/logs-store";
 
 export function LogsStatusIndicator() {
+  const { t } = useTranslations();
   const { totalCount, isAutoRefreshing } = useLogsStore();
   const [mounted, setMounted] = useState(false);
 
@@ -25,7 +28,7 @@ export function LogsStatusIndicator() {
         {isAutoRefreshing && (
           <div
             className="w-2 h-2 bg-green-500 rounded-full animate-pulse"
-            title="Live updates active"
+            title={t("common:liveUpdatesActive")}
           />
         )}
       </div>
@@ -40,7 +43,7 @@ export function LogsStatusIndicator() {
       {isAutoRefreshing && (
         <div
           className="w-2 h-2 bg-green-500 rounded-full animate-pulse"
-          title="Live updates active"
+          title={t("common:liveUpdatesActive")}
         />
       )}
     </div>

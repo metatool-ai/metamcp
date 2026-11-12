@@ -86,7 +86,7 @@ export function InspectorPrompts({
         }
       } catch (error) {
         console.error("Error fetching prompts:", error);
-        toast.error("Failed to fetch prompts from MCP server", {
+        toast.error(t("inspector:promptsFetchFailed"), {
           description: error instanceof Error ? error.message : String(error),
         });
         if (!cursor) {
@@ -190,7 +190,7 @@ export function InspectorPrompts({
             {message.content.data && (
               <img
                 src={`data:${message.content.mimeType};base64,${message.content.data}`}
-                alt="Prompt image"
+                alt={t("inspector:promptImageAlt")}
                 className="mt-2 max-w-full h-auto"
               />
             )}
