@@ -1,5 +1,6 @@
 // Export tRPC setup
 export {
+  adminProcedure,
   protectedProcedure,
   publicProcedure,
   router,

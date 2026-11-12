@@ -35,3 +35,28 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
     },
   });
 });
+
+/**
+ * Procedure restricted to administrators. Administrators are listed in
+ * METAMCP_ADMIN_EMAILS (comma-separated). When that variable is unset every
+ * signed-in user is an administrator (single-tenant mode).
+ */
+export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
+  const raw = process.env.METAMCP_ADMIN_EMAILS;
+  if (raw && raw.trim()) {
+    const admins = raw
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const email = String(ctx.user?.email ?? "")
+      .trim()
+      .toLowerCase();
+    if (!email || !admins.includes(email)) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Administrator access required",
+      });
+    }
+  }
+  return next({ ctx });
+});
