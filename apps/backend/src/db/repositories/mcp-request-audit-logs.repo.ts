@@ -1,10 +1,11 @@
-import { and, count, desc, eq, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, or } from "drizzle-orm";
 
 import logger from "@/utils/logger";
 
 import { db } from "../index";
 import {
   apiKeysTable,
+  endpointsTable,
   mcpRequestAuditLogsTable,
   mcpServersTable,
   namespacesTable,
@@ -59,12 +60,32 @@ export class McpRequestAuditLogsRepository {
     }
   }
 
+  // A caller sees:
+  //   - requests made with their own API key or their own OAuth identity;
+  //   - user-less requests (public API key or unauthenticated endpoint: both
+  //     user columns null) against an endpoint the caller owns or a public
+  //     endpoint (endpoint names are globally unique).
+  // Requests by other users (API key or OAuth) are never visible.
   private getAccessibleWhereConditions(userId: string) {
+    const accessibleEndpointNames = db
+      .select({ name: endpointsTable.name })
+      .from(endpointsTable)
+      .where(
+        or(eq(endpointsTable.user_id, userId), isNull(endpointsTable.user_id)),
+      );
+
     return [
       or(
         eq(mcpRequestAuditLogsTable.api_key_user_id, userId),
         eq(mcpRequestAuditLogsTable.oauth_user_id, userId),
-        isNull(mcpRequestAuditLogsTable.api_key_user_id),
+        and(
+          isNull(mcpRequestAuditLogsTable.api_key_user_id),
+          isNull(mcpRequestAuditLogsTable.oauth_user_id),
+          inArray(
+            mcpRequestAuditLogsTable.endpoint_name,
+            accessibleEndpointNames,
+          ),
+        ),
       ),
     ];
   }

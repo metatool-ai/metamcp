@@ -162,16 +162,73 @@ export async function convertDbServerToParams(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type EnvRecord = Record<string, any>;
 
+/**
+ * Backend environment variables that must never be copied into a STDIO MCP
+ * server through a "${VAR}" placeholder: they hold MetaMCP's own secrets
+ * (database credentials, auth signing secret, OIDC client secret, bootstrap
+ * passwords). Users can read their server's environment back, so resolving
+ * these would hand them to any user who can create a STDIO server.
+ */
+const PROTECTED_ENV_VAR_PATTERNS: RegExp[] = [
+  /^DATABASE_URL$/,
+  /^POSTGRES_/,
+  /^PG[A-Z]*$/,
+  /^BETTER_AUTH_/,
+  /^OIDC_/,
+  /^BOOTSTRAP_/,
+  /^METAMCP_ADMIN_EMAILS$/,
+];
+
+/**
+ * Environment variable names a STDIO server config may not set, because they
+ * let the configured value inject code into the spawned runtime (dynamic
+ * loader preloads, Node/Python startup hooks) rather than configure the tool.
+ */
+const FORBIDDEN_CHILD_ENV_PATTERNS: RegExp[] = [
+  /^LD_/,
+  /^DYLD_/,
+  /^NODE_OPTIONS$/,
+  /^NODE_PATH$/,
+  /^PYTHONSTARTUP$/,
+  /^PYTHONPATH$/,
+  /^PERL5OPT$/,
+  /^RUBYOPT$/,
+  /^BASH_ENV$/,
+  /^ENV$/,
+];
+
+export function isProtectedEnvVar(name: string): boolean {
+  return PROTECTED_ENV_VAR_PATTERNS.some((re) => re.test(name));
+}
+
+export function isForbiddenChildEnvVar(name: string): boolean {
+  return FORBIDDEN_CHILD_ENV_PATTERNS.some((re) => re.test(name.toUpperCase()));
+}
+
 export function resolveEnvVariables(envObject: EnvRecord): EnvRecord {
   const resolved: EnvRecord = {};
 
   for (const [key, value] of Object.entries(envObject)) {
+    if (isForbiddenChildEnvVar(key)) {
+      logger.warn(
+        `Ignoring forbidden environment variable for MCP server process: ${key}`,
+      );
+      continue;
+    }
+
     if (
       typeof value === "string" &&
       value.startsWith("${") &&
       value.endsWith("}")
     ) {
       const varName = value.slice(2, -1);
+      if (isProtectedEnvVar(varName)) {
+        resolved[key] = value;
+        logger.warn(
+          `Refusing to resolve protected environment variable ${varName} for ${key}; keeping placeholder`,
+        );
+        continue;
+      }
       const envValue = process.env[varName];
       if (envValue) {
         resolved[key] = envValue;

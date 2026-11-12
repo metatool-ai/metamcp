@@ -1,8 +1,12 @@
 import { SetConfigRequest, SetConfigRequestSchema } from "@repo/zod-types";
 import { z } from "zod";
 
-import { protectedProcedure, publicProcedure, router } from "../../trpc";
+import { adminProcedure, publicProcedure, router } from "../../trpc";
 
+// Global settings: every setter (and the raw getAllConfigs/setConfig) is
+// restricted to administrators (METAMCP_ADMIN_EMAILS; everyone when unset).
+// The individual getters stay public because the login/signup UI reads them
+// before a session exists.
 export const createConfigRouter = (implementations: {
   getSignupDisabled: () => Promise<boolean>;
   setSignupDisabled: (input: {
@@ -47,7 +51,7 @@ export const createConfigRouter = (implementations: {
       return await implementations.getSignupDisabled();
     }),
 
-    setSignupDisabled: protectedProcedure
+    setSignupDisabled: adminProcedure
       .input(z.object({ disabled: z.boolean() }))
       .mutation(async ({ input }) => {
         return await implementations.setSignupDisabled(input);
@@ -57,7 +61,7 @@ export const createConfigRouter = (implementations: {
       return await implementations.getSsoSignupDisabled();
     }),
 
-    setSsoSignupDisabled: protectedProcedure
+    setSsoSignupDisabled: adminProcedure
       .input(z.object({ disabled: z.boolean() }))
       .mutation(async ({ input }) => {
         return await implementations.setSsoSignupDisabled(input);
@@ -67,7 +71,7 @@ export const createConfigRouter = (implementations: {
       return await implementations.getBasicAuthDisabled();
     }),
 
-    setBasicAuthDisabled: protectedProcedure
+    setBasicAuthDisabled: adminProcedure
       .input(z.object({ disabled: z.boolean() }))
       .mutation(async ({ input }) => {
         return await implementations.setBasicAuthDisabled(input);
@@ -77,7 +81,7 @@ export const createConfigRouter = (implementations: {
       return await implementations.getMcpResetTimeoutOnProgress();
     }),
 
-    setMcpResetTimeoutOnProgress: protectedProcedure
+    setMcpResetTimeoutOnProgress: adminProcedure
       .input(z.object({ enabled: z.boolean() }))
       .mutation(async ({ input }) => {
         return await implementations.setMcpResetTimeoutOnProgress(input);
@@ -87,7 +91,7 @@ export const createConfigRouter = (implementations: {
       return await implementations.getMcpTimeout();
     }),
 
-    setMcpTimeout: protectedProcedure
+    setMcpTimeout: adminProcedure
       .input(z.object({ timeout: z.number().min(1000).max(86400000) }))
       .mutation(async ({ input }) => {
         return await implementations.setMcpTimeout(input);
@@ -97,7 +101,7 @@ export const createConfigRouter = (implementations: {
       return await implementations.getMcpMaxTotalTimeout();
     }),
 
-    setMcpMaxTotalTimeout: protectedProcedure
+    setMcpMaxTotalTimeout: adminProcedure
       .input(z.object({ timeout: z.number().min(1000).max(86400000) }))
       .mutation(async ({ input }) => {
         return await implementations.setMcpMaxTotalTimeout(input);
@@ -107,7 +111,7 @@ export const createConfigRouter = (implementations: {
       return await implementations.getMcpMaxAttempts();
     }),
 
-    setMcpMaxAttempts: protectedProcedure
+    setMcpMaxAttempts: adminProcedure
       .input(z.object({ maxAttempts: z.number().min(1).max(10) }))
       .mutation(async ({ input }) => {
         return await implementations.setMcpMaxAttempts(input);
@@ -117,7 +121,7 @@ export const createConfigRouter = (implementations: {
       return await implementations.getSessionLifetime();
     }),
 
-    setSessionLifetime: protectedProcedure
+    setSessionLifetime: adminProcedure
       .input(
         z.object({
           lifetime: z.number().min(300000).max(86400000).nullable().optional(),
@@ -127,11 +131,11 @@ export const createConfigRouter = (implementations: {
         return await implementations.setSessionLifetime(input);
       }),
 
-    getAllConfigs: protectedProcedure.query(async () => {
+    getAllConfigs: adminProcedure.query(async () => {
       return await implementations.getAllConfigs();
     }),
 
-    setConfig: protectedProcedure
+    setConfig: adminProcedure
       .input(SetConfigRequestSchema)
       .mutation(async ({ input }) => {
         return await implementations.setConfig(input);

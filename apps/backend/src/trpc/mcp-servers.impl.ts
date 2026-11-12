@@ -20,6 +20,13 @@ import {
   oauthSessionsRepository,
 } from "../db/repositories";
 import { McpServersSerializer } from "../db/serializers";
+import {
+  assertCanManageStdioServer,
+  canModifyResource,
+  createSecretsVisibility,
+  redactServerSecrets,
+  resolveRequestedOwner,
+} from "../lib/access-control";
 import { mcpServerPool } from "../lib/metamcp/mcp-server-pool";
 import { clearOverrideCache } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
@@ -33,9 +40,16 @@ export const mcpServersImplementations = {
     userId: string,
   ): Promise<z.infer<typeof CreateMcpServerResponseSchema>> => {
     try {
-      // Determine user ownership based on input.user_id or default to current user
-      const effectiveUserId =
-        input.user_id !== undefined ? input.user_id : userId;
+      // Only the caller's own id or null (public, admin only) may be requested.
+      const effectiveUserId = await resolveRequestedOwner(
+        input.user_id,
+        userId,
+        userId,
+      );
+
+      if (input.type === McpServerTypeEnum.enum.STDIO) {
+        await assertCanManageStdioServer(userId);
+      }
 
       const { oauth_client_info: oauthClientInfo, ...serverInput } = input;
 
@@ -116,10 +130,16 @@ export const mcpServersImplementations = {
       // Find servers accessible to user (public + user's own)
       const servers =
         await mcpServersRepository.findAllAccessibleToUser(userId);
+      const canSeeSecrets = await createSecretsVisibility(userId);
 
       return {
         success: true as const,
-        data: McpServersSerializer.serializeMcpServerList(servers),
+        data: servers.map((server) => {
+          const serialized = McpServersSerializer.serializeMcpServer(server);
+          return canSeeSecrets(server.user_id)
+            ? serialized
+            : redactServerSecrets(serialized);
+        }),
         message: "MCP servers retrieved successfully",
       };
     } catch (error) {
@@ -140,6 +160,17 @@ export const mcpServersImplementations = {
       const serversToInsert = [];
       const errors: string[] = [];
       let imported = 0;
+
+      // STDIO servers run commands in the backend: admin-only in multi-tenant
+      // mode. Entries without an explicit type default to STDIO below.
+      const containsStdio = Object.values(input.mcpServers).some(
+        (serverConfig) =>
+          (serverConfig.type || McpServerTypeEnum.enum.STDIO) ===
+          McpServerTypeEnum.enum.STDIO,
+      );
+      if (containsStdio) {
+        await assertCanManageStdioServer(userId);
+      }
 
       for (const [serverName, serverConfig] of Object.entries(
         input.mcpServers,
@@ -254,9 +285,14 @@ export const mcpServersImplementations = {
         };
       }
 
+      const serialized = McpServersSerializer.serializeMcpServer(server);
+      const canSeeSecrets = await createSecretsVisibility(userId);
+
       return {
         success: true as const,
-        data: McpServersSerializer.serializeMcpServer(server),
+        data: canSeeSecrets(server.user_id)
+          ? serialized
+          : redactServerSecrets(serialized),
         message: "MCP server retrieved successfully",
       };
     } catch (error) {
@@ -286,7 +322,7 @@ export const mcpServersImplementations = {
       }
 
       // Only server owner can delete their own servers, only admin can delete public servers
-      if (server.user_id && server.user_id !== userId) {
+      if (!(await canModifyResource(server.user_id, userId))) {
         return {
           success: false as const,
           message: "Access denied: You can only delete servers you own",
@@ -381,16 +417,24 @@ export const mcpServersImplementations = {
       }
 
       // Only server owner can update their own servers, only admin can update public servers
-      if (server.user_id && server.user_id !== userId) {
+      if (!(await canModifyResource(server.user_id, userId))) {
         return {
           success: false as const,
           message: "Access denied: You can only update servers you own",
         };
       }
 
-      // Determine user ownership based on input.user_id or keep existing ownership
-      const effectiveUserId =
-        input.user_id !== undefined ? input.user_id : server.user_id;
+      if (input.type === McpServerTypeEnum.enum.STDIO) {
+        await assertCanManageStdioServer(userId);
+      }
+
+      // Only the caller's own id or null (public, admin only) may be
+      // requested; otherwise keep the existing ownership.
+      const effectiveUserId = await resolveRequestedOwner(
+        input.user_id,
+        userId,
+        server.user_id,
+      );
 
       const { oauth_client_info: oauthClientInfo, ...serverInput } = input;
 

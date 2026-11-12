@@ -196,7 +196,14 @@ export class ApiKeysRepository {
     };
   }
 
-  async update(uuid: string, userId: string, input: ApiKeyUpdateInput) {
+  // `allowPublic` must only be true for administrators: it lets the caller
+  // modify public (user_id = null) keys in addition to their own.
+  async update(
+    uuid: string,
+    userId: string,
+    input: ApiKeyUpdateInput,
+    options: { allowPublic?: boolean } = {},
+  ) {
     const [updatedApiKey] = await db
       .update(apiKeysTable)
       .set({
@@ -206,7 +213,9 @@ export class ApiKeysRepository {
       .where(
         and(
           eq(apiKeysTable.uuid, uuid),
-          or(eq(apiKeysTable.user_id, userId), isNull(apiKeysTable.user_id)),
+          options.allowPublic
+            ? or(eq(apiKeysTable.user_id, userId), isNull(apiKeysTable.user_id))
+            : eq(apiKeysTable.user_id, userId),
         ),
       )
       .returning({
@@ -224,13 +233,20 @@ export class ApiKeysRepository {
     return updatedApiKey;
   }
 
-  async delete(uuid: string, userId: string) {
+  // `allowPublic` must only be true for administrators (see update).
+  async delete(
+    uuid: string,
+    userId: string,
+    options: { allowPublic?: boolean } = {},
+  ) {
     const [deletedApiKey] = await db
       .delete(apiKeysTable)
       .where(
         and(
           eq(apiKeysTable.uuid, uuid),
-          or(eq(apiKeysTable.user_id, userId), isNull(apiKeysTable.user_id)),
+          options.allowPublic
+            ? or(eq(apiKeysTable.user_id, userId), isNull(apiKeysTable.user_id))
+            : eq(apiKeysTable.user_id, userId),
         ),
       )
       .returning({

@@ -350,8 +350,7 @@ async function ensureUser(
   );
 
   let preservedUserApiKeys:
-    | { name: string; key: string; is_active: boolean }[]
-    | undefined;
+    { name: string; key: string; is_active: boolean }[] | undefined;
 
   let recreated = false;
 

@@ -14,15 +14,15 @@
   },
   "dependencies": {
     "@repo/zod-types": "workspace:*",
-    "@trpc/server": "^11.4.1",
-    "zod": "^4.4.3"
+    "@trpc/server": "^11.28.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "eslint": "^9.28.0",
-    "tsup": "^8.5.0",
-    "typescript": "^5.0.0"
+    "eslint": "^9.39.5",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   },
   "exports": {
     ".": {

@@ -804,7 +804,11 @@ describe("exchangeToken state CSRF validation", () => {
   // back-compat NULL branch). Pins the forward-through behaviour so a
   // future refactor of the spread cannot regress it.
   it("frontend.oauth.upsert forwards expected_state to the repository", async () => {
-    const { oauthImplementations, upsert } = await loadModule();
+    const { oauthImplementations, upsert, findServerByUuid } =
+      await loadModule();
+    findServerByUuid.mockResolvedValue(
+      ownedServer(SERVER_UUID, "https://mcp.example.com/mcp"),
+    );
     upsert.mockResolvedValue({
       uuid: "sess",
       mcp_server_uuid: SERVER_UUID,
@@ -815,10 +819,13 @@ describe("exchangeToken state CSRF validation", () => {
       updated_at: new Date(),
     });
 
-    await oauthImplementations.upsert({
-      mcp_server_uuid: SERVER_UUID,
-      expected_state: "the-csrf-nonce",
-    });
+    await oauthImplementations.upsert(
+      {
+        mcp_server_uuid: SERVER_UUID,
+        expected_state: "the-csrf-nonce",
+      },
+      USER_ID,
+    );
 
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({

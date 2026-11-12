@@ -31,6 +31,11 @@ import {
 } from "../db/repositories";
 import { NamespacesSerializer } from "../db/serializers";
 import {
+  canModifyResource,
+  createSecretsVisibility,
+  resolveRequestedOwner,
+} from "../lib/access-control";
+import {
   clearOverrideCache,
   mapOverrideNameToOriginal,
 } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
@@ -43,9 +48,12 @@ export const namespacesImplementations = {
     userId: string,
   ): Promise<z.infer<typeof CreateNamespaceResponseSchema>> => {
     try {
-      // Determine user ownership based on input.user_id or default to current user
-      const effectiveUserId =
-        input.user_id !== undefined ? input.user_id : userId;
+      // Only the caller's own id or null (public, admin only) may be requested.
+      const effectiveUserId = await resolveRequestedOwner(
+        input.user_id,
+        userId,
+        userId,
+      );
       const isPublicNamespace = effectiveUserId === null;
 
       // Validate server accessibility and relationship rules
@@ -182,6 +190,7 @@ export const namespacesImplementations = {
         success: true as const,
         data: NamespacesSerializer.serializeNamespaceWithServers(
           namespaceWithServers,
+          await createSecretsVisibility(userId),
         ),
         message: "Namespace retrieved successfully",
       };
@@ -310,7 +319,7 @@ export const namespacesImplementations = {
       }
 
       // Check if user owns this namespace (only owners can delete, protect public namespaces)
-      if (existingNamespace.user_id && existingNamespace.user_id !== userId) {
+      if (!(await canModifyResource(existingNamespace.user_id, userId))) {
         return {
           success: false as const,
           message: "Access denied: You can only delete namespaces you own",
@@ -380,16 +389,20 @@ export const namespacesImplementations = {
       }
 
       // Check if user owns this namespace (only owners can update)
-      if (existingNamespace.user_id && existingNamespace.user_id !== userId) {
+      if (!(await canModifyResource(existingNamespace.user_id, userId))) {
         return {
           success: false as const,
           message: "Access denied: You can only update namespaces you own",
         };
       }
 
-      // Determine the effective ownership for validation (use input.user_id if provided, otherwise existing)
-      const effectiveUserId =
-        input.user_id !== undefined ? input.user_id : existingNamespace.user_id;
+      // Determine the effective ownership for validation. Only the caller's
+      // own id or null (public, admin only) may be requested.
+      const effectiveUserId = await resolveRequestedOwner(
+        input.user_id,
+        userId,
+        existingNamespace.user_id,
+      );
       const isPublicNamespace = effectiveUserId === null;
 
       // Validate server accessibility and relationship rules if servers are being updated
@@ -435,7 +448,7 @@ export const namespacesImplementations = {
         uuid: input.uuid,
         name: input.name,
         description: input.description,
-        user_id: input.user_id,
+        user_id: input.user_id === undefined ? undefined : effectiveUserId,
         mcpServerUuids: input.mcpServerUuids,
       });
 
@@ -511,7 +524,7 @@ export const namespacesImplementations = {
       }
 
       // Check if user owns this namespace (only owners can update server status)
-      if (namespace.user_id && namespace.user_id !== userId) {
+      if (!(await canModifyResource(namespace.user_id, userId))) {
         return {
           success: false as const,
           message:
@@ -598,7 +611,7 @@ export const namespacesImplementations = {
       }
 
       // Check if user owns this namespace (only owners can update tool status)
-      if (namespace.user_id && namespace.user_id !== userId) {
+      if (!(await canModifyResource(namespace.user_id, userId))) {
         return {
           success: false as const,
           message:
@@ -654,7 +667,7 @@ export const namespacesImplementations = {
       }
 
       // Check if user owns this namespace (only owners can update tool overrides)
-      if (namespace.user_id && namespace.user_id !== userId) {
+      if (!(await canModifyResource(namespace.user_id, userId))) {
         return {
           success: false as const,
           message:
@@ -718,7 +731,7 @@ export const namespacesImplementations = {
       }
 
       // Check if user owns this namespace (only owners can refresh tools)
-      if (namespace.user_id && namespace.user_id !== userId) {
+      if (!(await canModifyResource(namespace.user_id, userId))) {
         return {
           success: false as const,
           message:
@@ -806,6 +819,18 @@ export const namespacesImplementations = {
         };
       }
 
+      // Resolve server names ONLY among servers mapped to this namespace.
+      // A global name lookup would let a caller attach tools to (and sync
+      // the tool list of) servers belonging to other users.
+      const namespaceWithServers =
+        await namespacesRepository.findByUuidWithServers(input.namespaceUuid);
+      const namespaceServersByName = new Map(
+        (namespaceWithServers?.servers ?? []).map((server) => [
+          server.name,
+          server,
+        ]),
+      );
+
       // Group tools by server name and resolve server UUIDs
       const toolsByServerName: Record<
         string,
@@ -821,9 +846,7 @@ export const namespacesImplementations = {
 
       for (const parsedTool of parsedTools) {
         // Find server by name - first try exact match
-        let server = await mcpServersRepository.findByName(
-          parsedTool.serverName,
-        );
+        let server = namespaceServersByName.get(parsedTool.serverName);
 
         // If exact match fails, try to handle nested MetaMCP scenarios
         // For nested MetaMCP, tool names may be in format "ParentServer__ChildServer__tool"
@@ -837,7 +860,7 @@ export const namespacesImplementations = {
             firstDoubleUnderscoreIndex,
           );
 
-          server = await mcpServersRepository.findByName(actualServerName);
+          server = namespaceServersByName.get(actualServerName);
 
           if (server) {
             logger.info(

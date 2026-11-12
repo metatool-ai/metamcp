@@ -381,8 +381,7 @@ export function useConnection({
 
         // Create appropriate transport
         let transportOptions:
-          | StreamableHTTPClientTransportOptions
-          | SSEClientTransportOptions;
+          StreamableHTTPClientTransportOptions | SSEClientTransportOptions;
 
         let mcpProxyServerUrl: URL;
 

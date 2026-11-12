@@ -35,6 +35,7 @@ import { mcpServersImplementations } from "../../trpc/mcp-servers.impl";
 import { namespacesImplementations } from "../../trpc/namespaces.impl";
 import { oauthImplementations } from "../../trpc/oauth.impl";
 import { toolsImplementations } from "../../trpc/tools.impl";
+import { assertAdminUserId } from "../access-control";
 import { createToolName } from "../metamcp/tool-name-parser";
 import { zodToMcpInputSchema } from "./zod-to-mcp-schema";
 
@@ -63,6 +64,25 @@ function defineTool(
     inputValidator,
     handler,
   };
+}
+
+// Global-configuration tools: administrators only (METAMCP_ADMIN_EMAILS;
+// everyone when unset), mirroring adminProcedure on the tRPC config router.
+function defineAdminTool(
+  name: string,
+  description: string,
+  inputValidator: ZodTypeAny,
+  handler: (userId: string, input: unknown) => Promise<unknown>,
+): AdminToolDefinition {
+  return defineTool(
+    name,
+    description,
+    inputValidator,
+    async (userId, input) => {
+      await assertAdminUserId(userId);
+      return handler(userId, input);
+    },
+  );
 }
 
 function definePublicTool(
@@ -325,7 +345,7 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     emptySchema,
     async () => configImplementations.getSignupDisabled(),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_set_signup_disabled",
     "Enable or disable new user registration.",
     z.object({ disabled: z.boolean() }),
@@ -340,7 +360,7 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     emptySchema,
     async () => configImplementations.getSsoSignupDisabled(),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_set_sso_signup_disabled",
     "Enable or disable SSO registration.",
     z.object({ disabled: z.boolean() }),
@@ -355,7 +375,7 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     emptySchema,
     async () => configImplementations.getBasicAuthDisabled(),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_set_basic_auth_disabled",
     "Enable or disable email/password authentication.",
     z.object({ disabled: z.boolean() }),
@@ -370,7 +390,7 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     emptySchema,
     async () => configImplementations.getMcpTimeout(),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_set_mcp_timeout",
     "Set the MCP request timeout in milliseconds (1000-86400000).",
     z.object({ timeout: z.number().min(1000).max(86400000) }),
@@ -385,7 +405,7 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     emptySchema,
     async () => configImplementations.getMcpMaxTotalTimeout(),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_set_mcp_max_total_timeout",
     "Set the MCP max total timeout in milliseconds (1000-86400000).",
     z.object({ timeout: z.number().min(1000).max(86400000) }),
@@ -400,7 +420,7 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     emptySchema,
     async () => configImplementations.getMcpMaxAttempts(),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_set_mcp_max_attempts",
     "Set max crash attempts before ERROR state (1-10).",
     z.object({ maxAttempts: z.number().min(1).max(10) }),
@@ -415,7 +435,7 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     emptySchema,
     async () => configImplementations.getMcpResetTimeoutOnProgress(),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_set_mcp_reset_timeout_on_progress",
     "Enable or disable resetting MCP timeout on progress.",
     z.object({ enabled: z.boolean() }),
@@ -430,7 +450,7 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     emptySchema,
     async () => configImplementations.getSessionLifetime(),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_set_session_lifetime",
     "Set MCP session lifetime in ms (300000-86400000) or null for default.",
     z.object({
@@ -450,13 +470,13 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
           .parse(input),
       ),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_get_all_configs",
     "Get all raw configuration key-value pairs.",
     emptySchema,
     async () => configImplementations.getAllConfigs(),
   ),
-  defineTool(
+  defineAdminTool(
     "metamcp_set_config",
     "Set a raw configuration value by key.",
     SetConfigRequestSchema,
@@ -475,24 +495,25 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     "metamcp_get_tools_by_mcp_server",
     "Get cached tools for an MCP server by UUID.",
     GetToolsByMcpServerUuidRequestSchema,
-    async (_userId, input) =>
+    async (userId, input) =>
       toolsImplementations.getByMcpServerUuid(
         GetToolsByMcpServerUuidRequestSchema.parse(input),
+        userId,
       ),
   ),
   defineTool(
     "metamcp_save_tools",
     "Upsert tools for an MCP server in the database.",
     CreateToolRequestSchema,
-    async (_userId, input) =>
-      toolsImplementations.create(CreateToolRequestSchema.parse(input)),
+    async (userId, input) =>
+      toolsImplementations.create(CreateToolRequestSchema.parse(input), userId),
   ),
   defineTool(
     "metamcp_sync_tools",
     "Sync tools for an MCP server, removing obsolete entries.",
     CreateToolRequestSchema,
-    async (_userId, input) =>
-      toolsImplementations.sync(CreateToolRequestSchema.parse(input)),
+    async (userId, input) =>
+      toolsImplementations.sync(CreateToolRequestSchema.parse(input), userId),
   ),
 
   // OAuth sessions (upstream MCP servers)
@@ -500,15 +521,21 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     "metamcp_get_oauth_session",
     "Get OAuth session tokens for an upstream OAuth-enabled MCP server.",
     GetOAuthSessionRequestSchema,
-    async (_userId, input) =>
-      oauthImplementations.get(GetOAuthSessionRequestSchema.parse(input)),
+    async (userId, input) =>
+      oauthImplementations.get(
+        GetOAuthSessionRequestSchema.parse(input),
+        userId,
+      ),
   ),
   defineTool(
     "metamcp_upsert_oauth_session",
     "Create or update OAuth session tokens for an upstream MCP server.",
     UpsertOAuthSessionRequestSchema,
-    async (_userId, input) =>
-      oauthImplementations.upsert(UpsertOAuthSessionRequestSchema.parse(input)),
+    async (userId, input) =>
+      oauthImplementations.upsert(
+        UpsertOAuthSessionRequestSchema.parse(input),
+        userId,
+      ),
   ),
 
   // Logs
@@ -516,14 +543,14 @@ export const ADMIN_TOOLS: AdminToolDefinition[] = [
     "metamcp_get_logs",
     "Get recent MCP activity logs.",
     GetLogsRequestSchema,
-    async (_userId, input) =>
-      logsImplementations.getLogs(GetLogsRequestSchema.parse(input)),
+    async (userId, input) =>
+      logsImplementations.getLogs(GetLogsRequestSchema.parse(input), userId),
   ),
   defineTool(
     "metamcp_clear_logs",
     "Clear all MCP activity logs.",
     emptySchema,
-    async () => logsImplementations.clearLogs(),
+    async (userId) => logsImplementations.clearLogs(userId),
   ),
 ];
 

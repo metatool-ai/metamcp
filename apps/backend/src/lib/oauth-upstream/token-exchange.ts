@@ -14,9 +14,7 @@
 import logger from "../../utils/logger";
 
 export type TokenEndpointAuthMethod =
-  | "none"
-  | "client_secret_basic"
-  | "client_secret_post";
+  "none" | "client_secret_basic" | "client_secret_post";
 
 export interface OAuthTokens {
   access_token: string;
@@ -296,9 +294,7 @@ export function resolveTokenEndpoint(args: {
   serverUrl: string;
 }): string {
   const ci = args.clientInformation as
-    | { token_endpoint?: unknown }
-    | null
-    | undefined;
+    { token_endpoint?: unknown } | null | undefined;
   if (typeof ci?.token_endpoint === "string" && ci.token_endpoint.length > 0) {
     return ci.token_endpoint;
   }

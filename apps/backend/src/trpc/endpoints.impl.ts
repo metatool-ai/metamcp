@@ -18,6 +18,10 @@ import {
   namespacesRepository,
 } from "../db/repositories";
 import { EndpointsSerializer } from "../db/serializers";
+import {
+  canModifyResource,
+  resolveRequestedOwner,
+} from "../lib/access-control";
 
 const apiKeysRepository = new ApiKeysRepository();
 
@@ -36,9 +40,12 @@ export const endpointsImplementations = {
         };
       }
 
-      // Determine user ownership based on input.user_id or default to current user
-      const effectiveUserId =
-        input.user_id !== undefined ? input.user_id : userId;
+      // Only the caller's own id or null (public, admin only) may be requested.
+      const effectiveUserId = await resolveRequestedOwner(
+        input.user_id,
+        userId,
+        userId,
+      );
       const isPublicEndpoint = effectiveUserId === null;
 
       // Validate namespace accessibility and relationship rules
@@ -241,7 +248,7 @@ export const endpointsImplementations = {
       }
 
       // Check if user owns this endpoint (only owners can delete, protect public endpoints)
-      if (existingEndpoint.user_id && existingEndpoint.user_id !== userId) {
+      if (!(await canModifyResource(existingEndpoint.user_id, userId))) {
         return {
           success: false as const,
           message: "Access denied: You can only delete endpoints you own",
@@ -290,7 +297,7 @@ export const endpointsImplementations = {
       }
 
       // Check if user owns this endpoint (only owners can update)
-      if (existingEndpoint.user_id && existingEndpoint.user_id !== userId) {
+      if (!(await canModifyResource(existingEndpoint.user_id, userId))) {
         return {
           success: false as const,
           message: "Access denied: You can only update endpoints you own",

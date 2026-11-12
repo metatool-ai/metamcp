@@ -58,18 +58,22 @@ publicEndpointsRouter.get("/health", (req, res) => {
 // List all available public endpoints
 publicEndpointsRouter.get("/", async (req, res) => {
   try {
+    // Unauthenticated listing: only public endpoints (user_id = null).
+    // Private endpoints must not be disclosed to anonymous callers.
     const endpoints = await endpointsRepository.findAllWithNamespaces();
-    const publicEndpoints = endpoints.map((endpoint) => ({
-      name: endpoint.name,
-      description: endpoint.description,
-      namespace: endpoint.namespace.name,
-      endpoints: {
-        mcp: `/metamcp/${endpoint.name}/mcp`,
-        sse: `/metamcp/${endpoint.name}/sse`,
-        api: `/metamcp/${endpoint.name}/api`,
-        openapi: `/metamcp/${endpoint.name}/api/openapi.json`,
-      },
-    }));
+    const publicEndpoints = endpoints
+      .filter((endpoint) => endpoint.user_id === null)
+      .map((endpoint) => ({
+        name: endpoint.name,
+        description: endpoint.description,
+        namespace: endpoint.namespace.name,
+        endpoints: {
+          mcp: `/metamcp/${endpoint.name}/mcp`,
+          sse: `/metamcp/${endpoint.name}/sse`,
+          api: `/metamcp/${endpoint.name}/api`,
+          openapi: `/metamcp/${endpoint.name}/api/openapi.json`,
+        },
+      }));
 
     res.json({
       service: "public-endpoints",

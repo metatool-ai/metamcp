@@ -180,6 +180,25 @@ const getHttpHeaders = (
   return headers;
 };
 
+// The frontend no longer receives the bearer token / OAuth tokens of public
+// servers unless the user is an administrator (they are redacted by the
+// serializers), so it cannot forward them. When the request carries no
+// Authorization header, fall back to the stored credentials, mirroring what
+// the MetaMCP client does for namespace connections.
+const withStoredAuthorization = (
+  headers: Record<string, string>,
+  params: ServerParameters,
+): Record<string, string> => {
+  const hasAuthorization = Object.keys(headers).some(
+    (key) => key.toLowerCase() === "authorization",
+  );
+  if (hasAuthorization) return headers;
+  const storedToken =
+    params.oauth_tokens?.access_token || params.bearerToken || undefined;
+  if (!storedToken) return headers;
+  return { ...headers, Authorization: `Bearer ${storedToken}` };
+};
+
 const serverRouter = express.Router();
 
 // Apply better auth middleware to all MCP proxy routes
@@ -290,10 +309,13 @@ const createTransport = async (
     const url = transformDockerUrl(params.url);
 
     // Merge custom headers from database with passthrough headers from request
-    const headers = {
-      ...(params.headers || {}),
-      ...getHttpHeaders(req, params.type),
-    };
+    const headers = withStoredAuthorization(
+      {
+        ...(params.headers || {}),
+        ...getHttpHeaders(req, params.type),
+      },
+      params,
+    );
 
     // Log only origin and path: the stored URL may carry credentials in
     // its query string.
@@ -319,10 +341,13 @@ const createTransport = async (
     const url = transformDockerUrl(params.url);
 
     // Merge custom headers from database with passthrough headers from request
-    const headers = {
-      ...(params.headers || {}),
-      ...getHttpHeaders(req, params.type),
-    };
+    const headers = withStoredAuthorization(
+      {
+        ...(params.headers || {}),
+        ...getHttpHeaders(req, params.type),
+      },
+      params,
+    );
 
     const transport = new StreamableHTTPClientTransport(new URL(url), {
       requestInit: {

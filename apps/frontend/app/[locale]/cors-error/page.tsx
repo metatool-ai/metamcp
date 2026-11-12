@@ -10,6 +10,21 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTranslations } from "@/hooks/useTranslations";
 import { getAppUrl } from "@/lib/env";
 
+/**
+ * Only allow same-origin relative paths as post-login destinations, so a
+ * crafted ?callbackUrl= cannot bounce the user to another site.
+ */
+function sanitizeCallbackPath(value: string | null): string {
+  if (!value) return "/";
+  if (!value.startsWith("/")) return "/";
+  if (value.startsWith("//") || value.startsWith("/\\")) return "/";
+  // Browsers strip tabs/newlines and treat a backslash like "/", which could turn
+  // e.g. "/\t/evil.com" into a protocol-relative URL.
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f\\]/.test(value)) return "/";
+  return value;
+}
+
 function CorsErrorContent() {
   const { t } = useTranslations();
   const router = useRouter();
@@ -31,12 +46,17 @@ function CorsErrorContent() {
     }
   }, []);
 
-  const attemptedPath = searchParams.get("callbackUrl") || "/";
+  const attemptedPath = sanitizeCallbackPath(searchParams.get("callbackUrl"));
 
   const handleRedirectToCorrectDomain = () => {
-    if (correctDomain) {
-      const redirectUrl = `${correctDomain}${attemptedPath}`;
-      window.location.href = redirectUrl;
+    if (!correctDomain) return;
+    try {
+      const origin = new URL(correctDomain).origin;
+      const redirectUrl = new URL(attemptedPath, origin);
+      window.location.href =
+        redirectUrl.origin === origin ? redirectUrl.toString() : origin;
+    } catch (error) {
+      console.error("Invalid app URL:", error);
     }
   };
 

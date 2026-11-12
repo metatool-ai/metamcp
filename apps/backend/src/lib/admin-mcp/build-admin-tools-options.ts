@@ -1,6 +1,7 @@
 import type { DatabaseEndpoint } from "@repo/zod-types";
 
 import type { ApiKeyAuthenticatedRequest } from "@/middleware/api-key-oauth.middleware";
+import logger from "@/utils/logger";
 
 import type { AdminToolsOptions } from "../metamcp/metamcp-server-pool";
 import { resolveAdminUserIdFromRequest } from "./resolve-auth-user";
@@ -31,10 +32,22 @@ export async function buildAdminToolsOptions(
     return undefined;
   }
 
-  const userId = await resolveAdminUserIdFromRequest(
-    authReq,
-    extractAuthToken(authReq),
-  );
+  let userId: string | undefined;
+  try {
+    userId = await resolveAdminUserIdFromRequest(
+      authReq,
+      extractAuthToken(authReq),
+    );
+  } catch (error) {
+    // e.g. a public (user-less) API key: admin tools are simply not exposed
+    // on this session; the regular endpoint keeps working.
+    logger.warn(
+      `MetaMCP admin tools disabled for this session: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return undefined;
+  }
 
   if (!userId) {
     return undefined;

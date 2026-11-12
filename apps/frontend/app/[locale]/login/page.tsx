@@ -13,6 +13,21 @@ import { useTranslations } from "@/hooks/useTranslations";
 import { authClient } from "@/lib/auth-client";
 import { vanillaTrpcClient } from "@/lib/trpc";
 
+/**
+ * Only allow same-origin relative paths as post-login destinations, so a
+ * crafted ?callbackUrl= cannot bounce the user to another site.
+ */
+function sanitizeCallbackPath(value: string | null): string {
+  if (!value) return "/";
+  if (!value.startsWith("/")) return "/";
+  if (value.startsWith("//") || value.startsWith("/\\")) return "/";
+  // Browsers strip tabs/newlines and treat a backslash like "/", which could turn
+  // e.g. "/\t/evil.com" into a protocol-relative URL.
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f\\]/.test(value)) return "/";
+  return value;
+}
+
 function LoginForm() {
   const { t } = useTranslations();
   const [email, setEmail] = useState("");
@@ -27,7 +42,7 @@ function LoginForm() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const callbackUrl = sanitizeCallbackPath(searchParams.get("callbackUrl"));
 
   // Check if signup is disabled
   useEffect(() => {
@@ -94,7 +109,12 @@ function LoginForm() {
       if (error) {
         setError(error.message || t("auth:signInError"));
       } else {
-        router.push(callbackUrl);
+        if (callbackUrl.startsWith("/oauth/")) {
+          // Backend-served route (proxied by Next), needs a full navigation.
+          window.location.assign(callbackUrl);
+        } else {
+          router.push(callbackUrl);
+        }
       }
     } catch (_err) {
       setError(t("auth:signInError"));

@@ -1,8 +1,11 @@
+import type { OAuthClient } from "@repo/zod-types";
+import { createHash } from "crypto";
 import express from "express";
 
 import logger from "@/utils/logger";
 
 import { oauthRepository } from "../../db/repositories";
+import { safeEqual } from "./consent";
 import {
   generateSecureAccessToken,
   generateSecureRefreshToken,
@@ -75,7 +78,9 @@ async function issueTokenPair(clientId: string, userId: string, scope: string) {
  * clients are unaffected.
  */
 function resolveClientId(req: express.Request): string | undefined {
-  if (req.body?.client_id) return req.body.client_id;
+  if (typeof req.body?.client_id === "string" && req.body.client_id) {
+    return req.body.client_id;
+  }
 
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Basic ")) {
@@ -85,6 +90,88 @@ function resolveClientId(req: express.Request): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Parse HTTP Basic client credentials (RFC 6749 2.3.1). The secret may
+ * itself contain ':' so only the first separator splits.
+ */
+function parseBasicAuth(
+  req: express.Request,
+): { clientId: string; clientSecret: string } | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Basic ")) return null;
+  const decoded = Buffer.from(authHeader.substring(6), "base64").toString();
+  const separatorIndex = decoded.indexOf(":");
+  if (separatorIndex <= 0) return null;
+  return {
+    clientId: decoded.substring(0, separatorIndex),
+    clientSecret: decoded.substring(separatorIndex + 1),
+  };
+}
+
+/**
+ * Authenticate a client according to its registered
+ * token_endpoint_auth_method. Returns an error body (with status) on
+ * failure, or null when the client is authenticated (or is public).
+ */
+function authenticateClient(
+  req: express.Request,
+  clientId: string,
+  clientData: OAuthClient,
+): {
+  status: number;
+  body: { error: string; error_description: string };
+} | null {
+  const method = clientData.token_endpoint_auth_method;
+
+  if (method === "client_secret_basic") {
+    const creds = parseBasicAuth(req);
+    if (!creds) {
+      return {
+        status: 401,
+        body: {
+          error: "invalid_client",
+          error_description: "Client authentication required via Basic auth",
+        },
+      };
+    }
+    if (
+      !clientData.client_secret ||
+      !safeEqual(creds.clientId, clientId) ||
+      !safeEqual(creds.clientSecret, clientData.client_secret)
+    ) {
+      return {
+        status: 401,
+        body: {
+          error: "invalid_client",
+          error_description: "Invalid client credentials",
+        },
+      };
+    }
+    return null;
+  }
+
+  if (method === "client_secret_post") {
+    const clientSecret = req.body?.client_secret;
+    if (
+      typeof clientSecret !== "string" ||
+      !clientData.client_secret ||
+      !safeEqual(clientSecret, clientData.client_secret)
+    ) {
+      return {
+        status: 401,
+        body: {
+          error: "invalid_client",
+          error_description: "Invalid client secret",
+        },
+      };
+    }
+    return null;
+  }
+
+  // "none": public client, PKCE / token binding provides the protection.
+  return null;
 }
 
 /**
@@ -144,7 +231,7 @@ async function handleAuthorizationCodeGrant(
   const client_id = resolveClientId(req);
 
   // Validate authorization code
-  if (!code) {
+  if (typeof code !== "string" || !code) {
     return res.status(400).json({
       error: "invalid_request",
       error_description: "Missing authorization code",
@@ -170,7 +257,7 @@ async function handleAuthorizationCodeGrant(
   }
 
   // Validate client_id and redirect_uri match the original request
-  if (codeData.client_id !== client_id) {
+  if (!client_id || codeData.client_id !== client_id) {
     return res.status(400).json({
       error: "invalid_client",
       error_description: "Client ID does not match",
@@ -193,41 +280,10 @@ async function handleAuthorizationCodeGrant(
     });
   }
 
-  // Validate client authentication based on registered auth method
-  if (clientData.token_endpoint_auth_method === "client_secret_basic") {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Basic ")) {
-      return res.status(401).json({
-        error: "invalid_client",
-        error_description: "Client authentication required via Basic auth",
-      });
-    }
-
-    const credentials = Buffer.from(
-      authHeader.substring(6),
-      "base64",
-    ).toString();
-    const [authClientId, authClientSecret] = credentials.split(":");
-
-    if (
-      authClientId !== client_id ||
-      authClientSecret !== clientData.client_secret
-    ) {
-      return res.status(401).json({
-        error: "invalid_client",
-        error_description: "Invalid client credentials",
-      });
-    }
-  } else if (clientData.token_endpoint_auth_method === "client_secret_post") {
-    const { client_secret } = req.body;
-    if (!client_secret || client_secret !== clientData.client_secret) {
-      return res.status(401).json({
-        error: "invalid_client",
-        error_description: "Invalid client secret",
-      });
-    }
+  const authError = authenticateClient(req, client_id, clientData);
+  if (authError) {
+    return res.status(authError.status).json(authError.body);
   }
-  // For "none" auth method, no additional validation needed
 
   // OAuth 2.1 Security: PKCE is mandatory for all clients
   if (!codeData.code_challenge) {
@@ -238,38 +294,40 @@ async function handleAuthorizationCodeGrant(
     });
   }
 
-  if (!code_verifier) {
+  if (typeof code_verifier !== "string" || !code_verifier) {
     return res.status(400).json({
       error: "invalid_request",
       error_description: "PKCE code verifier is required",
     });
   }
 
-  // Verify code challenge
-  const crypto = await import("crypto");
-  let challengeFromVerifier: string;
-
-  if (codeData.code_challenge_method === "S256") {
-    const hash = crypto.createHash("sha256").update(code_verifier).digest();
-    challengeFromVerifier = hash.toString("base64url");
-  } else if (codeData.code_challenge_method === "plain") {
-    challengeFromVerifier = code_verifier;
-  } else {
+  // Verify code challenge (S256 only, per OAuth 2.1 / MCP)
+  if (codeData.code_challenge_method !== "S256") {
     return res.status(400).json({
       error: "invalid_grant",
       error_description: "Unsupported code challenge method",
     });
   }
+  const challengeFromVerifier = createHash("sha256")
+    .update(code_verifier)
+    .digest("base64url");
 
-  if (challengeFromVerifier !== codeData.code_challenge) {
+  if (!safeEqual(challengeFromVerifier, codeData.code_challenge)) {
     return res.status(400).json({
       error: "invalid_grant",
       error_description: "PKCE verification failed",
     });
   }
 
-  // Code is valid, delete it (authorization codes are single-use)
-  await oauthRepository.deleteAuthCode(code);
+  // Code is valid: consume it atomically (authorization codes are
+  // single-use). If a parallel request already consumed it, fail.
+  const consumed = await oauthRepository.consumeAuthCode(code);
+  if (!consumed) {
+    return res.status(400).json({
+      error: "invalid_grant",
+      error_description: "Invalid or expired authorization code",
+    });
+  }
 
   // Issue access token + refresh token
   const { accessToken, refreshToken } = await issueTokenPair(
@@ -298,7 +356,7 @@ async function handleRefreshTokenGrant(
   const { refresh_token } = req.body;
   const client_id = resolveClientId(req);
 
-  if (!refresh_token) {
+  if (typeof refresh_token !== "string" || !refresh_token) {
     return res.status(400).json({
       error: "invalid_request",
       error_description: "Missing refresh_token parameter",
@@ -326,16 +384,36 @@ async function handleRefreshTokenGrant(
     });
   }
 
-  // Validate client_id matches (if provided)
-  if (client_id && tokenData.client_id !== client_id) {
+  // The refresh token is bound to the client it was issued to.
+  if (!client_id || tokenData.client_id !== client_id) {
     return res.status(400).json({
       error: "invalid_client",
       error_description: "Client ID does not match",
     });
   }
 
-  // Delete old token row (rotation: old refresh token is single-use)
-  await oauthRepository.deleteAccessToken(tokenData.access_token);
+  // Confidential clients must authenticate on refresh too.
+  const clientData = await oauthRepository.getClient(client_id);
+  if (!clientData) {
+    return res.status(400).json({
+      error: "invalid_client",
+      error_description: "Client not found or not registered",
+    });
+  }
+  const authError = authenticateClient(req, client_id, clientData);
+  if (authError) {
+    return res.status(authError.status).json(authError.body);
+  }
+
+  // Consume the old token row atomically (rotation: the refresh token is
+  // single-use). If a parallel request already consumed it, fail.
+  const consumed = await oauthRepository.consumeRefreshToken(refresh_token);
+  if (!consumed) {
+    return res.status(400).json({
+      error: "invalid_grant",
+      error_description: "Invalid refresh token",
+    });
+  }
 
   // Issue new access token + refresh token
   const { accessToken, refreshToken } = await issueTokenPair(

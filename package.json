@@ -13,9 +13,9 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
-    "dotenv-cli": "^11.0.0",
-    "prettier": "^3.8.1",
-    "turbo": "^2.8.9",
+    "dotenv-cli": "^11.1.0",
+    "prettier": "^3.10.0",
+    "turbo": "^2.11.11",
     "typescript": "5.9.3"
   },
   "packageManager": "pnpm@10.29.3",
@@ -38,7 +38,9 @@
       "tar@<7.5.7": ">=7.5.7",
       "js-yaml@>=4.0.0 <4.1.1": ">=4.1.1",
       "qs@<6.14.1": ">=6.14.1",
-      "qs@>=6.7.0 <=6.14.1": ">=6.14.2"
+      "qs@>=6.7.0 <=6.14.1": ">=6.14.2",
+      "postcss@<8.5.18": ">=8.5.18",
+      "vitest@>=4.0.0 <4.1.0": "^4.1.0"
     },
     "onlyBuiltDependencies": [
       "esbuild",

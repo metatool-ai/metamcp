@@ -73,6 +73,19 @@ export class OAuthRepository {
       .where(eq(oauthAuthorizationCodesTable.code, code));
   }
 
+  /**
+   * Atomically delete an authorization code and return the deleted row.
+   * Only one concurrent caller can get a row back, so a code can never be
+   * redeemed twice even under parallel token requests.
+   */
+  async consumeAuthCode(code: string): Promise<OAuthAuthorizationCode | null> {
+    const result = await db
+      .delete(oauthAuthorizationCodesTable)
+      .where(eq(oauthAuthorizationCodesTable.code, code))
+      .returning();
+    return result[0] || null;
+  }
+
   // ===== Access Tokens =====
 
   async getAccessToken(token: string): Promise<OAuthAccessToken | null> {
@@ -118,6 +131,18 @@ export class OAuthRepository {
       .from(oauthAccessTokensTable)
       .where(eq(oauthAccessTokensTable.refresh_token, refreshToken))
       .limit(1);
+    return result[0] || null;
+  }
+
+  /**
+   * Atomically delete the token row holding this refresh token and return it.
+   * Used for rotation so two parallel refreshes cannot both succeed.
+   */
+  async consumeRefreshToken(refreshToken: string) {
+    const result = await db
+      .delete(oauthAccessTokensTable)
+      .where(eq(oauthAccessTokensTable.refresh_token, refreshToken))
+      .returning();
     return result[0] || null;
   }
 

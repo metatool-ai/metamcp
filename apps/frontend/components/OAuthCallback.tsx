@@ -9,8 +9,7 @@ import { getServerSpecificKey, SESSION_KEYS } from "../lib/constants";
 import { vanillaTrpcClient } from "../lib/trpc";
 
 type CallbackStatus =
-  | { kind: "pending" }
-  | { kind: "error"; error: string; description?: string };
+  { kind: "pending" } | { kind: "error"; error: string; description?: string };
 
 // Drop every sessionStorage entry the SDK used during the pre-redirect half
 // of the flow. Called from both the success and the error paths so a

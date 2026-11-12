@@ -102,8 +102,7 @@ export function NamespaceServersTable({
                     ? {
                         ...server,
                         status: updateServerStatusMutation.variables?.status as
-                          | "ACTIVE"
-                          | "INACTIVE",
+                          "ACTIVE" | "INACTIVE",
                       }
                     : server,
                 ),

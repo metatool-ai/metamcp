@@ -19,9 +19,11 @@ export const createOAuthRouter = (
   implementations: {
     get: (
       input: z.infer<typeof GetOAuthSessionRequestSchema>,
+      userId: string,
     ) => Promise<z.infer<typeof GetOAuthSessionResponseSchema>>;
     upsert: (
       input: z.infer<typeof UpsertOAuthSessionRequestSchema>,
+      userId: string,
     ) => Promise<z.infer<typeof UpsertOAuthSessionResponseSchema>>;
     exchangeToken: (
       input: z.infer<typeof ExchangeOAuthTokenRequestSchema>,
@@ -34,20 +36,22 @@ export const createOAuthRouter = (
   },
 ) => {
   return router({
-    // Protected: Get OAuth session by MCP server UUID
+    // Protected: Get OAuth session by MCP server UUID. ctx.user.id is
+    // forwarded so the impl can enforce ownership of the referenced server
+    // and withhold tokens/secrets from callers who may not see them.
     get: protectedProcedure
       .input(GetOAuthSessionRequestSchema)
       .output(GetOAuthSessionResponseSchema)
-      .query(async ({ input }) => {
-        return await implementations.get(input);
+      .query(async ({ input, ctx }) => {
+        return await implementations.get(input, ctx.user.id);
       }),
 
-    // Protected: Upsert OAuth session
+    // Protected: Upsert OAuth session (owner, or admin for public servers)
     upsert: protectedProcedure
       .input(UpsertOAuthSessionRequestSchema)
       .output(UpsertOAuthSessionResponseSchema)
-      .mutation(async ({ input }) => {
-        return await implementations.upsert(input);
+      .mutation(async ({ input, ctx }) => {
+        return await implementations.upsert(input, ctx.user.id);
       }),
 
     // Protected: Server-side authorization-code-to-tokens exchange. This
