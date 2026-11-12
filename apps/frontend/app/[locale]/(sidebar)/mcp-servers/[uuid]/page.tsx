@@ -143,10 +143,7 @@ export default function McpServerDetailPage({
   const connection = useConnection({
     mcpServerUuid: uuid,
     transportType: server?.type || McpServerTypeEnum.enum.STDIO,
-    command: server?.command || "",
-    args: server?.args?.join(" ") || "",
     url: server?.url || "",
-    env: server?.env || {},
     bearerToken: server?.bearerToken || undefined,
     onNotification: (notification) => {
       console.log("MCP Notification:", notification);

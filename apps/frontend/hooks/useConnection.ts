@@ -68,10 +68,7 @@ export type MakeRequestFn = <T extends AnySchema>(
 interface UseConnectionOptions {
   mcpServerUuid: string;
   transportType: McpServerType;
-  command: string;
-  args: string;
   url: string;
-  env: Record<string, string>;
   bearerToken?: string;
   headerName?: string;
   onNotification?: (notification: Notification) => void;
@@ -88,10 +85,7 @@ interface UseConnectionOptions {
 export function useConnection({
   mcpServerUuid,
   transportType,
-  command,
-  args,
   url,
-  env,
   bearerToken,
   headerName,
   onNotification,
@@ -429,9 +423,6 @@ export function useConnection({
                 `/mcp-proxy/server/stdio`,
                 getAppUrl(),
               );
-              mcpProxyServerUrl.searchParams.append("command", command);
-              mcpProxyServerUrl.searchParams.append("args", args);
-              mcpProxyServerUrl.searchParams.append("env", JSON.stringify(env));
               transportOptions = {
                 authProvider: authProvider,
                 eventSourceInit: {
@@ -461,7 +452,6 @@ export function useConnection({
 
             case McpServerTypeEnum.enum.SSE:
               mcpProxyServerUrl = new URL(`/mcp-proxy/server/sse`, getAppUrl());
-              mcpProxyServerUrl.searchParams.append("url", url);
               transportOptions = {
                 eventSourceInit: {
                   fetch: (
@@ -490,7 +480,6 @@ export function useConnection({
 
             case McpServerTypeEnum.enum.STREAMABLE_HTTP:
               mcpProxyServerUrl = new URL(`/mcp-proxy/server/mcp`, getAppUrl());
-              mcpProxyServerUrl.searchParams.append("url", url);
               transportOptions = {
                 authProvider: authProvider,
                 eventSourceInit: {
@@ -524,6 +513,9 @@ export function useConnection({
               return;
           }
 
+          // The proxy resolves command, args, env and url from the stored
+          // server configuration; only the server UUID is sent.
+          mcpProxyServerUrl.searchParams.append("mcpServerUuid", mcpServerUuid);
           mcpProxyServerUrl.searchParams.append("transportType", transportType);
         }
 
