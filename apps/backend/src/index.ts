@@ -10,6 +10,18 @@ import logger from "./utils/logger";
 
 const app = express();
 
+// The backend is reached through the Next.js rewrite proxy on the same host,
+// so trust X-Forwarded-For only from loopback. This makes req.ip the real
+// client address for rate limiting instead of 127.0.0.1 (one shared bucket),
+// while preventing remote clients from spoofing it. Override with
+// TRUST_PROXY (e.g. "loopback, 10.0.0.0/8" or a hop count) behind more proxies.
+app.set(
+  "trust proxy",
+  /^\d+$/.test(process.env.TRUST_PROXY ?? "")
+    ? Number(process.env.TRUST_PROXY)
+    : process.env.TRUST_PROXY || "loopback",
+);
+
 // Global JSON middleware for non-proxy routes
 app.use((req, res, next) => {
   if (req.path.startsWith("/mcp-proxy/") || req.path.startsWith("/metamcp/")) {

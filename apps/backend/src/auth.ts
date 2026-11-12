@@ -15,6 +15,24 @@ if (!process.env.APP_URL) {
   throw new Error("APP_URL environment variable is required");
 }
 
+// Refuse to run in production with the placeholder secret shipped in
+// example.env / docker-compose.yml, or with a trivially short one: it signs
+// session cookies, so a known value lets anyone forge a session.
+const KNOWN_PLACEHOLDER_SECRETS = new Set([
+  "your-super-secret-key-change-this-in-production",
+  "changeme",
+  "secret",
+]);
+if (
+  process.env.NODE_ENV === "production" &&
+  (KNOWN_PLACEHOLDER_SECRETS.has(process.env.BETTER_AUTH_SECRET) ||
+    process.env.BETTER_AUTH_SECRET.length < 32)
+) {
+  throw new Error(
+    "BETTER_AUTH_SECRET is a placeholder or shorter than 32 characters. Generate one with `openssl rand -hex 32`.",
+  );
+}
+
 const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET;
 const BETTER_AUTH_URL = process.env.APP_URL;
 

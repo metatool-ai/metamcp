@@ -5,6 +5,7 @@
     "PORT",
     "APP_URL",
     "METAMCP_ADMIN_EMAILS",
+    "TRUST_PROXY",
     "DATABASE_URL",
     "BETTER_AUTH_SECRET",
     "NEXT_PUBLIC_APP_URL",
