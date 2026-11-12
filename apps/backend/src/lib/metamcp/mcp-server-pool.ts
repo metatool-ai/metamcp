@@ -1063,7 +1063,25 @@ export class McpServerPool {
       try {
         // Ping with a 5-second timeout
         await client.client.ping({ timeout: 5000 });
-      } catch {
+      } catch (error) {
+        // `ping` is OPTIONAL in the MCP spec, so a backend may legitimately not
+        // implement it and answer `-32601 Method not found`. That is a RESPONSE:
+        // it proves the connection is alive. Only silence (a timeout) or a
+        // transport failure means the session is dead.
+        //   "The Model Context Protocol includes an optional ping mechanism"
+        //   "Timeouts SHOULD be treated as connection failures"
+        //   -- spec 2025-11-25, basic/utilities/ping
+        // Without this guard the pool destroys and recreates a healthy idle
+        // connection every 60s, forever, for every server that lacks `ping`.
+        const pingError = error instanceof Error ? error.message : String(error);
+        const pingCode = (error as { code?: unknown })?.code;
+        if (
+          pingCode === -32601 ||
+          pingCode === "-32601" ||
+          pingError.includes("Method not found")
+        ) {
+          continue;
+        }
         logger.warn(
           `Idle session health check failed for server ${serverUuid}, recreating...`,
         );
