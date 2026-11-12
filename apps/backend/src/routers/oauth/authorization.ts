@@ -1,45 +1,151 @@
+import type { OAuthClient } from "@repo/zod-types";
 import express from "express";
 
 import logger from "@/utils/logger";
 
-import { auth } from "../../auth";
 import { oauthRepository } from "../../db/repositories";
+import {
+  consentPageCsp,
+  type ConsentRequestParams,
+  escapeHtml,
+  getSessionUserId,
+  isSameOriginRequest,
+  renderConsentPage,
+  signConsentRequest,
+  verifyConsentRequest,
+} from "./consent";
 import {
   generateSecureAuthCode,
   getBaseUrl,
-  type OAuthParams,
   rateLimitAuth,
   validateRedirectUri,
 } from "./utils";
 
 const authorizationRouter = express.Router();
 
+const AUTH_CODE_TTL_MS = 10 * 60 * 1000;
+
+type OAuthError = { status: number; error: string; error_description: string };
+
+function firstString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * Validate the client, its registered redirect_uri and PKCE (S256 only).
+ * Used both when rendering consent and again when consent is submitted, so a
+ * signed request can never outlive a client deletion or redirect change.
+ */
+async function validateClientRequest(
+  params: Pick<
+    ConsentRequestParams,
+    "client_id" | "redirect_uri" | "code_challenge" | "code_challenge_method"
+  >,
+): Promise<{ ok: true; client: OAuthClient } | { ok: false; err: OAuthError }> {
+  if (!params.code_challenge || !params.code_challenge_method) {
+    return {
+      ok: false,
+      err: {
+        status: 400,
+        error: "invalid_request",
+        error_description:
+          "PKCE parameters (code_challenge and code_challenge_method) are required per OAuth 2.1",
+      },
+    };
+  }
+
+  // OAuth 2.1 / MCP: only S256 is accepted.
+  if (params.code_challenge_method !== "S256") {
+    return {
+      ok: false,
+      err: {
+        status: 400,
+        error: "invalid_request",
+        error_description: "Unsupported code_challenge_method. Supported: S256",
+      },
+    };
+  }
+
+  if (!validateRedirectUri(params.redirect_uri)) {
+    return {
+      ok: false,
+      err: {
+        status: 400,
+        error: "invalid_request",
+        error_description: "Invalid redirect_uri format or insecure scheme",
+      },
+    };
+  }
+
+  const client = await oauthRepository.getClient(params.client_id);
+  if (!client) {
+    return {
+      ok: false,
+      err: {
+        status: 400,
+        error: "invalid_client",
+        error_description:
+          "Client not registered. Please register your client first.",
+      },
+    };
+  }
+
+  if (!client.redirect_uris.includes(params.redirect_uri)) {
+    return {
+      ok: false,
+      err: {
+        status: 400,
+        error: "invalid_request",
+        error_description: "redirect_uri is not registered for this client",
+      },
+    };
+  }
+
+  return { ok: true, client };
+}
+
+/** Build the /oauth/authorize URL (relative) for a set of parameters. */
+function buildAuthorizePath(params: Partial<ConsentRequestParams>): string {
+  const query = new URLSearchParams({ response_type: "code" });
+  for (const key of [
+    "client_id",
+    "redirect_uri",
+    "scope",
+    "state",
+    "code_challenge",
+    "code_challenge_method",
+    "resource",
+  ] as const) {
+    const value = params[key];
+    if (typeof value === "string" && value.length > 0) query.set(key, value);
+  }
+  return `/oauth/authorize?${query.toString()}`;
+}
+
 /**
  * OAuth 2.0 Authorization Endpoint
- * Handles authorization requests from MCP clients
+ * Validates the request, then either sends the user to log in (returning
+ * here afterwards) or shows a consent page. A code is never issued from a
+ * GET; the user must explicitly approve via POST /oauth/authorize/approve.
  */
 authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
   try {
-    const {
-      response_type,
-      client_id,
-      redirect_uri,
-      scope,
-      state,
-      code_challenge,
-      code_challenge_method,
-    } = req.query;
+    const response_type = firstString(req.query.response_type);
+    const client_id = firstString(req.query.client_id);
+    const redirect_uri = firstString(req.query.redirect_uri);
+    const scope = firstString(req.query.scope);
+    const state = firstString(req.query.state);
+    const code_challenge = firstString(req.query.code_challenge);
+    const code_challenge_method = firstString(req.query.code_challenge_method);
+    const resource = firstString(req.query.resource);
 
     logger.info("OAuth authorize request:", {
       response_type,
       client_id,
       redirect_uri,
-      scope,
-      state,
       code_challenge_method,
     });
 
-    // Validate required parameters
     if (response_type !== "code") {
       return res.status(400).json({
         error: "unsupported_response_type",
@@ -55,138 +161,58 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
       });
     }
 
-    // OAuth 2.1 Security: Enforce PKCE for all clients
-    if (!code_challenge || !code_challenge_method) {
-      return res.status(400).json({
-        error: "invalid_request",
-        error_description:
-          "PKCE parameters (code_challenge and code_challenge_method) are required per OAuth 2.1",
-      });
-    }
-
-    // Validate PKCE method (OAuth 2.1 recommends S256)
-    if (code_challenge_method !== "S256" && code_challenge_method !== "plain") {
-      return res.status(400).json({
-        error: "invalid_request",
-        error_description:
-          "Unsupported code_challenge_method. Supported: S256, plain",
-      });
-    }
-
-    // OAuth 2.1 Security: Validate redirect URI format
-    if (!validateRedirectUri(redirect_uri as string)) {
-      return res.status(400).json({
-        error: "invalid_request",
-        error_description: "Invalid redirect_uri format or insecure scheme",
-      });
-    }
-
-    // Validate client_id against registered clients
-    const clientData = await oauthRepository.getClient(client_id as string);
-    const finalClientId = client_id as string; // Track which client_id to use
-
-    if (!clientData) {
-      // Client not found - direct them to use dynamic client registration
-      const baseUrl = getBaseUrl(req);
-      return res.status(400).json({
-        error: "invalid_client",
-        error_description:
-          "Client not registered. Please register your client first.",
-        registration_endpoint: `${baseUrl}/oauth/register`,
-        documentation:
-          "Use the registration endpoint to dynamically register your OAuth client before authorization.",
-      });
-    } else {
-      // Validate redirect_uri against registered redirect_uris for existing clients
-      if (!clientData.redirect_uris.includes(redirect_uri as string)) {
-        return res.status(400).json({
-          error: "invalid_request",
-          error_description: "redirect_uri is not registered for this client",
+    const validation = await validateClientRequest({
+      client_id,
+      redirect_uri,
+      code_challenge: code_challenge ?? "",
+      code_challenge_method: code_challenge_method ?? "",
+    });
+    if (!validation.ok) {
+      const { status, ...body } = validation.err;
+      if (body.error === "invalid_client") {
+        return res.status(status).json({
+          ...body,
+          registration_endpoint: `${getBaseUrl(req)}/oauth/register`,
+          documentation:
+            "Use the registration endpoint to dynamically register your OAuth client before authorization.",
         });
       }
+      return res.status(status).json(body);
     }
 
-    // Store OAuth parameters for later use (using the correct client_id)
-    const oauthParams: OAuthParams = {
-      client_id: finalClientId,
-      redirect_uri: redirect_uri as string,
-      scope: scope ? (scope as string) : "admin",
-      state: state ? (state as string) : undefined,
-      code_challenge: code_challenge ? (code_challenge as string) : undefined,
-      code_challenge_method: code_challenge_method
-        ? (code_challenge_method as string)
-        : undefined,
+    const params: ConsentRequestParams = {
+      client_id,
+      redirect_uri,
+      scope: scope ?? "admin",
+      state,
+      code_challenge: code_challenge as string,
+      code_challenge_method: code_challenge_method as string,
+      resource,
     };
 
-    logger.info(
-      `Using client_id: ${finalClientId} (original: ${client_id}) for redirect_uri: ${redirect_uri}`,
-    );
+    const userId = await getSessionUserId(req);
 
-    const baseUrl = getBaseUrl(req);
-
-    // Check if user is already authenticated by verifying better-auth session
-    if (req.headers.cookie) {
-      try {
-        // Verify the session using better-auth
-        const sessionUrl = new URL("/api/auth/get-session", baseUrl);
-        const headers = new Headers();
-        headers.set("cookie", req.headers.cookie);
-
-        const sessionRequest = new Request(sessionUrl.toString(), {
-          method: "GET",
-          headers,
-        });
-
-        const sessionResponse = await auth.handler(sessionRequest);
-
-        if (sessionResponse.ok) {
-          const sessionData = (await sessionResponse.json()) as {
-            user?: { id: string };
-          };
-
-          if (sessionData?.user?.id) {
-            // User is already authenticated, generate authorization code directly
-            const code = generateSecureAuthCode();
-
-            // Store authorization code with associated data
-            await oauthRepository.setAuthCode(code, {
-              client_id: oauthParams.client_id,
-              redirect_uri: oauthParams.redirect_uri,
-              scope: oauthParams.scope || "admin",
-              user_id: sessionData.user.id,
-              code_challenge: oauthParams.code_challenge || null,
-              code_challenge_method: oauthParams.code_challenge_method || null,
-              expires_at: Date.now() + 10 * 60 * 1000, // 10 minutes
-            });
-
-            // Redirect back to the MCP client with authorization code
-            const redirectUrl = new URL(oauthParams.redirect_uri);
-            redirectUrl.searchParams.set("code", code);
-            if (oauthParams.state) {
-              redirectUrl.searchParams.set("state", oauthParams.state);
-            }
-
-            return res.redirect(redirectUrl.toString());
-          }
-        }
-      } catch (error) {
-        logger.info("Session verification failed, proceeding to login:", error);
-        // Continue to login flow if session verification fails
-      }
+    if (!userId) {
+      // Not signed in: log in, then come back to this same authorize request
+      // (which re-validates everything and shows consent).
+      const loginUrl = new URL("/login", getBaseUrl(req));
+      loginUrl.searchParams.set("callbackUrl", buildAuthorizePath(params));
+      return res.redirect(loginUrl.toString());
     }
 
-    // User is not authenticated, redirect to login page
-    const authUrl = new URL("/login", baseUrl);
-    const encodedParams = Buffer.from(JSON.stringify(oauthParams)).toString(
-      "base64url",
-    );
-    authUrl.searchParams.set(
-      "callbackUrl",
-      `/oauth/callback?params=${encodedParams}`,
-    );
-
-    // Redirect to frontend login page
-    res.redirect(authUrl.toString());
+    const signedRequest = signConsentRequest(params, userId);
+    res.setHeader("Content-Security-Policy", consentPageCsp(redirect_uri));
+    res
+      .status(200)
+      .type("html")
+      .send(
+        renderConsentPage({
+          clientName: validation.client.client_name,
+          redirectUri: redirect_uri,
+          scope: params.scope,
+          signedRequest,
+        }),
+      );
   } catch (error) {
     logger.error("Error in OAuth authorize endpoint:", error);
     res.status(500).json({
@@ -197,156 +223,197 @@ authorizationRouter.get("/oauth/authorize", rateLimitAuth, async (req, res) => {
 });
 
 /**
- * OAuth 2.0 Callback Handler
- * Handles the callback from frontend login and redirects back to the OAuth client
- * Verifies user authentication before issuing authorization code
+ * Shared handler for consent decisions. Verifies the session, the request
+ * origin and the signed consent blob, and re-validates the client before
+ * redirecting anywhere.
+ */
+function consentDecisionHandler(decision: "approve" | "deny") {
+  return async (req: express.Request, res: express.Response) => {
+    try {
+      if (!isSameOriginRequest(req)) {
+        return res.status(403).json({
+          error: "access_denied",
+          error_description: "Cross-origin consent submission rejected",
+        });
+      }
+
+      const userId = await getSessionUserId(req);
+      if (!userId) {
+        return res.status(401).json({
+          error: "login_required",
+          error_description: "You must be signed in to authorize a client",
+        });
+      }
+
+      const verified = verifyConsentRequest(req.body?.request, userId);
+      if (!verified.ok) {
+        logger.warn(`Rejected OAuth consent submission: ${verified.reason}`);
+        return res.status(400).json({
+          error: "invalid_request",
+          error_description:
+            verified.reason === "expired"
+              ? "Consent request has expired. Please start authorization again."
+              : "Invalid consent request",
+        });
+      }
+
+      const params = verified.params;
+      const validation = await validateClientRequest(params);
+      if (!validation.ok) {
+        const { status, ...body } = validation.err;
+        return res.status(status).json(body);
+      }
+
+      const redirectUrl = new URL(params.redirect_uri);
+
+      if (decision === "deny") {
+        redirectUrl.searchParams.set("error", "access_denied");
+        if (params.state) redirectUrl.searchParams.set("state", params.state);
+        return res.redirect(302, redirectUrl.toString());
+      }
+
+      const code = generateSecureAuthCode();
+      await oauthRepository.setAuthCode(code, {
+        client_id: params.client_id,
+        redirect_uri: params.redirect_uri,
+        scope: params.scope || "admin",
+        user_id: userId,
+        code_challenge: params.code_challenge,
+        code_challenge_method: params.code_challenge_method,
+        expires_at: Date.now() + AUTH_CODE_TTL_MS,
+      });
+
+      redirectUrl.searchParams.set("code", code);
+      if (params.state) redirectUrl.searchParams.set("state", params.state);
+      return res.redirect(302, redirectUrl.toString());
+    } catch (error) {
+      logger.error(`Error in OAuth consent (${decision}) endpoint:`, error);
+      res.status(500).json({
+        error: "server_error",
+        error_description: "Internal server error",
+      });
+    }
+  };
+}
+
+authorizationRouter.post(
+  "/oauth/authorize/approve",
+  rateLimitAuth,
+  consentDecisionHandler("approve"),
+);
+
+authorizationRouter.post(
+  "/oauth/authorize/deny",
+  rateLimitAuth,
+  consentDecisionHandler("deny"),
+);
+
+/**
+ * Legacy OAuth callback.
+ *
+ * - `?params=<base64 JSON>`: older login redirects pointed here. The content
+ *   is attacker-controllable, so it is never used to mint a code; it is only
+ *   turned back into an /oauth/authorize request, which re-validates the
+ *   client/redirect/PKCE and requires explicit consent.
+ * - `?code=`: development helper for clients whose redirect_uri is this
+ *   callback. All reflected values are HTML-escaped.
  */
 authorizationRouter.get("/oauth/callback", async (req, res) => {
   try {
-    let oauthParams: OAuthParams;
-
-    // Check if we have encoded params (from our internal redirect flow)
-    const { params } = req.query;
+    const params = firstString(req.query.params);
 
     if (params) {
-      // Decode OAuth parameters from our internal flow
-      oauthParams = JSON.parse(
-        Buffer.from(params as string, "base64url").toString(),
-      );
-    } else {
-      // Handle direct callback with individual query parameters
-      // This is likely from an external OAuth flow or direct URL access
-      const { code, state } = req.query;
-
-      if (!code) {
-        return res.status(400).send("Missing authorization code");
-      }
-
-      // If we receive a code directly, look up the code data to get the original parameters
-      const codeData = await oauthRepository.getAuthCode(code as string);
-      if (codeData) {
-        // Check if code has expired
-        if (Date.now() > codeData.expires_at.getTime()) {
-          await oauthRepository.deleteAuthCode(code as string);
-          return res.status(400).send("Authorization code has expired");
-        }
-
-        // Check if the redirect_uri points back to our own callback endpoint
-        // This would create an infinite loop, so we need to handle it differently
-        const baseUrl = getBaseUrl(req);
-        const ourCallbackUrl = `${baseUrl}/oauth/callback`;
-
-        if (
-          codeData.redirect_uri === ourCallbackUrl ||
-          codeData.redirect_uri.includes("/oauth/callback")
-        ) {
-          // This is likely a development/testing scenario where the client redirect_uri
-          // points back to our callback. Instead of redirecting, show a success page.
-
-          return res.send(`
-            <html>
-              <head><title>OAuth Authorization Successful</title></head>
-              <body>
-                <h1>Authorization Successful</h1>
-                <p>Authorization code: <code>${code}</code></p>
-                <p>State: <code>${state || "none"}</code></p>
-                <p>You can now exchange this code for an access token using the token endpoint.</p>
-                <pre>
-POST ${baseUrl}/oauth/token
-Content-Type: application/json
-
-{
-  "grant_type": "authorization_code",
-  "code": "${code}",
-  "client_id": "${codeData.client_id}",
-  "redirect_uri": "${codeData.redirect_uri}"
-}
-                </pre>
-              </body>
-            </html>
-          `);
-        }
-
-        // Code exists and is valid, redirect back to the original redirect_uri
-        const redirectUrl = new URL(codeData.redirect_uri);
-        redirectUrl.searchParams.set("code", code as string);
-        if (state) {
-          redirectUrl.searchParams.set("state", state as string);
-        }
-        return res.redirect(redirectUrl.toString());
-      } else {
+      let decoded: Record<string, unknown>;
+      try {
+        decoded = JSON.parse(Buffer.from(params, "base64url").toString());
+      } catch {
         return res.status(400).json({
           error: "invalid_request",
           error_description: "Invalid authorization parameters",
         });
       }
+      if (!decoded || typeof decoded !== "object") {
+        return res.status(400).json({
+          error: "invalid_request",
+          error_description: "Invalid authorization parameters",
+        });
+      }
+      return res.redirect(
+        buildAuthorizePath({
+          client_id: firstString(decoded.client_id),
+          redirect_uri: firstString(decoded.redirect_uri),
+          scope: firstString(decoded.scope),
+          state: firstString(decoded.state),
+          code_challenge: firstString(decoded.code_challenge),
+          code_challenge_method: firstString(decoded.code_challenge_method),
+          resource: firstString(decoded.resource),
+        }),
+      );
     }
 
-    const { client_id, redirect_uri, state } = oauthParams;
+    const code = firstString(req.query.code);
+    const state = firstString(req.query.state);
 
-    // Verify user authentication by checking session cookies
-    if (!req.headers.cookie) {
-      // Redirect back to login if no authentication
-      const baseUrl = getBaseUrl(req);
-      const loginUrl = new URL("/login", baseUrl);
-      loginUrl.searchParams.set("callbackUrl", req.originalUrl);
-      return res.redirect(loginUrl.toString());
+    if (!code) {
+      return res.status(400).send("Missing authorization code");
     }
 
-    // Verify the session using better-auth
-    const sessionUrl = new URL("/api/auth/get-session", getBaseUrl(req));
-    const headers = new Headers();
-    headers.set("cookie", req.headers.cookie);
-
-    const sessionRequest = new Request(sessionUrl.toString(), {
-      method: "GET",
-      headers,
-    });
-
-    const sessionResponse = await auth.handler(sessionRequest);
-
-    if (!sessionResponse.ok) {
-      // Redirect back to login if session invalid
-      const baseUrl = getBaseUrl(req);
-      const loginUrl = new URL("/login", baseUrl);
-      loginUrl.searchParams.set("callbackUrl", req.originalUrl);
-      return res.redirect(loginUrl.toString());
+    const codeData = await oauthRepository.getAuthCode(code);
+    if (!codeData) {
+      return res.status(400).json({
+        error: "invalid_request",
+        error_description: "Invalid authorization parameters",
+      });
     }
 
-    const sessionData = (await sessionResponse.json()) as {
-      user?: { id: string };
-    };
-
-    if (!sessionData?.user?.id) {
-      // Redirect back to login if no user
-      const baseUrl = getBaseUrl(req);
-      const loginUrl = new URL("/login", baseUrl);
-      loginUrl.searchParams.set("callbackUrl", req.originalUrl);
-      return res.redirect(loginUrl.toString());
+    if (Date.now() > codeData.expires_at.getTime()) {
+      await oauthRepository.deleteAuthCode(code);
+      return res.status(400).send("Authorization code has expired");
     }
 
-    // User is authenticated, generate authorization code
-    const code = generateSecureAuthCode();
+    const baseUrl = getBaseUrl(req);
+    const ourCallbackUrl = `${baseUrl}/oauth/callback`;
 
-    // Store authorization code with associated data
-    await oauthRepository.setAuthCode(code, {
-      client_id,
-      redirect_uri,
-      scope: oauthParams.scope || "admin",
-      user_id: sessionData.user.id,
-      code_challenge: oauthParams.code_challenge || null,
-      code_challenge_method: oauthParams.code_challenge_method || null,
-      expires_at: Date.now() + 10 * 60 * 1000, // 10 minutes
-    });
+    if (
+      codeData.redirect_uri === ourCallbackUrl ||
+      codeData.redirect_uri.includes("/oauth/callback")
+    ) {
+      // Development/testing: the client's redirect_uri is this callback, so
+      // show the code instead of redirecting in a loop.
+      const tokenRequest = JSON.stringify(
+        {
+          grant_type: "authorization_code",
+          code,
+          client_id: codeData.client_id,
+          redirect_uri: codeData.redirect_uri,
+        },
+        null,
+        2,
+      );
+      return res.type("html").send(`<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>OAuth Authorization Successful</title></head>
+  <body>
+    <h1>Authorization Successful</h1>
+    <p>Authorization code: <code>${escapeHtml(code)}</code></p>
+    <p>State: <code>${escapeHtml(state || "none")}</code></p>
+    <p>You can now exchange this code for an access token using the token endpoint.</p>
+    <pre>
+POST ${escapeHtml(baseUrl)}/oauth/token
+Content-Type: application/json
 
-    // Redirect back to the MCP client with authorization code
-    const redirectUrl = new URL(redirect_uri);
+${escapeHtml(tokenRequest)}
+    </pre>
+  </body>
+</html>`);
+    }
+
+    const redirectUrl = new URL(codeData.redirect_uri);
     redirectUrl.searchParams.set("code", code);
     if (state) {
       redirectUrl.searchParams.set("state", state);
     }
-
-    res.redirect(redirectUrl.toString());
+    return res.redirect(redirectUrl.toString());
   } catch (error) {
     logger.error("Error in OAuth callback:", error);
     res.status(500).send("OAuth callback error");
