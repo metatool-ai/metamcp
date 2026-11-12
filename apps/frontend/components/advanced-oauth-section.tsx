@@ -184,8 +184,7 @@ export function AdvancedOAuthSection({
             <Select
               value={
                 (form.watch("oauth_token_endpoint_auth_method") as
-                  | string
-                  | undefined) ?? "none"
+                  string | undefined) ?? "none"
               }
               onValueChange={(value) =>
                 setOauthField("oauth_token_endpoint_auth_method", value)

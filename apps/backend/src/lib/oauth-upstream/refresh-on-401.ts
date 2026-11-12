@@ -36,11 +36,7 @@ import {
 
 export interface RefreshResult {
   status:
-    | "refreshed"
-    | "no_refresh_token"
-    | "no_session"
-    | "no_client_id"
-    | "failed";
+    "refreshed" | "no_refresh_token" | "no_session" | "no_client_id" | "failed";
   tokens?: OAuthTokens;
   error?: string;
   errorDescription?: string;
@@ -95,8 +91,7 @@ async function doRefresh(
   }
 
   const currentTokens = session.tokens as
-    | (OAuthTokens & { refresh_token?: string })
-    | null;
+    (OAuthTokens & { refresh_token?: string }) | null;
   if (!currentTokens?.refresh_token) {
     return { status: "no_refresh_token" };
   }

@@ -18,6 +18,11 @@ import {
   oauthSessionsRepository,
 } from "../db/repositories";
 import { OAuthSessionsSerializer } from "../db/serializers";
+import {
+  canModifyResource,
+  canReadResource,
+  canViewResourceSecrets,
+} from "../lib/access-control";
 import { tryRefreshUpstreamTokens } from "../lib/oauth-upstream/refresh-on-401";
 import {
   discoverAuthorizationServerMetadata,
@@ -91,14 +96,15 @@ async function resolveOwnedServerUrl(
     };
   }
   // Match the access rules used elsewhere: a server with a `user_id` is
-  // private to that user; a server with `user_id === null` is public.
-  if (server.user_id && server.user_id !== userId) {
+  // private to that user; a server with `user_id === null` is public, and
+  // its OAuth session (a write) may only be changed by an administrator.
+  if (!(await canModifyResource(server.user_id, userId))) {
     return {
       ok: false,
       error: {
         error: "access_denied",
         error_description:
-          "You can only run OAuth flows against servers you own",
+          "You can only run OAuth flows against servers you own (public servers require an administrator)",
       },
     };
   }
@@ -120,10 +126,28 @@ async function resolveOwnedServerUrl(
 }
 
 export const oauthImplementations = {
+  // SECURITY: oauth_sessions hold upstream access/refresh tokens, the OAuth
+  // client secret and the PKCE code_verifier. The caller must be able to see
+  // the referenced MCP server (owner, or public), and the secret material is
+  // only returned to those allowed to modify it (owner of a private server,
+  // or an administrator for a public one).
   get: async (
     input: z.infer<typeof GetOAuthSessionRequestSchema>,
+    userId: string,
   ): Promise<z.infer<typeof GetOAuthSessionResponseSchema>> => {
     try {
+      const server = await mcpServersRepository.findByUuid(
+        input.mcp_server_uuid,
+      );
+      // Answer "not found" for inaccessible servers so existence of other
+      // users' servers is not disclosed.
+      if (!server || !canReadResource(server.user_id, userId)) {
+        return {
+          success: false as const,
+          message: "OAuth session not found",
+        };
+      }
+
       const session = await oauthSessionsRepository.findByMcpServerUuid(
         input.mcp_server_uuid,
       );
@@ -135,9 +159,30 @@ export const oauthImplementations = {
         };
       }
 
+      const serialized = OAuthSessionsSerializer.serializeOAuthSession(session);
+      if (await canViewResourceSecrets(server.user_id, userId)) {
+        return {
+          success: true as const,
+          data: serialized,
+          message: "OAuth session retrieved successfully",
+        };
+      }
+
+      // Public server viewed by a non-administrator: expose only
+      // non-secret client metadata.
+      let clientInformation = serialized.client_information;
+      if (clientInformation) {
+        const { client_secret: _clientSecret, ...rest } = clientInformation;
+        clientInformation = rest;
+      }
       return {
         success: true as const,
-        data: OAuthSessionsSerializer.serializeOAuthSession(session),
+        data: {
+          ...serialized,
+          client_information: clientInformation,
+          tokens: null,
+          code_verifier: null,
+        },
         message: "OAuth session retrieved successfully",
       };
     } catch (error) {
@@ -151,8 +196,28 @@ export const oauthImplementations = {
 
   upsert: async (
     input: z.infer<typeof UpsertOAuthSessionRequestSchema>,
+    userId: string,
   ): Promise<z.infer<typeof UpsertOAuthSessionResponseSchema>> => {
     try {
+      // Only the owner of a private server, or an administrator for a public
+      // server, may write its OAuth session.
+      const server = await mcpServersRepository.findByUuid(
+        input.mcp_server_uuid,
+      );
+      if (!server || !canReadResource(server.user_id, userId)) {
+        return {
+          success: false as const,
+          error: "MCP server not found",
+        };
+      }
+      if (!(await canModifyResource(server.user_id, userId))) {
+        return {
+          success: false as const,
+          error:
+            "Access denied: only administrators can modify OAuth sessions of public MCP servers",
+        };
+      }
+
       const session = await oauthSessionsRepository.upsert({
         mcp_server_uuid: input.mcp_server_uuid,
         ...(input.client_information && {

@@ -1,6 +1,4 @@
-import { db } from "../../db/index";
 import { ApiKeysRepository } from "../../db/repositories/api-keys.repo";
-import { usersTable } from "../../db/schema";
 
 const apiKeysRepository = new ApiKeysRepository();
 
@@ -11,20 +9,15 @@ export async function resolveUserIdFromApiKey(key: string): Promise<string> {
     throw new Error("Invalid or inactive API key");
   }
 
-  if (validation.user_id) {
-    return validation.user_id;
-  }
-
-  const [user] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .limit(1);
-
-  if (!user) {
+  // SECURITY: a public API key (user_id = null) is not bound to any user, so
+  // it cannot act as one. Never fall back to an arbitrary user (previously
+  // the first row of the users table), which would hand every holder of a
+  // public key that user's — often the administrator's — privileges.
+  if (!validation.user_id) {
     throw new Error(
-      "Public API key requires at least one user in the database. Bootstrap a user first.",
+      "Public API keys cannot be used for MetaMCP admin tools. Use an API key owned by a user.",
     );
   }
 
-  return user.id;
+  return validation.user_id;
 }

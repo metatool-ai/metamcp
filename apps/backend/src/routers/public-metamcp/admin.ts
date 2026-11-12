@@ -1,12 +1,19 @@
 import express from "express";
 
-import { authenticateApiKey } from "@/middleware/api-key-oauth.middleware";
+import {
+  ApiKeyAuthenticatedRequest,
+  authenticateApiKey,
+} from "@/middleware/api-key-oauth.middleware";
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 import logger from "@/utils/logger";
 
-import { mcpServersRepository } from "../../db/repositories";
+import {
+  mcpServersRepository,
+  namespacesRepository,
+} from "../../db/repositories";
+import { mcpServerPool } from "../../lib/metamcp/mcp-server-pool";
 import { serverErrorTracker } from "../../lib/metamcp/server-error-tracker";
-import { initializeIdleServers } from "../../lib/startup";
+import { convertDbServerToParams } from "../../lib/metamcp/utils";
 
 const adminRouter = express.Router();
 
@@ -14,53 +21,111 @@ const adminRouter = express.Router();
 adminRouter.use(express.json());
 
 /**
- * POST /metamcp/admin/reset-errors
+ * The per-endpoint admin API is scoped to the endpoint it is called on:
+ * it only sees and acts on MCP servers mapped into that endpoint's
+ * namespace, and it is only available when the endpoint requires
+ * authentication (API key and/or OAuth). Without that, anyone who knows an
+ * endpoint name could reset or respawn servers.
+ */
+const requireAuthenticatedEndpoint = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+) => {
+  const endpoint = (req as ApiKeyAuthenticatedRequest).endpoint;
+  if (!endpoint?.enable_api_key_auth && !endpoint?.enable_oauth) {
+    return res.status(403).json({
+      success: false,
+      error: "forbidden",
+      message:
+        "The admin API is only available on endpoints with API key or OAuth authentication enabled.",
+    });
+  }
+  next();
+};
+
+async function getEndpointNamespaceServers(req: express.Request) {
+  const namespaceUuid = (req as ApiKeyAuthenticatedRequest).namespaceUuid;
+  if (!namespaceUuid) return [];
+  const namespace =
+    await namespacesRepository.findByUuidWithServers(namespaceUuid);
+  return namespace?.servers ?? [];
+}
+
+/**
+ * POST /metamcp/:endpoint_name/admin/reset-errors
  *
- * Resets ERROR state for MCP servers without requiring a full backend restart.
- * Optionally targets a specific server by UUID, or resets all if no UUID given.
+ * Resets ERROR state for MCP servers of this endpoint's namespace without
+ * requiring a full backend restart. Optionally targets a specific server by
+ * UUID (which must belong to the namespace), or resets all errored servers
+ * in the namespace if no UUID is given.
  *
  * Body: { "serverUuid": "optional-specific-uuid" }
- * Auth: Same API key as MCP endpoints (X-API-Key header)
+ * Auth: Same API key / OAuth as the endpoint's MCP routes
  */
 adminRouter.post(
   "/:endpoint_name/admin/reset-errors",
   lookupEndpoint,
+  requireAuthenticatedEndpoint,
   authenticateApiKey,
   async (req, res) => {
     try {
       const { serverUuid } = req.body || {};
-      const resetResults: string[] = [];
+      const namespaceUuid = (req as ApiKeyAuthenticatedRequest).namespaceUuid;
+      const servers = await getEndpointNamespaceServers(req);
 
+      let targets: typeof servers;
       if (serverUuid) {
-        // Reset specific server
-        await serverErrorTracker.resetServerErrorState(serverUuid);
-        resetResults.push(serverUuid);
-        logger.info(`Admin API: Reset error state for server ${serverUuid}`);
-      } else {
-        // Reset all servers in ERROR state
-        const allServers = await mcpServersRepository.findAll();
-        const errorServers = allServers.filter(
-          (s) => s.error_status === "ERROR",
-        );
-
-        for (const server of errorServers) {
-          await serverErrorTracker.resetServerErrorState(server.uuid);
-          resetResults.push(server.name || server.uuid);
+        const target = servers.find((s) => s.uuid === serverUuid);
+        if (!target) {
+          return res.status(404).json({
+            success: false,
+            error: "server_not_found",
+            message:
+              "No MCP server with that UUID in this endpoint's namespace",
+          });
         }
+        targets = [target];
+      } else {
+        targets = servers.filter((s) => s.error_status === "ERROR");
+      }
 
-        // Also clear all in-memory crash counters
-        serverErrorTracker.resetAllAttempts();
-
-        logger.info(
-          `Admin API: Reset ${resetResults.length} servers from ERROR state: ${resetResults.join(", ")}`,
+      const resetResults: string[] = [];
+      for (const server of targets) {
+        await serverErrorTracker.resetServerErrorState(server.uuid);
+        resetResults.push(
+          serverUuid ? server.uuid : server.name || server.uuid,
         );
       }
 
-      // Trigger idle server re-initialization to respawn connections
-      // Run async — don't block the response
-      initializeIdleServers().catch((err) => {
-        logger.error("Admin API: Error re-initializing idle servers:", err);
-      });
+      logger.info(
+        `Admin API: Reset ${resetResults.length} server(s) of namespace ${namespaceUuid} from ERROR state: ${resetResults.join(", ")}`,
+      );
+
+      // Respawn idle sessions for the reset servers only. Run async — don't
+      // block the response.
+      for (const server of targets) {
+        mcpServersRepository
+          .findByUuid(server.uuid)
+          .then((dbServer) =>
+            dbServer ? convertDbServerToParams(dbServer) : null,
+          )
+          .then((params) =>
+            params
+              ? mcpServerPool.invalidateIdleSession(
+                  server.uuid,
+                  params,
+                  namespaceUuid,
+                )
+              : undefined,
+          )
+          .catch((err) => {
+            logger.error(
+              `Admin API: Error re-initializing idle session for server ${server.uuid}:`,
+              err,
+            );
+          });
+      }
 
       res.json({
         success: true,
@@ -83,18 +148,20 @@ adminRouter.post(
 );
 
 /**
- * GET /metamcp/admin/error-status
+ * GET /metamcp/:endpoint_name/admin/error-status
  *
- * Returns current error status of all servers (for diagnostics).
+ * Returns current error status of the servers in this endpoint's namespace
+ * (for diagnostics).
  */
 adminRouter.get(
   "/:endpoint_name/admin/error-status",
   lookupEndpoint,
+  requireAuthenticatedEndpoint,
   authenticateApiKey,
   async (req, res) => {
     try {
-      const allServers = await mcpServersRepository.findAll();
-      const serverStatuses = allServers.map((s) => ({
+      const servers = await getEndpointNamespaceServers(req);
+      const serverStatuses = servers.map((s) => ({
         uuid: s.uuid,
         name: s.name,
         error_status: s.error_status,

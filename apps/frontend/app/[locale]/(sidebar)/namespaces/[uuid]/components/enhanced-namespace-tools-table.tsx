@@ -111,11 +111,7 @@ interface EnhancedNamespaceToolsTableProps {
 }
 
 type SortField =
-  | "name"
-  | "serverName"
-  | "status"
-  | "description"
-  | "updated_at";
+  "name" | "serverName" | "status" | "description" | "updated_at";
 type SortDirection = "asc" | "desc";
 
 type OverrideDraft = {

@@ -26,7 +26,7 @@ import {
 import logger from "@/utils/logger";
 
 import { namespacesRepository } from "../../db/repositories/namespaces.repo";
-import { toolsImplementations } from "../../trpc/tools.impl";
+import { syncToolsForServer } from "../../trpc/tools.impl";
 import { getAdminToolsContext } from "../admin-mcp/admin-session-context";
 import {
   executeAdminTool,
@@ -408,7 +408,7 @@ export const createServer = async (
                 toolsSyncCache.update(mcpServerUuid, toolNames);
 
                 // Sync with cleanup
-                await toolsImplementations.sync({
+                await syncToolsForServer({
                   tools: toolsToSave,
                   mcpServerUuid: mcpServerUuid,
                 });

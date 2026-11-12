@@ -7,6 +7,8 @@ import {
   NamespaceWithServers,
 } from "@repo/zod-types";
 
+import { redactServerSecrets } from "../../lib/access-control";
+
 export class NamespacesSerializer {
   static serializeNamespace(dbNamespace: DatabaseNamespace): Namespace {
     return {
@@ -25,8 +27,14 @@ export class NamespacesSerializer {
     return dbNamespaces.map(this.serializeNamespace);
   }
 
+  /**
+   * @param canSeeSecrets decides, per server owner, whether env, bearerToken
+   *   and header values are returned. Omit to return them unredacted (only
+   *   for trusted internal callers).
+   */
   static serializeNamespaceWithServers(
     dbNamespace: DatabaseNamespaceWithServers,
+    canSeeSecrets?: (ownerId: string | null) => boolean,
   ): NamespaceWithServers {
     return {
       uuid: dbNamespace.uuid,
@@ -35,23 +43,28 @@ export class NamespacesSerializer {
       created_at: dbNamespace.created_at.toISOString(),
       updated_at: dbNamespace.updated_at.toISOString(),
       user_id: dbNamespace.user_id,
-      servers: dbNamespace.servers.map((server) => ({
-        uuid: server.uuid,
-        name: server.name,
-        description: server.description,
-        type: server.type,
-        command: server.command,
-        args: server.args || [],
-        url: server.url,
-        env: server.env || {},
-        bearerToken: server.bearerToken,
-        headers: server.headers || {},
-        forward_headers: server.forward_headers || {},
-        error_status: server.error_status,
-        created_at: server.created_at.toISOString(),
-        user_id: server.user_id,
-        status: server.status,
-      })),
+      servers: dbNamespace.servers.map((server) => {
+        const serialized = {
+          uuid: server.uuid,
+          name: server.name,
+          description: server.description,
+          type: server.type,
+          command: server.command,
+          args: server.args || [],
+          url: server.url,
+          env: server.env || {},
+          bearerToken: server.bearerToken,
+          headers: server.headers || {},
+          forward_headers: server.forward_headers || {},
+          error_status: server.error_status,
+          created_at: server.created_at.toISOString(),
+          user_id: server.user_id,
+          status: server.status,
+        };
+        return !canSeeSecrets || canSeeSecrets(server.user_id)
+          ? serialized
+          : redactServerSecrets(serialized);
+      }),
     };
   }
 

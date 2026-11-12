@@ -42,11 +42,16 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
  * signed-in user is an administrator (single-tenant mode).
  */
 export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  const raw = process.env.METAMCP_ADMIN_EMAILS;
+  // This package has no Node typings; read the env through globalThis.
+  const raw = (
+    globalThis as {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env?.METAMCP_ADMIN_EMAILS;
   if (raw && raw.trim()) {
     const admins = raw
       .split(",")
-      .map((e) => e.trim().toLowerCase())
+      .map((e: string) => e.trim().toLowerCase())
       .filter(Boolean);
     const email = String(ctx.user?.email ?? "")
       .trim()

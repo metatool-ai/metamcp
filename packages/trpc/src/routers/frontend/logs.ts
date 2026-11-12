@@ -5,7 +5,7 @@ import {
 } from "@repo/zod-types";
 import { z } from "zod";
 
-import { protectedProcedure, router } from "../../trpc";
+import { adminProcedure, protectedProcedure, router } from "../../trpc";
 
 // Define the logs router with procedure definitions
 // The actual implementation will be provided by the backend
@@ -14,23 +14,28 @@ export const createLogsRouter = (
   implementations: {
     getLogs: (
       input: z.infer<typeof GetLogsRequestSchema>,
+      userId: string,
     ) => Promise<z.infer<typeof GetLogsResponseSchema>>;
-    clearLogs: () => Promise<z.infer<typeof ClearLogsResponseSchema>>;
+    clearLogs: (
+      userId: string,
+    ) => Promise<z.infer<typeof ClearLogsResponseSchema>>;
   },
 ) =>
   router({
-    // Protected: Get logs with optional limit
+    // Protected: Get logs with optional limit. Log entries are global (they
+    // carry no owner), so in multi-tenant mode the impl restricts this to
+    // administrators.
     get: protectedProcedure
       .input(GetLogsRequestSchema)
       .output(GetLogsResponseSchema)
-      .query(async ({ input }) => {
-        return await implementations.getLogs(input);
+      .query(async ({ input, ctx }) => {
+        return await implementations.getLogs(input, ctx.user.id);
       }),
 
-    // Protected: Clear all logs
-    clear: protectedProcedure
+    // Admin: Clear all logs
+    clear: adminProcedure
       .output(ClearLogsResponseSchema)
-      .mutation(async () => {
-        return await implementations.clearLogs();
+      .mutation(async ({ ctx }) => {
+        return await implementations.clearLogs(ctx.user.id);
       }),
   });
