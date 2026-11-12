@@ -91,7 +91,11 @@
     "toggleTooFast": "토글이 너무 빠름",
     "toggleTooFastDescription": "세션이 제대로 초기화될 수 있도록 다시 토글하기 전에 잠시 기다려 주세요.",
     "forceReset": "강제 재설정",
-    "anErrorOccurredWhileDeleting": "Namespace를 삭제하는 중 오류가 발생했습니다"
+    "anErrorOccurredWhileDeleting": "Namespace를 삭제하는 중 오류가 발생했습니다",
+    "exportNamespace": "내보내기",
+    "namespaceExported": "Namespace 내보내기 완료",
+    "namespaceExportedDescription": "Namespace 구성이 다운로드되었습니다",
+    "exportFailed": "Namespace 내보내기에 실패했습니다"
   },
   "enhancedToolsTable": {
     "toolName": "Tool 이름",

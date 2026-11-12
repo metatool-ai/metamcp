@@ -2,6 +2,8 @@ import {
   CreateNamespaceRequestSchema,
   CreateNamespaceResponseSchema,
   DeleteNamespaceResponseSchema,
+  ExportNamespaceRequestSchema,
+  ExportNamespaceResponseSchema,
   GetNamespaceResponseSchema,
   GetNamespaceToolsRequestSchema,
   GetNamespaceToolsResponseSchema,
@@ -43,6 +45,10 @@ export const createNamespacesRouter = (
       input: z.infer<typeof GetNamespaceToolsRequestSchema>,
       userId: string,
     ) => Promise<z.infer<typeof GetNamespaceToolsResponseSchema>>;
+    export: (
+      input: z.infer<typeof ExportNamespaceRequestSchema>,
+      userId: string,
+    ) => Promise<z.infer<typeof ExportNamespaceResponseSchema>>;
     delete: (
       input: {
         uuid: string;
@@ -93,6 +99,14 @@ export const createNamespacesRouter = (
       .output(GetNamespaceToolsResponseSchema)
       .query(async ({ input, ctx }) => {
         return await implementations.getTools(input, ctx.user.id);
+      }),
+
+    // Protected: Export namespace as a portable, versioned JSON document
+    export: protectedProcedure
+      .input(ExportNamespaceRequestSchema)
+      .output(ExportNamespaceResponseSchema)
+      .query(async ({ input, ctx }) => {
+        return await implementations.export(input, ctx.user.id);
       }),
 
     // Protected: Create namespace

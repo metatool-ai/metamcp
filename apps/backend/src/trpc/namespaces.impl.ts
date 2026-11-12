@@ -2,10 +2,12 @@ import {
   CreateNamespaceRequestSchema,
   CreateNamespaceResponseSchema,
   DeleteNamespaceResponseSchema,
+  ExportNamespaceResponseSchema,
   GetNamespaceResponseSchema,
   GetNamespaceToolsRequestSchema,
   GetNamespaceToolsResponseSchema,
   ListNamespacesResponseSchema,
+  NamespaceExportSchema,
   RefreshNamespaceToolsRequestSchema,
   RefreshNamespaceToolsResponseSchema,
   UpdateNamespaceRequestSchema,
@@ -33,6 +35,7 @@ import {
   mapOverrideNameToOriginal,
 } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
+import { buildNamespaceExport } from "./namespace-export";
 
 export const namespacesImplementations = {
   create: async (
@@ -234,6 +237,55 @@ export const namespacesImplementations = {
         success: false as const,
         data: [],
         message: "Failed to fetch namespace tools",
+      };
+    }
+  },
+
+  export: async (
+    input: {
+      uuid: string;
+    },
+    userId: string,
+  ): Promise<z.infer<typeof ExportNamespaceResponseSchema>> => {
+    try {
+      const snapshot = await namespacesRepository.findExportSnapshotByUuid(
+        input.uuid,
+      );
+
+      if (!snapshot) {
+        return {
+          success: false as const,
+          message: "Namespace not found",
+        };
+      }
+
+      // Same access rule as get: owner or public namespace only
+      if (snapshot.namespace.user_id && snapshot.namespace.user_id !== userId) {
+        return {
+          success: false as const,
+          message:
+            "Access denied: You can only export namespaces you own or public namespaces",
+        };
+      }
+
+      return {
+        success: true as const,
+        // Parse here so the tRPC query and the admin MCP tool return the same
+        // document. The tRPC output schema parses it again; for example, both
+        // now drop a top-level "__proto__" annotation key.
+        data: NamespaceExportSchema.parse(
+          buildNamespaceExport(
+            { ...snapshot.namespace, servers: snapshot.servers },
+            snapshot.tools,
+          ),
+        ),
+        message: "Namespace exported successfully",
+      };
+    } catch (error) {
+      logger.error("Error exporting namespace:", error);
+      return {
+        success: false as const,
+        message: "Failed to export namespace",
       };
     }
   },

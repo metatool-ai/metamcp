@@ -110,6 +110,45 @@ MetaMCP 中的**命名空间**是 MCP 服务器的逻辑分组，允许您将多
 - `git-helper__git_commit`
 - `git-helper__git_diff`
 
+## 导出命名空间
+
+您可以将命名空间导出为可移植、带版本号的 JSON 文档。这样您可以将命名空间配置存储在 Git 中，在拉取请求中审查更改，并在不同环境之间迁移命名空间。
+
+1. **打开**命名空间详情页面
+2. **点击**"导出"
+3. 浏览器会下载 `namespace-<名称>.json` 文件（文件名中不允许的字符，例如 `/` 或 `:`，会被替换为 `_`）
+
+导出文档**按名称**引用服务器和工具，因此可以在不同的 MetaMCP 实例之间移植。主要特性：
+
+- **不含密钥**：不会包含服务器连接信息（`env` 值、Bearer 令牌、请求头）。文档仅按名称引用服务器。
+- **确定性**：服务器和工具按稳定且与区域设置无关的键排序，因此重新导出未更改的命名空间会得到相同的 `namespace` 内容。两次导出之间只有顶层的 `exportedAt` 时间戳会变化，因此差异很小。
+- **仅包含差异**：只有状态为 `INACTIVE` 或带有覆盖设置的工具才会列出。保持默认 `ACTIVE` 状态且没有覆盖设置的工具会被省略。
+
+导出示例：
+
+```json
+{
+  "version": 1,
+  "exportedAt": "2026-07-31T10:00:00.000Z",
+  "namespace": {
+    "name": "release-manager",
+    "description": "Tools for release coordination",
+    "servers": [{ "name": "github", "status": "ACTIVE" }],
+    "tools": [
+      {
+        "server": "github",
+        "name": "create_pull_request",
+        "status": "ACTIVE",
+        "override": {
+          "description": "Create a pull request into the release branch."
+        }
+      },
+      { "server": "github", "name": "delete_repository", "status": "INACTIVE" }
+    ]
+  }
+}
+```
+
 ## 下一步
 
 <CardGroup cols={2}>

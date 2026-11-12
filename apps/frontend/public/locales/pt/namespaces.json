@@ -91,7 +91,11 @@
     "toggleTooFast": "Alternância Muito Rápida",
     "toggleTooFastDescription": "Por favor, aguarde antes de alternar novamente para permitir que a sessão inicialize corretamente.",
     "forceReset": "Redefinição Forçada",
-    "anErrorOccurredWhileDeleting": "Ocorreu um erro ao excluir o namespace"
+    "anErrorOccurredWhileDeleting": "Ocorreu um erro ao excluir o namespace",
+    "exportNamespace": "Exportar",
+    "namespaceExported": "Namespace Exportado",
+    "namespaceExportedDescription": "A configuração do namespace foi baixada",
+    "exportFailed": "Falha ao exportar o namespace"
   },
   "enhancedToolsTable": {
     "toolName": "Nome da Tool",

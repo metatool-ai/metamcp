@@ -84,7 +84,11 @@
     "connect": "连接",
     "connectingToMetaMcp": "正在连接到 MetaMCP...",
     "connectToMetaMcpToEnable": "连接到 MetaMCP 以启用增强的工具管理",
-    "anErrorOccurredWhileDeleting": "删除命名空间时发生错误"
+    "anErrorOccurredWhileDeleting": "删除命名空间时发生错误",
+    "exportNamespace": "导出",
+    "namespaceExported": "命名空间已导出",
+    "namespaceExportedDescription": "命名空间配置已下载",
+    "exportFailed": "导出命名空间失败"
   },
   "enhancedToolsTable": {
     "toolName": "工具名称",

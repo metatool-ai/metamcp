@@ -3,6 +3,7 @@ import {
   DatabaseNamespaceTool,
   DatabaseNamespaceWithServers,
   NamespaceCreateInput,
+  NamespaceExportSnapshot,
   NamespaceUpdateInput,
 } from "@repo/zod-types";
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
@@ -277,6 +278,89 @@ export class NamespacesRepository {
       .orderBy(desc(toolsTable.created_at));
 
     return toolsData;
+  }
+
+  // Reads everything the namespace export needs in one read-only, repeatable
+  // read transaction, so the namespace, its servers and its tool mappings come
+  // from one consistent snapshot even if the namespace is updated at the same
+  // time. Selects only names, statuses and overrides, never server connection
+  // config.
+  async findExportSnapshotByUuid(
+    uuid: string,
+  ): Promise<NamespaceExportSnapshot | null> {
+    return await db.transaction(
+      async (tx) => {
+        const [namespace] = await tx
+          .select({
+            uuid: namespacesTable.uuid,
+            name: namespacesTable.name,
+            description: namespacesTable.description,
+            created_at: namespacesTable.created_at,
+            updated_at: namespacesTable.updated_at,
+            user_id: namespacesTable.user_id,
+          })
+          .from(namespacesTable)
+          .where(eq(namespacesTable.uuid, uuid));
+
+        if (!namespace) {
+          return null;
+        }
+
+        const servers = await tx
+          .select({
+            name: mcpServersTable.name,
+            status: namespaceServerMappingsTable.status,
+          })
+          .from(namespaceServerMappingsTable)
+          .innerJoin(
+            mcpServersTable,
+            eq(
+              namespaceServerMappingsTable.mcp_server_uuid,
+              mcpServersTable.uuid,
+            ),
+          )
+          .where(eq(namespaceServerMappingsTable.namespace_uuid, uuid));
+
+        const tools = await tx
+          .select({
+            name: toolsTable.name,
+            serverName: mcpServersTable.name,
+            status: namespaceToolMappingsTable.status,
+            overrideName: namespaceToolMappingsTable.override_name,
+            overrideTitle: namespaceToolMappingsTable.override_title,
+            overrideDescription:
+              namespaceToolMappingsTable.override_description,
+            overrideAnnotations:
+              namespaceToolMappingsTable.override_annotations,
+          })
+          .from(namespaceToolMappingsTable)
+          .innerJoin(
+            toolsTable,
+            eq(namespaceToolMappingsTable.tool_uuid, toolsTable.uuid),
+          )
+          .innerJoin(
+            mcpServersTable,
+            eq(toolsTable.mcp_server_uuid, mcpServersTable.uuid),
+          )
+          // Keep only tools whose server is still in the namespace, so every
+          // exported tool refers to an entry in `servers`. A tool refresh that
+          // runs while a server is removed can leave such a mapping behind.
+          .innerJoin(
+            namespaceServerMappingsTable,
+            and(
+              eq(namespaceServerMappingsTable.namespace_uuid, uuid),
+              eq(
+                namespaceServerMappingsTable.mcp_server_uuid,
+                toolsTable.mcp_server_uuid,
+              ),
+            ),
+          )
+          .where(eq(namespaceToolMappingsTable.namespace_uuid, uuid));
+
+        return { namespace, servers, tools };
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
   }
 
   async deleteByUuid(uuid: string): Promise<DatabaseNamespace | undefined> {
