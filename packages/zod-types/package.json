@@ -21,14 +21,14 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "eslint": "^9.28.0",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.33.0"
+    "eslint": "^9.39.5",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.2"
   }
 }
