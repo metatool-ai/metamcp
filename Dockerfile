@@ -48,9 +48,14 @@ COPY . .
 # Build all packages and apps
 RUN pnpm build
 
-RUN sed -i -e "s/30000/600000/" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/server/lib/router-utils/proxy-request.js" \
-    "node_modules/.pnpm/next@15.5.12_react-dom@19.1.2_react@19.1.2__react@19.1.2/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js"
+# Raise the Next.js rewrite proxy timeout. The glob follows the peer suffix
+# pnpm adds to the next directory, which changes whenever React is bumped;
+# fail the build if the file is missing or the patch did not apply.
+RUN set -eu; \
+    files=$(ls node_modules/.pnpm/next@*/node_modules/next/dist/server/lib/router-utils/proxy-request.js \
+               node_modules/.pnpm/next@*/node_modules/next/dist/esm/server/lib/router-utils/proxy-request.js); \
+    sed -i -e "s/30000/600000/" $files; \
+    for f in $files; do grep -q 600000 "$f"; done
 
 # Production runner stage
 FROM base AS runner
@@ -85,12 +90,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./
+COPY --from=builder --chown=nextjs:nodejs /app/pnpm-lock.yaml ./
 
-# Install production dependencies only
-RUN pnpm install --prod
+# Install production dependencies only. CI=true lets pnpm replace the
+# node_modules copied from the builder without asking for a TTY, and the
+# lockfile keeps the result pinned.
+RUN CI=true pnpm install --prod --frozen-lockfile
 
-# Install drizzle-kit locally in backend for migrations
-RUN cd apps/backend && pnpm add drizzle-kit@0.31.1
+# Install drizzle-kit locally in backend for migrations. It is a dev
+# dependency in the repo, so save it as a production one here; otherwise
+# pnpm re-adds dev dependencies and conflicts with the --prod install above.
+RUN cd apps/backend && CI=true pnpm add --save-prod --prod drizzle-kit@0.31.1
 
 # Copy startup script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
