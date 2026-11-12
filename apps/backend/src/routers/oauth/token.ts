@@ -11,8 +11,38 @@ import {
 
 const tokenRouter = express.Router();
 
-const ACCESS_TOKEN_EXPIRY = 3600; // 1 hour
-const REFRESH_TOKEN_EXPIRY = 7 * 24 * 3600; // 7 days
+/**
+ * Read a positive integer number of seconds from an env var, falling back to
+ * `fallback` when unset, unparseable or non-positive. A typo'd value must not
+ * silently produce zero-second tokens, so invalid input is warned about loudly.
+ */
+function readExpirySeconds(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid ${name}="${raw}" — expected a positive integer number of seconds. Falling back to ${fallback}.`,
+    );
+    return fallback;
+  }
+
+  return parsed;
+}
+
+// Token lifetimes are env-var configurable so deployers can tune how often MCP
+// clients re-authorize without rebuilding the image. Defaults match the
+// previous hardcoded values exactly, so this is a strict superset — no behavior
+// change for existing installs that don't set the env vars.
+const ACCESS_TOKEN_EXPIRY = readExpirySeconds(
+  "OAUTH_ACCESS_TOKEN_EXPIRES_IN_SECONDS",
+  3600, // 1 hour (default)
+);
+const REFRESH_TOKEN_EXPIRY = readExpirySeconds(
+  "OAUTH_REFRESH_TOKEN_EXPIRES_IN_SECONDS",
+  7 * 24 * 3600, // 7 days (default)
+);
 
 /**
  * Issue a new access token + refresh token pair and store them.
